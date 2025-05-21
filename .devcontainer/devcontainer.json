@@ -1,0 +1,31 @@
+{
+    "name": "Agent Starter Pack Development",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {},
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-python.black-formatter",
+                "njpwerner.autodocstring"
+            ],
+            "settings": {
+                "python.formatting.provider": "black",
+                "editor.formatOnSave": true
+            }
+        }
+    },
+    "remoteUser": "vscode",
+    "mounts": [
+        "source=${localEnv:HOME}/.config/gcloud,target=/home/vscode/.config/gcloud,type=bind,consistency=cached"
+    ],
+    "postCreateCommand": "pip install --user pipx && python -m pipx ensurepath && pipx install agent-starter-pack",
+    "updateContentCommand": "pipx upgrade agent-starter-pack"
+}
