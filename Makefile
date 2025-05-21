@@ -17,15 +17,18 @@ install:
 
 dev:
 	@echo "Starting development environment..."
-	docker compose up --build
+	@echo "Starting backend..."
+	@cd backend && poetry run uvicorn rag.main:app --host 0.0.0.0 --port 8000 --reload & \
+	echo "Starting frontend..." && \
+	cd frontend && npm run dev -- --host 0.0.0.0
 
 dev-backend:
 	@echo "Starting backend development server..."
-	docker compose up backend
+	cd backend && poetry run uvicorn rag.main:app --host 0.0.0.0 --port 8000 --reload
 
 dev-frontend:
 	@echo "Starting frontend development server..."
-	docker compose up frontend
+	cd frontend && npm run dev -- --host 0.0.0.0
 
 # Building
 build:
