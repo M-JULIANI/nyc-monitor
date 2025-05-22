@@ -183,15 +183,9 @@ build-frontend: check-docker
 		exit 1; \
 	fi
 
-# Cloud Run Configuration (frontend)
+# Simplified deployment variables
 CLOUD_RUN_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-frontend
 CLOUD_RUN_REGION ?= $(GOOGLE_CLOUD_LOCATION)
-CLOUD_RUN_MIN_INSTANCES ?= 1
-CLOUD_RUN_MAX_INSTANCES ?= 20
-CLOUD_RUN_CPU ?= 1
-CLOUD_RUN_MEMORY ?= 512Mi
-CLOUD_RUN_CONCURRENCY ?= 80
-CLOUD_RUN_TIMEOUT ?= 300s
 
 # Deployment
 deploy: deploy-backend deploy-frontend
@@ -206,57 +200,29 @@ deploy-backend: check-gcloud
 		exit 1; \
 	fi
 
-deploy-frontend: check-docker build-frontend deploy-cloudrun
-	@echo "Frontend deployment completed"
-
-deploy-cloudrun: check-gcloud
-	@echo "Deploying frontend to Cloud Run..."
+deploy-frontend: check-docker check-gcloud
+	@echo "Building and deploying frontend..."
 	@if [ -z "$(DOCKER_REGISTRY)" ] || [ "$(DOCKER_REGISTRY)" = "localhost" ]; then \
 		echo "Error: DOCKER_REGISTRY must be set for frontend deployment"; \
 		exit 1; \
 	fi
-	@echo "Building and pushing frontend images..."
-	@if ! docker build \
+	@echo "Building frontend image..."
+	@docker build \
+		--platform linux/amd64 \
 		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)" \
 		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest" \
-		-f frontend/Dockerfile frontend/; then \
-		echo "Error: Failed to build frontend image"; \
-		exit 1; \
-	fi
-	@echo "Pushing images to registry..."
-	@if ! docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)"; then \
-		echo "Error: Failed to push versioned image"; \
-		exit 1; \
-	fi
-	@if ! docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest"; then \
-		echo "Error: Failed to push latest image"; \
-		exit 1; \
-	fi
-	@echo "Getting backend endpoint URL..."
-	@BACKEND_URL=$$(gcloud ai endpoints list \
-		--project=$(GOOGLE_CLOUD_PROJECT) \
-		--region=$(GOOGLE_CLOUD_LOCATION) \
-		--format='value(displayName,id)' | grep "$(DOCKER_IMAGE_PREFIX)-backend" | head -n1 | awk '{print "https://$(GOOGLE_CLOUD_LOCATION)-$(GOOGLE_CLOUD_PROJECT).aiplatform.googleapis.com/v1/projects/$(GOOGLE_CLOUD_PROJECT)/locations/$(GOOGLE_CLOUD_LOCATION)/endpoints/" $$2}') && \
-	if [ -z "$$BACKEND_URL" ]; then \
-		echo "Warning: Could not find backend endpoint. Setting VITE_API_URL to empty string."; \
-		BACKEND_URL=""; \
-	fi
+		-f frontend/Dockerfile frontend/
+	@echo "Pushing image to registry..."
+	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)"
+	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest"
 	@echo "Deploying to Cloud Run..."
 	@gcloud run deploy $(CLOUD_RUN_SERVICE_NAME) \
 		--image "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)" \
 		--platform managed \
 		--region $(CLOUD_RUN_REGION) \
-		--min-instances $(CLOUD_RUN_MIN_INSTANCES) \
-		--max-instances $(CLOUD_RUN_MAX_INSTANCES) \
-		--cpu $(CLOUD_RUN_CPU) \
-		--memory $(CLOUD_RUN_MEMORY) \
-		--concurrency $(CLOUD_RUN_CONCURRENCY) \
-		--timeout $(CLOUD_RUN_TIMEOUT) \
 		--allow-unauthenticated \
-		--set-env-vars="VITE_API_URL=$$BACKEND_URL" \
-		--port 8080 \
-		--use-http2
-	@echo "Cloud Run deployment completed. Service URL:"
+		--port 8080
+	@echo "Deployment completed. Service URL:"
 	@gcloud run services describe $(CLOUD_RUN_SERVICE_NAME) \
 		--platform managed \
 		--region $(CLOUD_RUN_REGION) \
