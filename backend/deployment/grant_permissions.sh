@@ -20,7 +20,8 @@ set -e
 
 # Load environment variables from .env file
 SCRIPT_DIR="$(dirname "$0")"
-ENV_FILE="${SCRIPT_DIR}/../.env"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ENV_FILE="${REPO_ROOT}/.env"
 if [ -f "$ENV_FILE" ]; then
   source "$ENV_FILE"
 else

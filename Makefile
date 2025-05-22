@@ -1,20 +1,97 @@
-.PHONY: install dev build test deploy clean lint format
+.PHONY: install dev build test deploy clean lint format devcontainer-setup devcontainer-clean check-deps check-docker check-gcloud
 
 # Variables
+GOOGLE_CLOUD_PROJECT ?= $(shell grep GOOGLE_CLOUD_PROJECT .env 2>/dev/null | cut -d '=' -f2)
+GOOGLE_CLOUD_LOCATION ?= $(shell grep GOOGLE_CLOUD_LOCATION .env 2>/dev/null | cut -d '=' -f2 || echo "us-central1")
 DOCKER_REGISTRY ?= $(shell grep DOCKER_REGISTRY .env 2>/dev/null | cut -d '=' -f2 || echo "localhost")
 DOCKER_IMAGE_PREFIX ?= $(shell grep DOCKER_IMAGE_PREFIX .env 2>/dev/null | cut -d '=' -f2 || echo "atlas")
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
+# Ensure PATH includes user's local bin
+SHELL := /bin/bash
+export PATH := /home/vscode/.local/bin:$(PATH)
+
+# Check dependencies
+check-deps:
+	@echo "Checking dependencies..."
+	@if ! command -v poetry >/dev/null 2>&1; then \
+		echo "Installing Poetry..."; \
+		curl -sSL https://install.python-poetry.org | python3 -; \
+	fi
+	@if ! command -v npm >/dev/null 2>&1; then \
+		echo "Installing Node.js..."; \
+		curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -; \
+		sudo apt-get install -y nodejs; \
+	fi
+	@echo "Updating npm to latest version..."
+	@if command -v npm >/dev/null 2>&1; then \
+		sudo npm install -g npm@latest; \
+	fi
+	@echo "Dependencies check complete"
+
+# Check Google Cloud setup
+check-gcloud:
+	@echo "Checking Google Cloud setup..."
+	@if ! command -v gcloud >/dev/null 2>&1; then \
+		echo "Error: gcloud CLI not found. Please install Google Cloud SDK."; \
+		exit 1; \
+	fi
+	@if [ -z "$(GOOGLE_CLOUD_PROJECT)" ]; then \
+		echo "Error: GOOGLE_CLOUD_PROJECT not set in .env file"; \
+		exit 1; \
+	fi
+	@if ! gcloud projects describe "$(GOOGLE_CLOUD_PROJECT)" >/dev/null 2>&1; then \
+		echo "Error: Project $(GOOGLE_CLOUD_PROJECT) not found or not accessible"; \
+		exit 1; \
+	fi
+	@echo "Google Cloud setup verified"
+
 # Development environment
-install:
-	@echo "Installing dependencies..."
+install: check-deps install-backend install-frontend
+	@echo "All dependencies installed successfully"
+
+install-backend:
+	@echo "Installing backend dependencies..."
 	@if [ -f "backend/pyproject.toml" ]; then \
 		cd backend && poetry install; \
-	fi
-	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && npm install; \
+	else \
+		echo "Warning: backend/pyproject.toml not found"; \
 	fi
 
+install-frontend:
+	@echo "Installing frontend dependencies..."
+	@if [ -f "frontend/package.json" ]; then \
+		cd frontend && \
+		npm install --no-audit --no-fund && \
+		npm update --no-audit --no-fund; \
+	else \
+		echo "Warning: frontend/package.json not found"; \
+	fi
+
+# Devcontainer specific commands
+devcontainer-setup: check-deps install check-gcloud
+	@echo "Setting up devcontainer environment..."
+	@if [ -f "backend/pyproject.toml" ]; then \
+		cd backend && poetry config virtualenvs.in-project true; \
+	fi
+	@if [ -f "frontend/package.json" ]; then \
+		cd frontend && npm config set prefix /home/vscode/.npm-global; \
+	fi
+	@echo "Running grant_permissions.sh..."
+	@if [ -f "backend/deployment/grant_permissions.sh" ]; then \
+		chmod +x backend/deployment/grant_permissions.sh && \
+		./backend/deployment/grant_permissions.sh; \
+	fi
+	@echo "Devcontainer setup complete"
+
+devcontainer-clean:
+	@echo "Cleaning devcontainer environment..."
+	rm -rf backend/.venv frontend/node_modules
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+	@echo "Devcontainer cleanup complete"
+
+# Development servers
 dev:
 	@echo "Starting development environment..."
 	@echo "Starting backend..."
@@ -30,36 +107,21 @@ dev-frontend:
 	@echo "Starting frontend development server..."
 	cd frontend && npm run dev -- --host 0.0.0.0
 
-# Building
-build:
-	@echo "Building Docker images..."
-	docker compose build
-
-build-backend:
-	@echo "Building backend Docker image..."
-	docker compose build backend
-
-build-frontend:
-	@echo "Building frontend Docker image..."
-	docker compose build frontend
-
 # Testing
-test:
-	@echo "Running tests..."
-	@if [ -f "backend/pyproject.toml" ]; then \
-		cd backend && poetry run pytest; \
-	fi
-	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && npm test; \
-	fi
+test: test-backend test-frontend
+	@echo "All tests completed"
 
 test-backend:
 	@echo "Running backend tests..."
-	cd backend && poetry run pytest
+	@if [ -f "backend/pyproject.toml" ]; then \
+		cd backend && poetry run pytest; \
+	fi
 
 test-frontend:
 	@echo "Running frontend tests..."
-	cd frontend && npm test
+	@if [ -f "frontend/package.json" ]; then \
+		cd frontend && npm test; \
+	fi
 
 # Linting and Formatting
 lint:
@@ -80,39 +142,90 @@ format:
 		cd frontend && npm run format; \
 	fi
 
+# Check Docker permissions
+check-docker:
+	@echo "Checking Docker permissions..."
+	@if ! command -v docker >/dev/null 2>&1; then \
+		echo "Error: Docker is not installed. Required for building production images."; \
+		exit 1; \
+	fi
+	@if ! docker info >/dev/null 2>&1; then \
+		echo "Error: Docker daemon is not accessible. Please ensure:"; \
+		echo "1. Docker daemon is running"; \
+		echo "2. You have permission to access /var/run/docker.sock"; \
+		echo "3. You are in the docker group"; \
+		echo "Try rebuilding the devcontainer with: Dev Containers: Rebuild Container"; \
+		exit 1; \
+	fi
+
+# Production Build (Frontend only - Backend uses Vertex AI)
+build: check-docker build-frontend
+	@echo "Production build completed"
+
+build-frontend: check-docker
+	@echo "Building frontend production image..."
+	@if [ -f "frontend/Dockerfile" ]; then \
+		docker build \
+			-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)" \
+			-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest" \
+			-f frontend/Dockerfile frontend/; \
+	else \
+		echo "Error: frontend/Dockerfile not found"; \
+		exit 1; \
+	fi
+
 # Deployment
-deploy:
-	@echo "Deploying to production..."
-	# Build and push Docker images
-	docker build -t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION) -f backend/Dockerfile backend/
-	docker build -t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION) -f frontend/Dockerfile frontend/
-	docker push $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)
-	docker push $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)
-	# Deploy backend agent
-	cd backend && poetry run python deployment/deploy.py
+deploy: check-gcloud deploy-backend deploy-frontend
+	@echo "Deployment completed"
+
+deploy-backend: check-gcloud
+	@echo "Deploying backend agent..."
+	@if [ -f "backend/deployment/deploy.py" ]; then \
+		cd backend && poetry run python deployment/deploy.py; \
+	else \
+		echo "Error: backend/deployment/deploy.py not found"; \
+		exit 1; \
+	fi
+
+deploy-frontend: check-docker
+	@echo "Deploying frontend..."
+	@if [ -z "$(DOCKER_REGISTRY)" ] || [ "$(DOCKER_REGISTRY)" = "localhost" ]; then \
+		echo "Error: DOCKER_REGISTRY must be set for frontend deployment"; \
+		exit 1; \
+	fi
+	@echo "Pushing frontend images..."
+	docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)"
+	docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest"
 
 # Cleanup
 clean:
-	@echo "Cleaning up..."
-	docker compose down -v
+	@echo "Cleaning up development environment..."
 	rm -rf backend/.venv frontend/node_modules
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 
 # Help
 help:
-	@echo "Available commands:"
-	@echo "  make install        - Install all dependencies"
-	@echo "  make dev           - Start development environment (both services)"
-	@echo "  make dev-backend   - Start backend development server"
-	@echo "  make dev-frontend  - Start frontend development server"
-	@echo "  make build         - Build all Docker images"
-	@echo "  make build-backend - Build backend Docker image"
-	@echo "  make build-frontend- Build frontend Docker image"
-	@echo "  make test          - Run all tests"
-	@echo "  make test-backend  - Run backend tests"
-	@echo "  make test-frontend - Run frontend tests"
-	@echo "  make lint          - Run linters"
-	@echo "  make format        - Format code"
-	@echo "  make deploy        - Deploy to production"
-	@echo "  make clean         - Clean up development environment" 
+	@echo "Development Commands:"
+	@echo "  make install           - Install all dependencies"
+	@echo "  make install-backend   - Install backend dependencies"
+	@echo "  make install-frontend  - Install frontend dependencies"
+	@echo "  make dev              - Start development environment (both services)"
+	@echo "  make dev-backend      - Start backend development server"
+	@echo "  make dev-frontend     - Start frontend development server"
+	@echo "  make test             - Run all tests"
+	@echo "  make test-backend     - Run backend tests"
+	@echo "  make test-frontend    - Run frontend tests"
+	@echo "  make lint             - Run linters"
+	@echo "  make format           - Format code"
+	@echo "  make clean            - Clean up development environment"
+	@echo ""
+	@echo "Devcontainer Commands:"
+	@echo "  make devcontainer-setup  - Set up devcontainer environment"
+	@echo "  make devcontainer-clean  - Clean devcontainer environment"
+	@echo ""
+	@echo "Production Commands:"
+	@echo "  make build            - Build frontend production image"
+	@echo "  make deploy           - Deploy both backend (Vertex AI) and frontend"
+	@echo "  make deploy-backend   - Deploy backend agent to Vertex AI"
+	@echo "  make deploy-frontend  - Deploy frontend container" 
