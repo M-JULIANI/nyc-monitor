@@ -18,18 +18,27 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Install envsubst for environment variable substitution
+RUN apk add --no-cache gettext
+
+# Copy nginx configuration template
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Add healthcheck
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+# Create startup script
+RUN echo '#!/bin/sh' > /docker-entrypoint.sh && \
+    echo 'set -e' >> /docker-entrypoint.sh && \
+    echo 'PORT=${PORT:-8080}' >> /docker-entrypoint.sh && \
+    echo 'BACKEND_URL=${BACKEND_URL:-}' >> /docker-entrypoint.sh && \
+    echo 'echo "Starting nginx with PORT=$PORT and BACKEND_URL=$BACKEND_URL"' >> /docker-entrypoint.sh && \
+    echo 'envsubst "\$PORT \$BACKEND_URL" < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf' >> /docker-entrypoint.sh && \
+    echo 'exec nginx -g "daemon off;"' >> /docker-entrypoint.sh && \
+    chmod +x /docker-entrypoint.sh
 
-# Expose port 80
-EXPOSE 80
+# Expose port (will be overridden by Cloud Run)
+EXPOSE 8080
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"] 
+# Start nginx using the entrypoint script
+ENTRYPOINT ["/docker-entrypoint.sh"] 

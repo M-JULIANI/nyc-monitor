@@ -1,10 +1,11 @@
 .PHONY: install dev build test deploy clean lint format devcontainer-setup devcontainer-clean check-deps check-docker check-gcloud
 
 # Variables
-GOOGLE_CLOUD_PROJECT ?= $(shell grep GOOGLE_CLOUD_PROJECT .env 2>/dev/null | cut -d '=' -f2)
-GOOGLE_CLOUD_LOCATION ?= $(shell grep GOOGLE_CLOUD_LOCATION .env 2>/dev/null | cut -d '=' -f2 || echo "us-central1")
-DOCKER_REGISTRY ?= $(shell grep DOCKER_REGISTRY .env 2>/dev/null | cut -d '=' -f2 || echo "localhost")
-DOCKER_IMAGE_PREFIX ?= $(shell grep DOCKER_IMAGE_PREFIX .env 2>/dev/null | cut -d '=' -f2 || echo "atlas")
+GOOGLE_CLOUD_PROJECT ?= $(shell grep -E '^GOOGLE_CLOUD_PROJECT=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+GOOGLE_CLOUD_LOCATION ?= $(shell grep -E '^GOOGLE_CLOUD_LOCATION=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ' || echo "us-central1")
+STAGING_BUCKET ?= $(shell grep -E '^STAGING_BUCKET=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ' || echo "gs://$(GOOGLE_CLOUD_PROJECT)-vertex-deploy")
+DOCKER_REGISTRY ?= $(shell grep -E '^DOCKER_REGISTRY=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ' || echo "localhost")
+DOCKER_IMAGE_PREFIX ?= $(shell grep -E '^DOCKER_IMAGE_PREFIX=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ' || echo "atlas")
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
 # Ensure PATH includes user's local bin
@@ -40,9 +41,17 @@ check-gcloud:
 		echo "Error: GOOGLE_CLOUD_PROJECT not set in .env file"; \
 		exit 1; \
 	fi
+	@if [ -z "$(STAGING_BUCKET)" ]; then \
+		echo "Error: STAGING_BUCKET not set in .env file"; \
+		exit 1; \
+	fi
 	@if ! gcloud projects describe "$(GOOGLE_CLOUD_PROJECT)" >/dev/null 2>&1; then \
 		echo "Error: Project $(GOOGLE_CLOUD_PROJECT) not found or not accessible"; \
 		exit 1; \
+	fi
+	@if ! gsutil ls "$(STAGING_BUCKET)" >/dev/null 2>&1; then \
+		echo "Creating staging bucket $(STAGING_BUCKET)..."; \
+		gsutil mb -l "$(GOOGLE_CLOUD_LOCATION)" "$(STAGING_BUCKET)"; \
 	fi
 	@echo "Google Cloud setup verified"
 
@@ -159,7 +168,7 @@ check-docker:
 	fi
 
 # Production Build (Frontend only - Backend uses Vertex AI)
-build: check-docker build-frontend
+build: build-frontend
 	@echo "Production build completed"
 
 build-frontend: check-docker
@@ -174,12 +183,22 @@ build-frontend: check-docker
 		exit 1; \
 	fi
 
+# Cloud Run Configuration (frontend)
+CLOUD_RUN_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-frontend
+CLOUD_RUN_REGION ?= $(GOOGLE_CLOUD_LOCATION)
+CLOUD_RUN_MIN_INSTANCES ?= 1
+CLOUD_RUN_MAX_INSTANCES ?= 20
+CLOUD_RUN_CPU ?= 1
+CLOUD_RUN_MEMORY ?= 512Mi
+CLOUD_RUN_CONCURRENCY ?= 80
+CLOUD_RUN_TIMEOUT ?= 300s
+
 # Deployment
-deploy: check-gcloud deploy-backend deploy-frontend
+deploy: deploy-backend deploy-frontend
 	@echo "Deployment completed"
 
 deploy-backend: check-gcloud
-	@echo "Deploying backend agent..."
+	@echo "Deploying backend to Vertex AI..."
 	@if [ -f "backend/deployment/deploy.py" ]; then \
 		cd backend && poetry run python deployment/deploy.py; \
 	else \
@@ -187,15 +206,61 @@ deploy-backend: check-gcloud
 		exit 1; \
 	fi
 
-deploy-frontend: check-docker
-	@echo "Deploying frontend..."
+deploy-frontend: check-docker build-frontend deploy-cloudrun
+	@echo "Frontend deployment completed"
+
+deploy-cloudrun: check-gcloud
+	@echo "Deploying frontend to Cloud Run..."
 	@if [ -z "$(DOCKER_REGISTRY)" ] || [ "$(DOCKER_REGISTRY)" = "localhost" ]; then \
 		echo "Error: DOCKER_REGISTRY must be set for frontend deployment"; \
 		exit 1; \
 	fi
-	@echo "Pushing frontend images..."
-	docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)"
-	docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest"
+	@echo "Building and pushing frontend images..."
+	@if ! docker build \
+		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)" \
+		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest" \
+		-f frontend/Dockerfile frontend/; then \
+		echo "Error: Failed to build frontend image"; \
+		exit 1; \
+	fi
+	@echo "Pushing images to registry..."
+	@if ! docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)"; then \
+		echo "Error: Failed to push versioned image"; \
+		exit 1; \
+	fi
+	@if ! docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest"; then \
+		echo "Error: Failed to push latest image"; \
+		exit 1; \
+	fi
+	@echo "Getting backend endpoint URL..."
+	@BACKEND_URL=$$(gcloud ai endpoints list \
+		--project=$(GOOGLE_CLOUD_PROJECT) \
+		--region=$(GOOGLE_CLOUD_LOCATION) \
+		--format='value(displayName,id)' | grep "$(DOCKER_IMAGE_PREFIX)-backend" | head -n1 | awk '{print "https://$(GOOGLE_CLOUD_LOCATION)-$(GOOGLE_CLOUD_PROJECT).aiplatform.googleapis.com/v1/projects/$(GOOGLE_CLOUD_PROJECT)/locations/$(GOOGLE_CLOUD_LOCATION)/endpoints/" $$2}') && \
+	if [ -z "$$BACKEND_URL" ]; then \
+		echo "Warning: Could not find backend endpoint. Setting VITE_API_URL to empty string."; \
+		BACKEND_URL=""; \
+	fi
+	@echo "Deploying to Cloud Run..."
+	@gcloud run deploy $(CLOUD_RUN_SERVICE_NAME) \
+		--image "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)" \
+		--platform managed \
+		--region $(CLOUD_RUN_REGION) \
+		--min-instances $(CLOUD_RUN_MIN_INSTANCES) \
+		--max-instances $(CLOUD_RUN_MAX_INSTANCES) \
+		--cpu $(CLOUD_RUN_CPU) \
+		--memory $(CLOUD_RUN_MEMORY) \
+		--concurrency $(CLOUD_RUN_CONCURRENCY) \
+		--timeout $(CLOUD_RUN_TIMEOUT) \
+		--allow-unauthenticated \
+		--set-env-vars="VITE_API_URL=$$BACKEND_URL" \
+		--port 8080 \
+		--use-http2
+	@echo "Cloud Run deployment completed. Service URL:"
+	@gcloud run services describe $(CLOUD_RUN_SERVICE_NAME) \
+		--platform managed \
+		--region $(CLOUD_RUN_REGION) \
+		--format='value(status.url)'
 
 # Cleanup
 clean:
