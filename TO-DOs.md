@@ -6,7 +6,7 @@
 - [x] build frontend
 - [x] deploy backend
 - [x] deploy frontend
-- [ ] fix deployment frontend
+- [x] fix deployment frontend
 - [ ] connect backend to frontend
 - [ ] serve frontend to a proper url
 - [ ] buy a simple domain?
