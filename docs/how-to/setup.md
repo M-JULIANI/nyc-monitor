@@ -25,9 +25,7 @@ cd atlas-bootstrapped
 
 ---
 
-## 4. Copy contents of .env file into local .env file at root of repo
-
-(TBD)
+## 4. Copy contents of .env file into local .env file at root of repo from [GDrive](https://drive.google.com/drive/folders/11FMQG1ofqvze5Mu7CL_daLPegDAO2GGk?usp=sharing). Remember this file is not commited to version control and is part of .gitignore already/
 
 ---
 

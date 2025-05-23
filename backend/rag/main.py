@@ -37,7 +37,7 @@ async def root():
 @app.post("/ask", response_model=Answer)
 async def ask_question(question: Question):
     try:
-        response = await root_agent.ask(question.text)
+        response = await root_agent(question.text)
         return Answer(response=response)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

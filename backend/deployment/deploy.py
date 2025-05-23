@@ -74,6 +74,7 @@ remote_app = agent_engines.create(
     extra_packages=[
         "./rag",
     ],
+    display_name="Atlas RAG Agent"
 )
 
 # log remote_app
