@@ -20,7 +20,8 @@
                 "ms-python.vscode-pylance",
                 "ms-python.black-formatter",
                 "njpwerner.autodocstring",
-                "ms-azuretools.vscode-docker"
+                "ms-azuretools.vscode-docker",
+                "vstirbu.vscode-mermaid-preview"
             ],
             "settings": {
                 "python.formatting.provider": "black",
