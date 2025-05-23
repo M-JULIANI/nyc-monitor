@@ -168,7 +168,7 @@ check-docker:
 	fi
 
 # Production Build (Frontend only - Backend uses Vertex AI)
-build: build-frontend
+build: build-frontend build-backend
 	@echo "Production build completed"
 
 build-frontend: check-docker
@@ -183,12 +183,25 @@ build-frontend: check-docker
 		exit 1; \
 	fi
 
+build-backend: check-docker
+	@echo "Building backend production image..."
+	@if [ -f "backend/Dockerfile" ]; then \
+		docker build \
+			-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)" \
+			-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:latest" \
+			-f backend/Dockerfile .; \
+	else \
+		echo "Error: backend/Dockerfile not found"; \
+		exit 1; \
+	fi
+
 # Simplified deployment variables
 CLOUD_RUN_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-frontend
 CLOUD_RUN_REGION ?= $(GOOGLE_CLOUD_LOCATION)
+CLOUD_RUN_BACKEND_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-backend
 
 # Deployment
-deploy: deploy-backend deploy-frontend
+deploy: deploy-backend deploy-backend-api deploy-frontend
 	@echo "Deployment completed"
 
 deploy-backend: check-gcloud
@@ -199,6 +212,27 @@ deploy-backend: check-gcloud
 		echo "Error: backend/deployment/deploy.py not found"; \
 		exit 1; \
 	fi
+
+deploy-backend-api: check-docker check-gcloud
+	@echo "Deploying FastAPI backend to Cloud Run..."
+	@docker build \
+		--platform linux/amd64 \
+		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)" \
+		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:latest" \
+		-f backend/Dockerfile .
+	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)"
+	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:latest"
+	@gcloud run deploy $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
+		--image "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)" \
+		--platform managed \
+		--region $(CLOUD_RUN_REGION) \
+		--allow-unauthenticated \
+		--port 8000
+	@echo "Backend API deployed. Service URL:"
+	@gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
+		--platform managed \
+		--region $(CLOUD_RUN_REGION) \
+		--format='value(status.url)'
 
 deploy-frontend: check-docker check-gcloud
 	@echo "Building and deploying frontend..."
