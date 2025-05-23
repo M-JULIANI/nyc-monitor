@@ -70,9 +70,11 @@ async def ask_question(
     user=Depends(verify_google_token)
 ):
     try:
-        response = root_agent(question.text)
+       # response = root_agent(question.text)
+        response = "Hello"
         return Answer(response=response)
     except Exception as e:
+        print("ERROR in /ask:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
