@@ -109,16 +109,16 @@ jobs:
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
-          context: backend
-          file: Dockerfile
+          context: ./backend
+          file: ${{ github.workspace }}/backend/Dockerfile
           push: true
           tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-backend:${{ env.VERSION }}
 
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
-          context: frontend
-          file: Dockerfile
+          context: ./frontend
+          file: ${{ github.workspace }}/frontend/Dockerfile
           push: true
           tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-frontend:${{ env.VERSION }}
 
