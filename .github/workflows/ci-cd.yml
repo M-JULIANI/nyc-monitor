@@ -112,6 +112,7 @@ jobs:
           context: .
           file: ${{ github.workspace }}/backend/Dockerfile
           push: true
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
           tags: us-central1-docker.pkg.dev/${{ secrets.GOOGLE_CLOUD_PROJECT }}/atlas-repo/atlas-backend:${{ env.VERSION }}
 
       - name: Build and push frontend
@@ -120,6 +121,7 @@ jobs:
           context: .
           file: ${{ github.workspace }}/frontend/Dockerfile
           push: true
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
           tags: us-central1-docker.pkg.dev/${{ secrets.GOOGLE_CLOUD_PROJECT }}/atlas-repo/atlas-frontend:${{ env.VERSION }}
 
   deploy:
