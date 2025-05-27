@@ -43,7 +43,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./backend
-          file: ./Dockerfile
+          file: Dockerfile
           push: true
           tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-backend:${{ env.VERSION }}
 
@@ -51,7 +51,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
-          file: ./Dockerfile
+          file: Dockerfile
           push: true
           tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-frontend:${{ env.VERSION }}
 
