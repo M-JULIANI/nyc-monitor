@@ -36,6 +36,11 @@ jobs:
         run: |
           make install
 
+      - name: Debug DOCKER_REGISTRY
+        run: echo "DOCKER_REGISTRY is: $DOCKER_REGISTRY"
+        env:
+          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+
       - name: Build
         run: |
           make build
@@ -51,11 +56,6 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-
-      - name: Debug DOCKER_REGISTRY
-        run: echo "DOCKER_REGISTRY is: $DOCKER_REGISTRY"
-        env:
-          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
 
   build-and-push:
     needs: test
