@@ -11,7 +11,7 @@
 - [ ] serve frontend to a proper url
 - [ ] buy a simple domain?
 - [x] CI/CD? (when we merge an MR get it auto-deployed)
-    - [ ] run build & testfor a PR pipeline
+    - [x] run build & test for a PR pipeline
     - [ ] push to artifact registry & deploy on PR merge
 
 ## Explore datasets and APIs
