@@ -112,6 +112,7 @@ jobs:
           context: .
           file: ${{ github.workspace }}/backend/Dockerfile
           push: true
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
           tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-backend:${{ env.VERSION }}
 
       - name: Build and push frontend
@@ -120,6 +121,7 @@ jobs:
           context: .
           file: ${{ github.workspace }}/frontend/Dockerfile
           push: true
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
           tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-frontend:${{ env.VERSION }}
 
   deploy:
