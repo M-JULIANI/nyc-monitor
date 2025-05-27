@@ -96,6 +96,16 @@ jobs:
           echo "CHECKING HERE! Listing frontend directory:"
           ls -l ./frontend
 
+      - name: Test Dockerfile existence for buildx
+        run: |
+          if [ ! -f ./backend/Dockerfile ]; then
+            echo "Dockerfile not found for buildx!";
+            exit 1;
+          else
+            echo "Dockerfile found for buildx!";
+            cat ./backend/Dockerfile | head -10
+          fi
+
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
