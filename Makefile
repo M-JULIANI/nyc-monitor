@@ -72,10 +72,16 @@ install-frontend:
 	@if [ -f "frontend/package.json" ]; then \
 		cd frontend && \
 		npm install --no-audit --no-fund && \
-		npm update --no-audit --no-fund; \
+		npm update --no-audit --no-fund && \
+		npm install --save-dev vitest; \
 	else \
 		echo "Warning: frontend/package.json not found"; \
 	fi
+
+install-frontend-test:
+	@echo "Installing frontend test dependencies (Vitest, TypeScript)..."
+	cd frontend && \
+	npm install --save-dev vitest
 
 # Devcontainer specific commands
 devcontainer-setup: check-deps install check-gcloud
