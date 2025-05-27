@@ -59,6 +59,7 @@ jobs:
 
   build-and-push:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+   #if: github.event_name == 'pull_request' for testing purposes only
     # Only run on master push
     runs-on: ubuntu-latest
     environment: prod
@@ -81,25 +82,45 @@ jobs:
         with:
           credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
-      - name: Configure Docker for Google Container Registry
+      - name: Configure Docker for Artifact Registry
         run: |
-          gcloud auth configure-docker
+          gcloud auth configure-docker us-central1-docker.pkg.dev
+
+      - name: List backend directory
+        run: |
+          echo "CHECKING HERE! Listing backend directory:"
+          ls -l ./backend
+
+      - name: List frontend directory
+        run: |
+          echo "CHECKING HERE! Listing frontend directory:"
+          ls -l ./frontend
+
+      - name: Test Dockerfile existence for buildx
+        run: |
+          if [ ! -f ./backend/Dockerfile ]; then
+            echo "Dockerfile not found for buildx!";
+            exit 1;
+          else
+            echo "Dockerfile found for buildx!";
+            cat ./backend/Dockerfile | head -10
+          fi
 
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
-          file: Dockerfile
+          context: .
+          file: ${{ github.workspace }}/backend/Dockerfile
           push: true
-          tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-backend:${{ env.VERSION }}
+          tags: us-central1-docker.pkg.dev/${{ secrets.GOOGLE_CLOUD_PROJECT }}/atlas-repo/atlas-backend:${{ env.VERSION }}
 
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
-          context: ./frontend
-          file: Dockerfile
+          context: .
+          file: ${{ github.workspace }}/frontend/Dockerfile
           push: true
-          tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-frontend:${{ env.VERSION }}
+          tags: us-central1-docker.pkg.dev/${{ secrets.GOOGLE_CLOUD_PROJECT }}/atlas-repo/atlas-frontend:${{ env.VERSION }}
 
   deploy:
     needs: build-and-push

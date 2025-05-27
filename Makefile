@@ -184,7 +184,7 @@ build-frontend: check-docker
 		docker build \
 			-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)" \
 			-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest" \
-			-f frontend/Dockerfile frontend/; \
+			-f frontend/Dockerfile .; \
 	else \
 		echo "Error: frontend/Dockerfile not found"; \
 		exit 1; \
