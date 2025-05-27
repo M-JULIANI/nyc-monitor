@@ -58,7 +58,8 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
   build-and-push:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    #if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'pull_request'
     # Only run on master push
     runs-on: ubuntu-latest
     environment: prod
@@ -84,6 +85,16 @@ jobs:
       - name: Configure Docker for Google Container Registry
         run: |
           gcloud auth configure-docker
+
+      - name: List backend directory
+        run: |
+          echo "CHECKING HERE! Listing backend directory:"
+          ls -l ./backend
+
+      - name: List frontend directory
+        run: |
+          echo "CHECKING HERE! Listing frontend directory:"
+          ls -l ./frontend
 
       - name: Build and push backend
         uses: docker/build-push-action@v6
