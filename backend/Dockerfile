@@ -15,12 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy poetry files and install dependencies
-COPY pyproject.toml poetry.lock* ./
+COPY backend/pyproject.toml backend/poetry.lock* ./
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --only main
 
 # Copy backend code
-COPY . ./
+COPY backend/ ./
 
 # Expose port for Cloud Run
 EXPOSE 8000

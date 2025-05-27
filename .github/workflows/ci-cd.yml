@@ -21,6 +21,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          
+      - name: Debug files
+        run: ls -l backend/
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -56,9 +59,6 @@ jobs:
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
-      - name: Debug files
-        run: ls -l backend/
-
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
@@ -81,7 +81,7 @@ jobs:
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
+          context: .
           file: ./backend/Dockerfile
           push: true
           tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-backend:${{ env.VERSION }}
@@ -89,7 +89,7 @@ jobs:
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
-          context: ./frontend
+          context: .
           file: ./frontend/Dockerfile
           push: true
           tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-frontend:${{ env.VERSION }}
