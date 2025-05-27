@@ -36,11 +36,6 @@ jobs:
         run: |
           make install
 
-      - name: Debug DOCKER_REGISTRY
-        run: echo "DOCKER_REGISTRY is: $DOCKER_REGISTRY"
-        env:
-          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-
       - name: Build
         run: |
           make build

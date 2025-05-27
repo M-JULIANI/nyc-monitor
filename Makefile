@@ -175,6 +175,7 @@ check-docker:
 
 # Production Build (Frontend only - Backend uses Vertex AI)
 build: build-frontend build-backend
+	@echo "DOCKER_REGISTRY is: '$(DOCKER_REGISTRY)'"
 	@echo "Production build completed"
 
 build-frontend: check-docker
