@@ -4,7 +4,7 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 # Copy package files
-COPY ./package*.json ./
+COPY frontend/package*.json ./
 
 # Install dependencies
 RUN npm ci
@@ -19,7 +19,7 @@ RUN npm run build
 FROM nginx:alpine
 
 # Copy nginx config
-COPY ./nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
