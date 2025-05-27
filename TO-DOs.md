@@ -10,7 +10,9 @@
 - [x] connect backend to frontend
 - [ ] serve frontend to a proper url
 - [ ] buy a simple domain?
-- [x] CI/CD? (when we merge an MR get it auto-deployed), run test and build for any pipeline
+- [x] CI/CD? (when we merge an MR get it auto-deployed)
+    - [ ] run build & testfor a PR pipeline
+    - [ ] push to artifact registry & deploy on PR merge
 
 ## Explore datasets and APIs
 Decide which of these are valuable and worth pursuing as we will build an integration/api call to fetch data from them (our `searcher` agent). Are these api calls searchable by topic, lat, lon?
