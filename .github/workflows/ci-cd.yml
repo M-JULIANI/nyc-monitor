@@ -61,7 +61,16 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     # Only run on master push
     runs-on: ubuntu-latest
+    environment: prod
     steps:
+      - name: Check if GOOGLE_APPLICATION_CREDENTIALS is set
+        run: |
+          if [ -z "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" ]; then
+            echo "Secret is NOT set";
+            exit 1;
+          else
+            echo "Secret is set";
+          fi
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
