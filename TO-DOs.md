@@ -7,10 +7,10 @@
 - [x] deploy backend
 - [x] deploy frontend
 - [x] fix deployment frontend
-- [ ] connect backend to frontend
+- [x] connect backend to frontend
 - [ ] serve frontend to a proper url
 - [ ] buy a simple domain?
-- [ ] CI/CD? (when we merge an MR get it auto-deployed)
+- [x] CI/CD? (when we merge an MR get it auto-deployed), run test and build for any pipeline
 
 ## Explore datasets and APIs
 Decide which of these are valuable and worth pursuing as we will build an integration/api call to fetch data from them (our `searcher` agent). Are these api calls searchable by topic, lat, lon?

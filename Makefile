@@ -299,4 +299,4 @@ help:
 	@echo "  make build            - Build frontend production image"
 	@echo "  make deploy           - Deploy both backend (Vertex AI) and frontend"
 	@echo "  make deploy-backend   - Deploy backend agent to Vertex AI"
-	@echo "  make deploy-frontend  - Deploy frontend container" 
+	@echo "  make deploy-frontend  - Deploy frontend container"
