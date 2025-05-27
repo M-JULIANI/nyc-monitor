@@ -56,6 +56,9 @@ jobs:
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
+      - name: Debug files
+        run: ls -l backend/
+
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
