@@ -20,7 +20,7 @@ RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --only main
 
 # Copy backend code
-COPY backend/ ./
+COPY . ./
 
 # Expose port for Cloud Run
 EXPOSE 8000
