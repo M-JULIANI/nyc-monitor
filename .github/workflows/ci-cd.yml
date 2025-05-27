@@ -7,13 +7,13 @@ on:
     branches: [master]
 
 env:
-  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
   DOCKER_IMAGE_PREFIX: atlas
   VERSION: ${{ github.sha }}
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    environment: prod
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +35,10 @@ jobs:
       - name: Install dependencies
         run: |
           make install
+        env:
+          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+          DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
+          VERSION: ${{ env.VERSION }}
 
       - name: Build
         run: |
@@ -56,6 +60,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    environment: prod
     steps:
       - uses: actions/checkout@v4
 
@@ -91,6 +96,7 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    environment: prod
     steps:
       - uses: actions/checkout@v4
 
