@@ -61,6 +61,7 @@ install: check-deps install-backend install-frontend
 
 install-backend:
 	@echo "Installing backend dependencies..."
+	@echo "DOCKER_REGISTRY is: '$(DOCKER_REGISTRY)'"
 	@if [ -f "backend/pyproject.toml" ]; then \
 		cd backend && poetry install; \
 	else \
@@ -72,10 +73,16 @@ install-frontend:
 	@if [ -f "frontend/package.json" ]; then \
 		cd frontend && \
 		npm install --no-audit --no-fund && \
-		npm update --no-audit --no-fund; \
+		npm update --no-audit --no-fund && \
+		npm install --save-dev vitest; \
 	else \
 		echo "Warning: frontend/package.json not found"; \
 	fi
+
+install-frontend-test:
+	@echo "Installing frontend test dependencies (Vitest, TypeScript)..."
+	cd frontend && \
+	npm install --save-dev vitest
 
 # Devcontainer specific commands
 devcontainer-setup: check-deps install check-gcloud
@@ -293,4 +300,4 @@ help:
 	@echo "  make build            - Build frontend production image"
 	@echo "  make deploy           - Deploy both backend (Vertex AI) and frontend"
 	@echo "  make deploy-backend   - Deploy backend agent to Vertex AI"
-	@echo "  make deploy-frontend  - Deploy frontend container" 
+	@echo "  make deploy-frontend  - Deploy frontend container"

@@ -1,8 +1,8 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import Login from './Login';
-import Layout from './Layout';
-import Home from './Home';
+import Login from './components/Login';
+import Layout from './components/Layout';
+import Home from './pages/Home';
 
 const clientId = "290750569862-gdc3l80ctskurtojh6sgkbs74ursl25l.apps.googleusercontent.com";
 
