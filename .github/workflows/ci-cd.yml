@@ -82,9 +82,9 @@ jobs:
         with:
           credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
-      - name: Configure Docker for Google Container Registry
+      - name: Configure Docker for Artifact Registry
         run: |
-          gcloud auth configure-docker
+          gcloud auth configure-docker us-central1-docker.pkg.dev
 
       - name: List backend directory
         run: |
@@ -112,8 +112,7 @@ jobs:
           context: .
           file: ${{ github.workspace }}/backend/Dockerfile
           push: true
-          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-backend:${{ env.VERSION }}
+          tags: us-central1-docker.pkg.dev/${{ secrets.GOOGLE_CLOUD_PROJECT }}/atlas-repo/atlas-backend:${{ env.VERSION }}
 
       - name: Build and push frontend
         uses: docker/build-push-action@v6
@@ -121,8 +120,7 @@ jobs:
           context: .
           file: ${{ github.workspace }}/frontend/Dockerfile
           push: true
-          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
-          tags: gcr.io/${{ secrets.GOOGLE_CLOUD_PROJECT }}/${{ env.DOCKER_IMAGE_PREFIX }}-frontend:${{ env.VERSION }}
+          tags: us-central1-docker.pkg.dev/${{ secrets.GOOGLE_CLOUD_PROJECT }}/atlas-repo/atlas-frontend:${{ env.VERSION }}
 
   deploy:
     needs: build-and-push
