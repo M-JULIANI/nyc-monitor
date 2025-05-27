@@ -61,6 +61,7 @@ install: check-deps install-backend install-frontend
 
 install-backend:
 	@echo "Installing backend dependencies..."
+	@echo "DOCKER_REGISTRY is: '$(DOCKER_REGISTRY)'"
 	@if [ -f "backend/pyproject.toml" ]; then \
 		cd backend && poetry install; \
 	else \
@@ -175,7 +176,6 @@ check-docker:
 
 # Production Build (Frontend only - Backend uses Vertex AI)
 build: build-frontend build-backend
-	@echo "DOCKER_REGISTRY is: '$(DOCKER_REGISTRY)'"
 	@echo "Production build completed"
 
 build-frontend: check-docker
