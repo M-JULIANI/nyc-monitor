@@ -221,12 +221,13 @@ deploy-backend: check-gcloud
 	fi
 
 deploy-backend-api: check-docker check-gcloud
+	@env | grep GOOGLE
 	@echo "Deploying FastAPI backend to Cloud Run..."
 	@docker build \
 		--platform linux/amd64 \
 		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)" \
 		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:latest" \
-		-f backend/Dockerfile .
+		-f backend/Dockerfile . 
 	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)"
 	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:latest"
 	@gcloud run deploy $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
@@ -252,7 +253,7 @@ deploy-frontend: check-docker check-gcloud
 		--platform linux/amd64 \
 		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)" \
 		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest" \
-		-f frontend/Dockerfile frontend/
+		-f frontend/Dockerfile .
 	@echo "Pushing image to registry..."
 	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)"
 	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:latest"

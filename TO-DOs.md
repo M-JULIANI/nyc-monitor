@@ -23,6 +23,13 @@ Decide which of these are valuable and worth pursuing as we will build an integr
 - [ ] tripadvisor
 - [ ] google trends
 
+## MCP implementations to study
+- [ ] [reddit mcp](https://github.com/adhikasp/mcp-reddit)
+- [ ] [trip advisor mcp](https://github.com/pab1it0/tripadvisor-mcp)
+- [ ] [google search](https://github.com/mixelpixx/Google-Search-MCP-Server)
+- [ ] [twitter mcp](https://github.com/EnesCinr/twitter-mcp)
+
+
 ## Agents (Backend)
 These are basically the agents. The search one will do most of the work, so maybe worth splitting into search APIs and search datasets
 
