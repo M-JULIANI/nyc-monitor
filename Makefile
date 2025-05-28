@@ -270,42 +270,6 @@ deploy-frontend: check-docker check-gcloud
 		--region $(CLOUD_RUN_REGION) \
 		--format='value(status.url)'
 
-# Deploy-only targets (for CI/CD - use pre-built images)
-deploy-only: deploy-backend deploy-backend-api-only deploy-frontend-only
-	@echo "Deploy-only completed (using pre-built images)"
-
-deploy-backend-api-only: check-gcloud
-	@echo "Deploying pre-built FastAPI backend to Cloud Run..."
-	@gcloud run deploy $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
-		--image "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)" \
-		--platform managed \
-		--region $(CLOUD_RUN_REGION) \
-		--allow-unauthenticated \
-		--port 8000
-	@echo "Backend API deployed. Service URL:"
-	@gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
-		--platform managed \
-		--region $(CLOUD_RUN_REGION) \
-		--format='value(status.url)'
-
-deploy-frontend-only: check-gcloud
-	@echo "Deploying pre-built frontend to Cloud Run..."
-	@if [ -z "$(DOCKER_REGISTRY)" ] || [ "$(DOCKER_REGISTRY)" = "localhost" ]; then \
-		echo "Error: DOCKER_REGISTRY must be set for frontend deployment"; \
-		exit 1; \
-	fi
-	@gcloud run deploy $(CLOUD_RUN_SERVICE_NAME) \
-		--image "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-frontend:$(VERSION)" \
-		--platform managed \
-		--region $(CLOUD_RUN_REGION) \
-		--allow-unauthenticated \
-		--port 8080
-	@echo "Frontend deployment completed. Service URL:"
-	@gcloud run services describe $(CLOUD_RUN_SERVICE_NAME) \
-		--platform managed \
-		--region $(CLOUD_RUN_REGION) \
-		--format='value(status.url)'
-
 # Cleanup
 clean:
 	@echo "Cleaning up development environment..."
@@ -338,6 +302,3 @@ help:
 	@echo "  make deploy           - Deploy both backend (Vertex AI) and frontend"
 	@echo "  make deploy-backend   - Deploy backend agent to Vertex AI"
 	@echo "  make deploy-frontend  - Deploy frontend container"
-	@echo "  make deploy-only      - Deploy backend and frontend using pre-built images"
-	@echo "  make deploy-backend-api-only - Deploy pre-built backend to Cloud Run"
-	@echo "  make deploy-frontend-only - Deploy pre-built frontend to Cloud Run"
