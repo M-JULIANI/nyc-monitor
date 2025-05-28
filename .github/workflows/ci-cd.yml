@@ -153,6 +153,11 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          
+      - name: Configure gsutil to use gcloud credentials
+        run: |
+          gcloud auth activate-service-account --key-file="${GOOGLE_APPLICATION_CREDENTIALS}"
+          gcloud config set account "$(gcloud config get-value account)"
 
       - name: Print Google env vars
         run: env | grep GOOGLE || true
