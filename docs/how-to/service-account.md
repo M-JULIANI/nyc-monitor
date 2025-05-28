@@ -1,6 +1,6 @@
 # One time service account creation for CI/CD
 
-(Martin you don't need to do this, just documenting for posterity)
+(Martin you don't need to do this, just documenting for posterity.)
 
 1. Create service account:
 ```
