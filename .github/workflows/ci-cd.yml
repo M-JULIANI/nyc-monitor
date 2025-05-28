@@ -160,6 +160,15 @@ jobs:
       - name: Set gcloud project
         run: gcloud config set project "$GOOGLE_CLOUD_PROJECT"
 
+      - name: Validate gcloud project access
+        run: |
+          echo "Current gcloud project:"
+          gcloud config get-value project
+          echo "Listing projects visible to this account:"
+          gcloud projects list || true
+          echo "Trying to describe the configured project:"
+          gcloud projects describe "$(gcloud config get-value project)" || true
+
       - name: Deploy Backend API
         run: |
           make deploy-backend-api
