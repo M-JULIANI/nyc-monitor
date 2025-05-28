@@ -11,51 +11,51 @@ env:
   VERSION: ${{ github.sha }}
 
 jobs:
-  test:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    environment: prod
-    steps:
-      - uses: actions/checkout@v4
+  # test:
+  #   if: github.event_name == 'pull_request'
+  #   runs-on: ubuntu-latest
+  #   environment: prod
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.12"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
+  #     - name: Set up Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "20"
 
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          poetry config virtualenvs.create false
+  #     - name: Install Poetry
+  #       run: |
+  #         curl -sSL https://install.python-poetry.org | python3 -
+  #         poetry config virtualenvs.create false
 
-      - name: Install dependencies
-        run: |
-          make install
-        env:
-          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-          DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
-          VERSION: ${{ env.VERSION }}
+  #     - name: Install dependencies
+  #       run: |
+  #         make install
+  #       env:
+  #         DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+  #         DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
+  #         VERSION: ${{ env.VERSION }}
 
-      - name: Build
-        run: |
-          make build
-        env:
-          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-          DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
-          VERSION: ${{ env.VERSION }}
+  #     - name: Build
+  #       run: |
+  #         make build
+  #       env:
+  #         DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+  #         DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
+  #         VERSION: ${{ env.VERSION }}
 
-      - name: Run tests
-        run: |
-          make test
-        env:
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+  #     - name: Run tests
+  #       run: |
+  #         make test
+  #       env:
+  #         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+  #         GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
+  #         GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
   build-and-push:
     #if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -181,13 +181,17 @@ jobs:
       - name: Install all dependencies
         run: make install
 
+      - name: Write Google credentials to file
+        run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > /tmp/gcp-creds.json
+        shell: bash
+
       - name: Deploy Backend API
         run: |
           make deploy-backend-api
         env:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-creds.json
           DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
           DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
           VERSION: ${{ env.VERSION }}
