@@ -11,55 +11,55 @@ env:
   VERSION: ${{ github.sha }}
 
 jobs:
-  # test:
-  #   if: github.event_name == 'pull_request'
-  #   runs-on: ubuntu-latest
-  #   environment: prod
-  #   steps:
-  #     - uses: actions/checkout@v4
+  test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
 
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v5
-  #       with:
-  #         python-version: "3.12"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-  #     - name: Set up Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: "20"
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-  #     - name: Install Poetry
-  #       run: |
-  #         curl -sSL https://install.python-poetry.org | python3 -
-  #         poetry config virtualenvs.create false
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          poetry config virtualenvs.create false
 
-  #     - name: Install dependencies
-  #       run: |
-  #         make install
-  #       env:
-  #         DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-  #         DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
-  #         VERSION: ${{ env.VERSION }}
+      - name: Install dependencies
+        run: |
+          make install
+        env:
+          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+          DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
+          VERSION: ${{ env.VERSION }}
 
-  #     - name: Build
-  #       run: |
-  #         make build
-  #       env:
-  #         DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-  #         DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
-  #         VERSION: ${{ env.VERSION }}
+      - name: Build
+        run: |
+          make build
+        env:
+          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+          DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
+          VERSION: ${{ env.VERSION }}
 
-  #     - name: Run tests
-  #       run: |
-  #         make test
-  #       env:
-  #         GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-  #         GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
-  #         GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+      - name: Run tests
+        run: |
+          make test
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
   build-and-push:
     #if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    if: github.event_name == 'pull_request' #for testing purposes only
+    if: github.event_name == 'pull_request'
     # Only run on master push
     runs-on: ubuntu-latest
     environment: prod
@@ -86,26 +86,6 @@ jobs:
         run: |
           gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      - name: List backend directory
-        run: |
-          echo "CHECKING HERE! Listing backend directory:"
-          ls -l ./backend
-
-      - name: List frontend directory
-        run: |
-          echo "CHECKING HERE! Listing frontend directory:"
-          ls -l ./frontend
-
-      - name: Test Dockerfile existence for buildx
-        run: |
-          if [ ! -f ./backend/Dockerfile ]; then
-            echo "Dockerfile not found for buildx!";
-            exit 1;
-          else
-            echo "Dockerfile found for buildx!";
-            cat ./backend/Dockerfile | head -10
-          fi
-
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
@@ -124,8 +104,8 @@ jobs:
 
   deploy:
     needs: build-and-push
-    if: github.event_name == 'pull_request'
     #if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     environment: prod
     steps:
@@ -154,25 +134,8 @@ jobs:
         with:
           credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
           
-      - name: Configure gsutil to use gcloud credentials
-        run: |
-          gcloud auth activate-service-account --key-file="${GOOGLE_APPLICATION_CREDENTIALS}"
-          gcloud config set account "$(gcloud config get-value account)"
-
-      - name: Print Google env vars
-        run: env | grep GOOGLE || true
-
       - name: Set gcloud project
         run: gcloud config set project "$GOOGLE_CLOUD_PROJECT"
-
-      - name: Validate gcloud project access
-        run: |
-          echo "Current gcloud project:"
-          gcloud config get-value project
-          echo "Listing projects visible to this account:"
-          gcloud projects list || true
-          echo "Trying to describe the configured project:"
-          gcloud projects describe "$(gcloud config get-value project)" || true
 
       - name: Configure Docker for Artifact Registry
         run: |
@@ -181,31 +144,9 @@ jobs:
       - name: Install all dependencies
         run: make install
 
-      - name: Deploy Backend API
+      - name: Deploy All Services
         run: |
-          make deploy-backend-api
-        env:
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
-          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-          DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
-          VERSION: ${{ env.VERSION }}
-          STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
-
-      - name: Deploy Backend
-        run: |
-          make deploy-backend
-        env:
-          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
-          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
-          DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
-          VERSION: ${{ env.VERSION }}
-          STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
-
-      - name: Deploy Frontend
-        run: |
-          make deploy-frontend
+          make deploy-only
         env:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
