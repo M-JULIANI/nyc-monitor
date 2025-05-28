@@ -19,6 +19,7 @@ from rag.agent import root_agent
 import logging
 import os
 from dotenv import set_key, load_dotenv
+from google.auth import default
 
 # Load .env from the repo root
 load_dotenv(os.path.abspath(os.path.join(
@@ -34,10 +35,16 @@ STAGING_BUCKET = os.getenv("STAGING_BUCKET")
 ENV_FILE_PATH = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "..", ".env"))
 
+# Remove the GOOGLE_APPLICATION_CREDENTIALS dependency entirely
+# and rely only on gcloud authentication
+os.environ.pop('GOOGLE_APPLICATION_CREDENTIALS', None)
+credentials, project_id = default()
+
 vertexai.init(
-    project=GOOGLE_CLOUD_PROJECT,
+    project=GOOGLE_CLOUD_PROJECT or project_id,
     location=GOOGLE_CLOUD_LOCATION,
     staging_bucket=STAGING_BUCKET,
+    credentials=credentials,
 )
 
 # Function to update the .env file
