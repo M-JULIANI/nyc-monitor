@@ -185,6 +185,17 @@ jobs:
         run: echo "${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}" > /tmp/gcp-creds.json
         shell: bash
 
+      - name: Debug credentials file before deploy-backend
+        run: |
+          echo "Checking credentials file before deploy-backend:"
+          ls -la /tmp/gcp-creds.json || echo "File not found"
+          echo "File size:"
+          wc -c /tmp/gcp-creds.json || echo "Cannot get file size"
+          echo "First few lines:"
+          head -3 /tmp/gcp-creds.json || echo "Cannot read file"
+          echo "Validating JSON:"
+          python3 -m json.tool /tmp/gcp-creds.json > /dev/null && echo "Valid JSON" || echo "Invalid JSON"
+
       - name: Deploy Backend API
         run: |
           make deploy-backend-api
