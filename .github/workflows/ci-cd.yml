@@ -58,8 +58,8 @@ jobs:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
 
   build-and-push:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-   #if: github.event_name == 'pull_request' for testing purposes only
+    #if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+   if: github.event_name == 'pull_request' for testing purposes only
     # Only run on master push
     runs-on: ubuntu-latest
     environment: prod
@@ -139,6 +139,14 @@ jobs:
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
           poetry config virtualenvs.create false
+
+      - name: Print Google env vars
+        run: env | grep GOOGLE || true
+
+      - name: Check gcloud auth and project
+        run: |
+          gcloud auth list
+          gcloud config list project
 
       - name: Deploy Backend API
         run: |
