@@ -59,7 +59,7 @@ jobs:
 
   build-and-push:
     #if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-   if: github.event_name == 'pull_request' for testing purposes only
+   if: github.event_name == 'pull_request' #for testing purposes only
     # Only run on master push
     runs-on: ubuntu-latest
     environment: prod
