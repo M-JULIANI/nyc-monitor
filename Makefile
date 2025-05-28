@@ -221,6 +221,7 @@ deploy-backend: check-gcloud
 	fi
 
 deploy-backend-api: check-docker check-gcloud
+	@env | grep GOOGLE
 	@echo "Deploying FastAPI backend to Cloud Run..."
 	@docker build \
 		--platform linux/amd64 \
