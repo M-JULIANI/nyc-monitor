@@ -35,9 +35,7 @@ STAGING_BUCKET = os.getenv("STAGING_BUCKET")
 ENV_FILE_PATH = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "..", ".env"))
 
-# Remove the GOOGLE_APPLICATION_CREDENTIALS dependency entirely
-# and rely only on gcloud authentication
-os.environ.pop('GOOGLE_APPLICATION_CREDENTIALS', None)
+# Use default credentials which will work with both local and CI/CD environments
 credentials, project_id = default()
 
 vertexai.init(
