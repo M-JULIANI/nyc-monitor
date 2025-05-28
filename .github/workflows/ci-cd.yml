@@ -157,10 +157,8 @@ jobs:
       - name: Print Google env vars
         run: env | grep GOOGLE || true
 
-      - name: Check gcloud auth and project
-        run: |
-          gcloud auth list
-          gcloud config list project
+      - name: Set gcloud project
+        run: gcloud config set project "$GOOGLE_CLOUD_PROJECT"
 
       - name: Deploy Backend API
         run: |
