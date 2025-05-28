@@ -178,6 +178,9 @@ jobs:
         run: |
           gcloud auth configure-docker us-central1-docker.pkg.dev
 
+      - name: Install all dependencies
+        run: make install
+
       - name: Deploy Backend API
         run: |
           make deploy-backend-api
