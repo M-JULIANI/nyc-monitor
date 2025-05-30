@@ -31,8 +31,13 @@ class TriageAgent:
         # Initialize Vertex AI
         vertexai.init(project=self.project_id, location=self.location)
 
-        # Use fast, lightweight model
-        self.model = GenerativeModel("gemini-1.5-flash")
+        # Use available model (try gemini-pro)
+        try:
+            self.model = GenerativeModel("gemini-pro")
+            logger.info("✅ Using gemini-pro model for triage analysis")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Vertex AI model: {e}")
+            raise
 
         # Severity thresholds for alerting
         self.severity_thresholds = {
@@ -57,8 +62,8 @@ class TriageAgent:
             # Create prompt for AI analysis
             prompt = self._create_triage_prompt(raw_signals)
 
-            # Get AI response
-            response = await self.model.generate_content_async(prompt)
+            # Get AI response (using synchronous method)
+            response = self.model.generate_content(prompt)
 
             if response and response.text:
                 try:

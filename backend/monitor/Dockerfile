@@ -5,7 +5,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Set environment variables
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:/app/monitor
 ENV PYTHONUNBUFFERED=1
 
 # Install system dependencies

@@ -423,6 +423,10 @@ logs-monitor: check-gcloud
 		--format='table(timestamp,textPayload)' \
 		--freshness=1d
 
+verify-monitor: check-gcloud
+	@echo "🔍 Verifying monitor system..."
+	cd backend && poetry run python ../scripts/verify_monitor_system.py
+
 # Cleanup
 clean:
 	@echo "Cleaning up development environment..."
@@ -464,3 +468,4 @@ help:
 	@echo "  make deploy-monitor   - Deploy monitor system with monitor"
 	@echo "  make test-monitor     - Run monitor job manually"
 	@echo "  make logs-monitor     - View monitor system logs"
+	@echo "  make verify-monitor   - Verify monitor system"

@@ -84,40 +84,77 @@ class MonitorJob:
         Returns:
             Dictionary with job execution statistics
         """
-        logger.info("=== Starting background monitor cycle ===")
+        logger.info("🚀 === STARTING NYC BACKGROUND MONITOR CYCLE ===")
+        logger.info(f"   Timestamp: {datetime.utcnow().isoformat()}")
+        logger.info(f"   Project: {os.getenv('GOOGLE_CLOUD_PROJECT')}")
+        logger.info(f"   Collectors: {len(self.collectors)}")
 
         try:
             # Step 1: Collect raw signals from all sources
+            logger.info("📡 PHASE 1: COLLECTING SIGNALS")
             raw_signals = await self._collect_all_signals()
 
             if not raw_signals:
-                logger.info("No signals collected from any sources")
+                logger.warning("⚠️  No signals collected from any sources")
+                logger.info(
+                    "🔍 Check collector configuration and API credentials")
                 return self._generate_stats_report()
 
-            logger.info(f"Collected signals from {len(raw_signals)} sources")
+            logger.info(f"✅ Collected signals from {len(raw_signals)} sources")
+            for source, data in raw_signals.items():
+                if isinstance(data, list):
+                    logger.info(f"   📊 {source}: {len(data)} items")
 
             # Step 2: Run triage analysis on collected signals
+            logger.info("🧠 PHASE 2: TRIAGE ANALYSIS")
             triage_results = await self._run_triage_analysis(raw_signals)
 
             if not triage_results or not triage_results.get('alerts'):
-                logger.info("No alerts generated from triage analysis")
+                logger.warning("⚠️  No alerts generated from triage analysis")
+                logger.info(
+                    "🔍 Check triage agent configuration or signal quality")
                 return self._generate_stats_report()
 
             alerts = triage_results['alerts']
             self.stats['alerts_generated'] = len(alerts)
-            logger.info(f"Triage analysis generated {len(alerts)} alerts")
+            logger.info(f"✅ Triage analysis generated {len(alerts)} alerts")
+
+            # Log alert severity distribution
+            severity_counts = {}
+            for alert in alerts:
+                severity = alert.get('severity', 0)
+                severity_counts[severity] = severity_counts.get(
+                    severity, 0) + 1
+            logger.info(f"   📈 Severity distribution: {severity_counts}")
 
             # Step 3: Store alerts in Firestore
+            logger.info("💾 PHASE 3: STORING ALERTS")
             stored_count = await self._store_alerts(alerts)
             self.stats['alerts_stored'] = stored_count
 
+            # Final summary
+            logger.info("🎉 === MONITOR CYCLE COMPLETED ===")
             logger.info(
-                f"Background monitor cycle completed. Stored {stored_count} alerts.")
+                f"   ✅ Signals collected: {self.stats['signals_collected']}")
+            logger.info(
+                f"   ✅ Alerts generated: {self.stats['alerts_generated']}")
+            logger.info(f"   ✅ Alerts stored: {stored_count}")
+            logger.info(
+                f"   ⏱️  Execution time: {(datetime.utcnow() - self.start_time).total_seconds():.2f}s")
+
+            if stored_count > 0:
+                logger.info(f"🎯 VERIFICATION LINKS:")
+                logger.info(
+                    f"   Firestore: https://console.cloud.google.com/firestore/data/nyc_monitor_alerts")
+                logger.info(
+                    f"   Logs: https://console.cloud.google.com/run/jobs/details/{os.getenv('GOOGLE_CLOUD_LOCATION', 'us-central1')}/atlas-monitor")
+
             return self._generate_stats_report()
 
         except Exception as e:
-            error_msg = f"Background monitor failed: {str(e)}"
+            error_msg = f"❌ Background monitor failed: {str(e)}"
             logger.error(error_msg)
+            logger.error(f"   Exception type: {type(e).__name__}")
             self.stats['errors'].append(error_msg)
             return self._generate_stats_report()
 
@@ -205,10 +242,19 @@ class MonitorJob:
         Returns:
             Number of alerts successfully stored
         """
-        stored_count = 0
+        logger.info(f"📦 STORING {len(alerts)} ALERTS IN FIRESTORE")
+        logger.info(f"   Target Collection: nyc_monitor_alerts")
+        logger.info(
+            f"   Firestore Project: {os.getenv('GOOGLE_CLOUD_PROJECT')}")
 
-        for alert in alerts:
+        stored_count = 0
+        failed_count = 0
+
+        for i, alert in enumerate(alerts, 1):
             try:
+                logger.info(
+                    f"📝 Storing alert {i}/{len(alerts)}: {alert.get('title', 'Unknown')}")
+
                 # Enhance alert with additional metadata
                 enhanced_alert = {
                     **alert,
@@ -220,14 +266,25 @@ class MonitorJob:
 
                 alert_id = await self.storage.store_alert(enhanced_alert)
                 stored_count += 1
-                logger.debug(
-                    f"Stored alert {alert_id}: {alert.get('title', 'Unknown')}")
+                logger.info(f"✅ SUCCESS - Alert stored with ID: {alert_id}")
 
             except Exception as e:
-                error_msg = f"Error storing alert {alert.get('title', 'Unknown')}: {str(e)}"
+                failed_count += 1
+                error_msg = f"❌ FAILED to store alert {i}: {alert.get('title', 'Unknown')} - {str(e)}"
                 logger.error(error_msg)
                 self.stats['errors'].append(error_msg)
                 continue
+
+        # Summary logging
+        logger.info(f"📊 STORAGE SUMMARY:")
+        logger.info(f"   ✅ Stored: {stored_count}")
+        logger.info(f"   ❌ Failed: {failed_count}")
+        logger.info(f"   📍 Collection: nyc_monitor_alerts")
+
+        if stored_count > 0:
+            logger.info(f"🎯 VERIFICATION: Check Firestore console at:")
+            logger.info(
+                f"   https://console.cloud.google.com/firestore/data/nyc_monitor_alerts")
 
         return stored_count
 
