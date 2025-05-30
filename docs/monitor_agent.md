@@ -2,7 +2,9 @@
 
 ## Overview
 
-The Monitor Agent is the "always-on intelligence" layer of the Atlas system that continuously scans multiple NYC data sources to identify patterns, anomalies, and emerging situations requiring investigation. It operates as a lightweight triage system that feeds high-priority signals to the full multi-agent analysis pipeline.
+The Monitor Agent is the "always-on intelligence" layer of the Atlas system that continuously scans multiple NYC data sources to identify patterns, anomalies, emergencies, and major public events requiring investigation or city planning attention. It operates as a lightweight triage system that feeds high-priority signals to the full multi-agent analysis pipeline.
+
+This system captures both emergency situations AND significant public events that impact NYC operations, including crowd gatherings, parades, festivals, concerts, and seasonal celebrations that require city planning, safety coordination, and resource allocation.
 
 ## Architecture
 
@@ -33,22 +35,24 @@ The Monitor Agent is the "always-on intelligence" layer of the Atlas system that
 ### 🔍 **Continuous Monitoring**
 - **Frequency**: Every 15 minutes via Cloud Scheduler
 - **Scope**: Multi-source data aggregation across NYC
-- **Intelligence**: Pattern recognition and anomaly detection
+- **Intelligence**: Pattern recognition for emergencies AND public events
 - **Output**: Prioritized alert queue for human/AI investigation
 
 ### 📊 **Live Intelligence Dashboard**
 Real-time view of city-wide patterns:
-- 🔴 **Critical Alerts** (Severity 8-10): Immediate investigation triggers
-- 🟡 **Medium Alerts** (Severity 5-7): Queued for user investigation  
-- 🟢 **Background Trends** (Severity 1-4): Logged for pattern analysis
-- 📊 **Daily Insights**: Areas flagged, trends identified, correlations found
+- 🔴 **Critical Alerts** (Severity 8-10): Emergencies requiring immediate response
+- 🟡 **Major Events** (Severity 5-7): Public gatherings, parades, festivals requiring planning
+- 🟢 **Background Trends** (Severity 1-4): Routine activities and minor events
+- 📊 **Daily Insights**: Emergency areas, planned events, crowd patterns, resource needs
 
 ### 🎯 **Smart Triage Logic**
 The system automatically escalates based on:
-- **Severity scoring** (1-10 scale)
-- **Cross-source correlation** (multiple signals from same area)
-- **Temporal patterns** (recurring vs. anomalous events)
-- **Geographic clustering** (neighborhood-level analysis)
+- **Severity scoring** (1-10 scale) for both emergencies and events
+- **Event type classification** (emergency, parade, festival, concert, etc.)
+- **Crowd impact assessment** (expected attendance and city resource needs)
+- **Cross-source correlation** (multiple signals from same area/event)
+- **Temporal patterns** (planned vs. spontaneous events)
+- **Geographic clustering** (neighborhood-level event analysis)
 
 ## Data Sources
 
@@ -84,6 +88,25 @@ Health & Safety:
   - "air quality", "pollution", "smog alert"
   - "heat wave", "cold warning", "weather emergency"
 
+Major Public Events & Crowd Gatherings:
+  - "parade", "festival", "pride", "concert", "marathon"
+  - "protest", "rally", "demonstration", "march"
+  - "celebration", "block party", "street fair"
+  - "outdoor event", "large crowd", "street closure"
+  - "event permit", "public gathering", "street festival"
+
+Seasonal & Annual NYC Events:
+  - "halloween parade", "thanksgiving parade", "new year"
+  - "fourth of july", "summer streets", "outdoor cinema"
+  - "bryant park event", "central park event", "times square event"
+  - "brooklyn bridge park", "pier event"
+
+Sports & Entertainment Events:
+  - "yankees game", "mets game", "knicks game", "rangers game"
+  - "madison square garden", "yankee stadium", "citi field"
+  - "barclays center", "big concert", "broadway opening"
+  - "fashion week"
+
 City Operations:
   - "city hall", "mayor", "DOT", "DSNY", "FDNY", "NYPD"
   - "permit", "inspection", "violation", "citation"
@@ -92,7 +115,7 @@ City Operations:
 Community Concerns:
   - "noise complaint", "quality of life", "safety concern"
   - "homeless", "housing", "rent", "eviction"
-  - "protest", "rally", "demonstration"
+  - "neighborhood meeting", "community board"
 ```
 
 ### 📞 **311 Service Requests** (Planned)
@@ -255,28 +278,40 @@ def handle_new_alert(alert_data):
 
 ## Live Intelligence Examples
 
-### 🔴 **Critical Alert Example**
+### 🔴 **Critical Emergency Alert**
 ```
 SEVERITY: 9 | AREA: Lower Manhattan | TIME: 2min ago
+EVENT TYPE: Emergency | CROWD IMPACT: High
 SIGNALS: Reddit (15 posts), Traffic (major incident), 911 (call spike)
 PATTERN: "explosion" + "downtown" + traffic closure + emergency response
 ACTION: ✅ Full investigation triggered automatically
 ```
 
-### 🟡 **Medium Alert Example**  
+### 🟡 **Major Event Alert**  
 ```
-SEVERITY: 6 | AREA: Astoria, Queens | TIME: 45min ago
-SIGNALS: Reddit (housing complaints), NYC Open Data (permit surge)
-PATTERN: Construction permits correlating with noise complaints
-ACTION: 📋 Queued for user investigation
+SEVERITY: 7 | AREA: Central Park | TIME: 2hr ago
+EVENT TYPE: Festival | CROWD IMPACT: High | ESTIMATED: 50,000+ attendees
+SIGNALS: Reddit (event posts), Traffic (street closures), Permits (scheduled)
+PATTERN: "Summer Stage concert" + "road closures" + "large crowd gathering"
+ACTION: 🎭 Event monitoring activated - resource coordination needed
 ```
 
-### 🟢 **Background Trend Example**
+### 🟡 **Public Gathering Alert**
 ```
-SEVERITY: 3 | AREA: Manhattan | TIME: 2hr ago  
-SIGNALS: Environmental (air quality), Reddit (allergy mentions)
-PATTERN: Seasonal pattern - spring air quality affecting residents
-ACTION: 📊 Logged for trend analysis
+SEVERITY: 6 | AREA: Brooklyn Bridge | TIME: 45min ago
+EVENT TYPE: Protest | CROWD IMPACT: Medium | ESTIMATED: 5,000+ attendees
+SIGNALS: Reddit (rally posts), Social media (demonstration), Traffic (delays)
+PATTERN: "peaceful protest" + "bridge access" + "NYPD coordination"
+ACTION: 📋 Crowd management protocols activated
+```
+
+### 🟢 **Background Event Trend**
+```
+SEVERITY: 3 | AREA: East Village | TIME: 2hr ago  
+EVENT TYPE: Street Fair | CROWD IMPACT: Low | ESTIMATED: 1,000 attendees
+SIGNALS: Reddit (local event), Permits (street fair permit)
+PATTERN: Regular weekend street fair - normal neighborhood activity
+ACTION: 📊 Logged for community event tracking
 ```
 
 ## Benefits

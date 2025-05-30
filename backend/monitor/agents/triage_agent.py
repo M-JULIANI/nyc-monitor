@@ -31,13 +31,22 @@ class TriageAgent:
         # Initialize Vertex AI
         vertexai.init(project=self.project_id, location=self.location)
 
-        # Use available model (try gemini-pro)
+        # Use current available model (gemini-2.0-flash is the latest stable)
         try:
-            self.model = GenerativeModel("gemini-pro")
-            logger.info("✅ Using gemini-pro model for triage analysis")
+            self.model = GenerativeModel("gemini-2.0-flash")
+            logger.info("✅ Using gemini-2.0-flash model for triage analysis")
         except Exception as e:
-            logger.error(f"❌ Failed to initialize Vertex AI model: {e}")
-            raise
+            # Fallback to alternative current models
+            try:
+                self.model = GenerativeModel("gemini-1.5-flash")
+                logger.info(
+                    "✅ Using gemini-1.5-flash model for triage analysis (fallback)")
+            except Exception as e2:
+                logger.error(f"❌ Failed to initialize any Vertex AI model:")
+                logger.error(f"   gemini-2.0-flash: {e}")
+                logger.error(f"   gemini-1.5-flash: {e2}")
+                raise Exception(
+                    f"No available Vertex AI models. Check project access and model availability.")
 
         # Severity thresholds for alerting
         self.severity_thresholds = {
@@ -67,8 +76,33 @@ class TriageAgent:
 
             if response and response.text:
                 try:
+                    # Clean the response text to extract JSON
+                    response_text = response.text.strip()
+
+                    # Try to extract JSON from the response (sometimes wrapped in markdown)
+                    if response_text.startswith('```json'):
+                        # Extract JSON from markdown code block
+                        start = response_text.find('{')
+                        end = response_text.rfind('}') + 1
+                        if start != -1 and end > start:
+                            response_text = response_text[start:end]
+                    elif response_text.startswith('```'):
+                        # Extract from generic code block
+                        lines = response_text.split('\n')
+                        json_lines = []
+                        in_json = False
+                        for line in lines:
+                            if line.strip() == '```':
+                                if in_json:
+                                    break
+                                continue
+                            if line.strip().startswith('{') or in_json:
+                                in_json = True
+                                json_lines.append(line)
+                        response_text = '\n'.join(json_lines)
+
                     # Parse structured response
-                    analysis = json.loads(response.text.strip())
+                    analysis = json.loads(response_text)
 
                     # Add metadata
                     analysis['timestamp'] = datetime.utcnow().isoformat()
@@ -84,6 +118,10 @@ class TriageAgent:
 
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse triage response: {e}")
+                    logger.error(f"Raw response: {response.text[:500]}...")
+                    return self._create_fallback_response(raw_signals)
+                except Exception as e:
+                    logger.error(f"Error processing triage response: {e}")
                     return self._create_fallback_response(raw_signals)
             else:
                 logger.warning("Empty response from triage agent")
@@ -105,7 +143,7 @@ class TriageAgent:
                 signal_summary[source] = "1 dataset"
 
         prompt = f"""
-You are a NYC emergency monitoring triage agent. Analyze these data signals and assign severity scores (1-10).
+You are a NYC monitoring triage agent. Analyze these data signals and assign severity scores (1-10).
 
 **Current Time**: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
 
@@ -114,46 +152,64 @@ You are a NYC emergency monitoring triage agent. Analyze these data signals and 
 **Raw Data**: {json.dumps(raw_signals, indent=2, default=str)[:3000]}...
 
 **Your Task**: 
-1. Identify potential alerts, incidents, or anomalies affecting NYC residents
+1. Identify potential alerts, incidents, emergencies, OR major public events affecting NYC residents
 2. Assign severity scores (1-10) where:
-   - 9-10: Emergency/breaking news (subway outage, major incident)
-   - 7-8: High priority (significant traffic, widespread complaints, safety issues)
-   - 5-6: Medium priority (local disruptions, trending concerns)
-   - 3-4: Low priority (minor issues, background chatter)
+   - 9-10: Critical emergencies (major incidents, safety threats, city-wide disruptions)
+   - 7-8: High priority (significant events, widespread crowd gatherings, infrastructure issues)
+   - 5-6: Medium priority (local events, neighborhood gatherings, trending concerns)
+   - 3-4: Low priority (small events, minor issues, background chatter)
    - 1-2: Normal activity
 
 3. Focus on:
-   - Cross-source correlations (same issue mentioned across platforms)
-   - Unusual volume spikes
-   - Safety/emergency keywords
-   - Infrastructure problems (MTA, traffic, utilities)
-   - Public health concerns
+   - **Emergency situations**: Accidents, fires, public safety threats, infrastructure failures
+   - **Major public events**: Parades, festivals, concerts, protests, large gatherings
+   - **Crowd management scenarios**: Events that draw significant crowds affecting city operations
+   - **Cross-source correlations**: Same event/area mentioned across platforms
+   - **Infrastructure impacts**: Events affecting traffic, transit, utilities, city services
+   - **Seasonal/planned events**: Major NYC events (Pride, marathons, street fairs, holiday events)
 
-4. Group related signals by geographical area or theme
+4. Event Examples to Capture:
+   - **Emergency (High severity)**: "Fire in Manhattan", "Subway system failure", "Major accident"
+   - **Major Events (Medium-High)**: "Pride Parade route", "Marathon street closures", "Central Park concert"
+   - **Local Events (Medium)**: "Street fair in Brooklyn", "Block party permits", "Neighborhood festival"
+   - **Routine (Low)**: "Restaurant opening", "Small gathering", "Individual complaints"
+
+5. Group related signals by geographical area or event type
 
 **Response Format** (JSON only):
 {{
-  "summary": "Brief overview of current NYC situation",
+  "summary": "Brief overview of current NYC situation including events and emergencies",
   "alerts": [
     {{
       "id": "unique_alert_id",
       "title": "Brief alert title",
       "area": "Geographic area or 'Citywide'",
       "severity": 8,
-      "category": "transportation|safety|weather|infrastructure|social",
+      "category": "emergency|event|transportation|infrastructure|social|safety",
+      "event_type": "emergency|parade|festival|concert|protest|sports|seasonal|routine",
       "signals": ["reddit", "traffic"],
-      "description": "What's happening and why it matters",
-      "keywords": ["subway", "delays"],
-      "confidence": 0.85
+      "description": "What's happening, expected crowd size/impact, and why it matters",
+      "keywords": ["pride", "parade", "street closure"],
+      "confidence": 0.85,
+      "crowd_impact": "high|medium|low|none",
+      "estimated_attendance": "number or range if applicable"
     }}
   ],
   "normal_activity": [
     {{
       "source": "reddit",
-      "note": "Normal food/entertainment discussions"
+      "note": "Normal discussions without significant events"
     }}
   ]
 }}
+
+IMPORTANT: 
+- Respond with ONLY valid JSON - no markdown, no explanations, no code blocks
+- Start your response with {{ and end with }}
+- Do not wrap the JSON in ```json``` or any other formatting
+- Ensure all strings are properly quoted and escaped
+- Capture BOTH emergencies AND major public events/gatherings
+- If no significant alerts are needed, use an empty alerts array: "alerts": []
 """
         return prompt
 
@@ -181,27 +237,24 @@ You are a NYC emergency monitoring triage agent. Analyze these data signals and 
         return categorized
 
     def _create_fallback_response(self, raw_signals: Dict) -> Dict:
-        """Create a fallback response when AI analysis fails"""
+        """Create a fallback response when AI analysis fails - no fake alerts"""
+        logger.error("❌ Triage analysis failed - returning empty results")
+        logger.error("📊 Raw signals will not be processed into alerts")
+        logger.error(f"   Sources affected: {list(raw_signals.keys())}")
+
+        # Return empty results - no fake entries
         return {
-            'summary': 'Triage analysis failed - manual review required',
-            'alerts': [{
-                'id': f'fallback_{int(datetime.utcnow().timestamp())}',
-                'title': 'System Alert: Triage Analysis Failed',
-                'area': 'System',
-                'severity': 5,
-                'category': 'infrastructure',
-                'signals': list(raw_signals.keys()),
-                'description': 'Automated triage failed. Raw data collected but needs manual review.',
-                'keywords': ['system', 'error'],
-                'confidence': 1.0
-            }],
+            'summary': 'Triage analysis failed - no alerts generated',
+            'alerts': [],  # Empty - no fake entries
             'normal_activity': [],
             'timestamp': datetime.utcnow().isoformat(),
             'sources_analyzed': list(raw_signals.keys()),
             'action_required': {
                 'urgent_investigation': [],
-                'user_investigation': [{'id': f'fallback_{int(datetime.utcnow().timestamp())}'}],
+                'user_investigation': [],
                 'monitor_only': [],
                 'normal_activity': []
-            }
+            },
+            'error': 'AI analysis failed',
+            'raw_signals_available': True  # Data is available for manual review
         }

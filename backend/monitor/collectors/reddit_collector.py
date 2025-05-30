@@ -12,7 +12,7 @@ import logging
 import re
 
 from .base_collector import BaseCollector
-from ..utils.location_extractor import NYCLocationExtractor
+from monitor.utils.location_extractor import NYCLocationExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -70,27 +70,35 @@ class RedditCollector(BaseCollector):
             # Remove non-existent: noisecomplaint, neighborhoodwatch, communityboard
         ]
 
-        # Emergency and city operations keywords to monitor
+        # Priority keywords for monitoring NYC events and emergencies
+        # Captures both emergency situations AND major public events/crowd gatherings
         self.priority_keywords = [
-            # Emergency Keywords
-            '911', 'emergency', 'ambulance', 'fire', 'police', 'shooting',
-            'explosion', 'accident', 'collapse', 'evacuation', 'lockdown',
+            # Immediate emergencies
+            '911', 'emergency', 'fire', 'shooting', 'explosion', 'ambulance',
+            'police', 'evacuation', 'lockdown', 'collapse', 'accident',
 
-            # Infrastructure Issues
-            'power outage', 'blackout', 'water main', 'gas leak', 'subway delay',
-            'train stuck', 'signal problem', 'road closure', 'bridge closed',
+            # Infrastructure emergencies
+            'power outage', 'blackout', 'gas leak', 'water main break',
+            'subway shutdown', 'bridge closed', 'road closure',
 
-            # Health & Safety
-            'food poisoning', 'contamination', 'outbreak', 'air quality',
-            'pollution', 'smog alert', 'heat wave', 'weather emergency',
+            # Health/safety emergencies
+            'outbreak', 'contamination', 'air quality alert', 'heat emergency',
 
-            # City Operations
-            'city hall', 'mayor', 'DOT', 'DSNY', 'FDNY', 'NYPD', 'permit',
-            'inspection', 'violation', 'citation', 'budget', 'policy',
+            # Major public events and crowd gatherings
+            'parade', 'festival', 'pride', 'concert', 'marathon', 'protest',
+            'rally', 'demonstration', 'march', 'celebration', 'block party',
+            'street fair', 'outdoor event', 'large crowd', 'street closure',
+            'event permit', 'public gathering', 'street festival',
 
-            # Community Concerns
-            'noise complaint', 'quality of life', 'safety concern', 'homeless',
-            'housing crisis', 'rent increase', 'eviction', 'protest', 'rally'
+            # Seasonal/Annual NYC events
+            'halloween parade', 'thanksgiving parade', 'new year', 'fourth of july',
+            'summer streets', 'outdoor cinema', 'bryant park', 'central park event',
+            'times square event', 'brooklyn bridge park', 'pier event',
+
+            # Sports and entertainment events
+            'yankees game', 'mets game', 'knicks game', 'rangers game', 'nets game',
+            'madison square garden', 'yankee stadium', 'citi field', 'barclays center',
+            'big concert', 'broadway opening', 'fashion week'
         ]
 
         logger.info(
@@ -118,7 +126,7 @@ class RedditCollector(BaseCollector):
                 'emergency_posts': 0,
                 'subreddits_monitored': len(self.nyc_subreddits),
                 'keywords_found': set(),
-                'emergency_flags': set()
+                'priority_flags': set()
             }
 
             # Collect recent hot posts from NYC subreddits
@@ -128,34 +136,46 @@ class RedditCollector(BaseCollector):
                         f"📡 Collecting from r/{subreddit} ({i}/{len(self.nyc_subreddits)})")
                     signals = await self._fetch_subreddit_signals(subreddit, limit=10)
 
-                    # Categorize signals by priority
+                    # Categorize signals by priority content (for logging)
                     for signal in signals:
                         all_signals.append(signal)
                         monitoring_stats['total_posts'] += 1
 
-                        priority_score = signal['metadata'].get(
-                            'priority_score', 0)
+                        has_priority = signal['metadata'].get(
+                            'has_priority_content', False)
                         keywords = signal['metadata'].get(
                             'priority_keywords', [])
-                        emergency_flags = signal['metadata'].get(
-                            'emergency_flags', [])
+                        priority_flags = signal['metadata'].get(
+                            'priority_flags', [])
 
                         # Track statistics
                         monitoring_stats['keywords_found'].update(keywords)
-                        monitoring_stats['emergency_flags'].update(
-                            emergency_flags)
+                        monitoring_stats['priority_flags'].update(
+                            priority_flags)
 
-                        # Categorize by priority
-                        if emergency_flags:
-                            priority_signals.append(signal)
-                            monitoring_stats['emergency_posts'] += 1
-                            logger.warning(f"🚨 EMERGENCY POST DETECTED: {signal['title'][:60]}... "
-                                           f"(Keywords: {emergency_flags}, Score: {priority_score})")
-                        elif priority_score >= 10:
+                        # Categorization by priority content (emergencies OR major events)
+                        if has_priority:
                             priority_signals.append(signal)
                             monitoring_stats['priority_posts'] += 1
-                            logger.info(f"⚠️  HIGH PRIORITY: {signal['title'][:60]}... "
-                                        f"(Score: {priority_score})")
+
+                            # Distinguish between emergencies and events in logging
+                            emergency_terms = ['911', 'emergency', 'fire', 'shooting', 'explosion',
+                                               'ambulance', 'police', 'evacuation', 'lockdown', 'collapse',
+                                               'accident', 'power outage', 'blackout', 'gas leak', 'outbreak']
+
+                            has_emergency = any(
+                                term in priority_flags for term in emergency_terms)
+
+                            if has_emergency:
+                                monitoring_stats['emergency_posts'] += 1
+                                logger.warning(f"🚨 EMERGENCY CONTENT: {signal['title'][:60]}... "
+                                               f"(Keywords: {priority_flags})")
+                            else:
+                                logger.info(f"🎉 MAJOR EVENT/GATHERING: {signal['title'][:60]}... "
+                                            f"(Keywords: {priority_flags})")
+                        elif len(keywords) > 0:
+                            logger.info(f"⚠️  RELEVANT KEYWORDS: {signal['title'][:60]}... "
+                                        f"(Keywords: {keywords})")
 
                     logger.info(
                         f"✅ Collected {len(signals)} signals from r/{subreddit}")
@@ -166,9 +186,12 @@ class RedditCollector(BaseCollector):
                     logger.error(f"   Exception type: {type(e).__name__}")
                     continue
 
-            # Sort all signals by priority score (highest first)
-            all_signals.sort(key=lambda x: x['metadata'].get(
-                'priority_score', 0), reverse=True)
+            # Sort signals: priority content first, then by Reddit score
+            all_signals.sort(key=lambda x: (
+                x['metadata'].get('has_priority_content',
+                                  False),  # Priority content first
+                x.get('score', 0)  # Then by Reddit score
+            ), reverse=True)
 
             # Report monitoring summary
             logger.info(f"📊 REDDIT MONITORING SUMMARY:")
@@ -181,9 +204,9 @@ class RedditCollector(BaseCollector):
             logger.info(
                 f"   Subreddits monitored: {monitoring_stats['subreddits_monitored']}")
 
-            if monitoring_stats['emergency_flags']:
+            if monitoring_stats['priority_flags']:
                 logger.warning(
-                    f"🚨 EMERGENCY KEYWORDS DETECTED: {list(monitoring_stats['emergency_flags'])}")
+                    f"🚨 PRIORITY KEYWORDS DETECTED: {list(monitoring_stats['priority_flags'])}")
 
             if monitoring_stats['keywords_found']:
                 top_keywords = list(monitoring_stats['keywords_found'])[:10]
@@ -325,7 +348,7 @@ class RedditCollector(BaseCollector):
                     # Skip non-NYC relevant posts from broader subreddits
                     return None
 
-            # Analyze keywords and priority
+            # Analyze keywords for basic emergency detection (pre-filtering)
             keyword_analysis = self._analyze_keywords(title, content)
 
             # Extract location information using the dedicated extractor
@@ -348,9 +371,11 @@ class RedditCollector(BaseCollector):
                     'author': author_name,
                     'is_stickied': getattr(submission, 'is_stickied', False),
                     'is_nsfw': getattr(submission, 'is_nsfw', False),
+                    # Basic pre-filtering data (for cost optimization)
                     'priority_keywords': keyword_analysis['keywords'],
-                    'priority_score': keyword_analysis['score'],
-                    'emergency_flags': keyword_analysis['emergency_flags'],
+                    'has_priority_content': keyword_analysis['has_priority_content'],
+                    'priority_flags': keyword_analysis['priority_flags'],
+                    'keyword_count': keyword_analysis['keyword_count'],
                     'nyc_relevant': True,  # All returned signals are NYC-relevant
                     # Location data
                     'locations': location_info['locations_found'],
@@ -364,99 +389,44 @@ class RedditCollector(BaseCollector):
 
             return self.standardize_signal(raw_signal)
         except Exception as e:
-            logger.error(f"Error converting submission to signal: {e}")
-            logger.error(f"Submission type: {type(submission)}")
-            logger.error(f"Available attributes: {dir(submission)}")
-            # Return a minimal signal to avoid complete failure
-            return self.standardize_signal({
-                'title': 'Error parsing submission',
-                'content': '',
-                'url': '',
-                'score': 0,
-                'comments': 0,
-                'shares': 0,
-                'created_at': datetime.utcnow(),
-                'timestamp': datetime.utcnow(),
-                'metadata': {
-                    'subreddit': subreddit,
-                    'post_id': '',
-                    'post_type': 'unknown',
-                    'author': '[error]',
-                    'is_stickied': False,
-                    'is_nsfw': False,
-                    'priority_keywords': [],
-                    'priority_score': 0,
-                    'emergency_flags': [],
-                    'nyc_relevant': False,
-                    'locations': [],
-                    'latitude': None,
-                    'longitude': None,
-                    'location_count': 0,
-                    'primary_borough': None,
-                    'has_coordinates': False
-                }
-            })
+            logger.error(f"❌ Failed to parse Reddit submission: {e}")
+            logger.error(f"   Submission type: {type(submission)}")
+            logger.error(f"   Subreddit: r/{subreddit}")
+            # Don't create fake signals - just return None to skip this submission
+            return None
 
     def _analyze_keywords(self, title: str, content: str) -> Dict:
-        """Analyze text for priority keywords and emergency indicators"""
+        """Priority keyword detection for NYC events and emergencies (cost optimization)"""
         try:
             # Combine title and content for analysis
             full_text = f"{title} {content}".lower()
 
             found_keywords = []
-            emergency_flags = []
-            priority_score = 0
+            priority_flags = []
 
-            # Check for priority keywords
+            # Check for priority keywords (emergencies AND major events)
             for keyword in self.priority_keywords:
                 if keyword.lower() in full_text:
                     found_keywords.append(keyword)
+                    priority_flags.append(keyword)
 
-                    # Assign priority scores based on keyword type
-                    if keyword in ['911', 'emergency', 'explosion', 'shooting', 'evacuation', 'lockdown']:
-                        priority_score += 10  # High priority emergency
-                        emergency_flags.append(keyword)
-                    elif keyword in ['ambulance', 'fire', 'police', 'accident', 'collapse']:
-                        priority_score += 7   # Medium-high priority
-                        emergency_flags.append(keyword)
-                    elif keyword in ['power outage', 'subway delay', 'gas leak', 'road closure']:
-                        priority_score += 5   # Infrastructure issues
-                    elif keyword in ['air quality', 'pollution', 'food poisoning', 'outbreak']:
-                        priority_score += 4   # Health/environmental concerns
-                    elif keyword in ['noise complaint', 'housing crisis', 'safety concern']:
-                        priority_score += 2   # Community issues
-                    else:
-                        priority_score += 1   # General city operations
-
-            # Bonus for multiple keywords (indicates significant event)
-            if len(found_keywords) > 1:
-                priority_score += len(found_keywords) * 2
-
-            # Geographic bonus for NYC neighborhood mentions
-            nyc_neighborhoods = [
-                'manhattan', 'brooklyn', 'queens', 'bronx', 'staten island',
-                'midtown', 'downtown', 'uptown', 'lower east side', 'upper west side',
-                'williamsburg', 'park slope', 'astoria', 'flushing', 'forest hills',
-                'harlem', 'soho', 'tribeca', 'chelsea', 'greenwich village'
-            ]
-
-            for neighborhood in nyc_neighborhoods:
-                if neighborhood in full_text:
-                    priority_score += 3  # Geographic relevance bonus
-                    break
+            # Boolean: does this post have priority content (emergency OR major event)?
+            has_priority_content = len(priority_flags) > 0
 
             return {
                 'keywords': found_keywords,
-                'score': min(priority_score, 100),  # Cap at 100
-                'emergency_flags': emergency_flags
+                'priority_flags': priority_flags,
+                'has_priority_content': has_priority_content,
+                'keyword_count': len(found_keywords)
             }
 
         except Exception as e:
-            logger.warning(f"Error analyzing keywords: {e}")
+            logger.warning(f"Error in priority keyword detection: {e}")
             return {
                 'keywords': [],
-                'score': 0,
-                'emergency_flags': []
+                'priority_flags': [],
+                'has_priority_content': False,
+                'keyword_count': 0
             }
 
     def _get_post_type(self, submission) -> str:

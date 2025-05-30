@@ -3,9 +3,9 @@ Main Monitor Job for NYC Background Monitor System.
 Implements the background_monitor() flow: collect signals → triage analysis → store alerts.
 Designed to run every 15 minutes as a Cloud Run Job.
 """
-from storage.firestore_manager import FirestoreManager
-from agents.triage_agent import TriageAgent
-from collectors.reddit_collector import RedditCollector
+from monitor.collectors.reddit_collector import RedditCollector
+from monitor.agents.triage_agent import TriageAgent
+from monitor.storage.firestore_manager import FirestoreManager
 import os
 import asyncio
 import logging
@@ -14,9 +14,12 @@ from typing import List, Dict
 import sys
 import signal
 
-# Add parent directories to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Set up the Python path to include the backend directory
+backend_dir = os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, backend_dir)
 
+# Now import using the full path from backend
 
 # Configure logging
 logging.basicConfig(
@@ -110,22 +113,52 @@ class MonitorJob:
             triage_results = await self._run_triage_analysis(raw_signals)
 
             if not triage_results or not triage_results.get('alerts'):
-                logger.warning("⚠️  No alerts generated from triage analysis")
-                logger.info(
-                    "🔍 Check triage agent configuration or signal quality")
+                if triage_results and triage_results.get('error'):
+                    logger.error(
+                        "⚠️  Triage analysis failed - no alerts will be stored")
+                    logger.error(f"   Error: {triage_results.get('error')}")
+                    logger.info(
+                        "📊 Raw signals collected but not processed into alerts")
+                else:
+                    logger.info(
+                        "ℹ️  No alerts generated from current signals (normal operation)")
+                    logger.info("🔍 All signals appear to be routine activity")
                 return self._generate_stats_report()
 
             alerts = triage_results['alerts']
-            self.stats['alerts_generated'] = len(alerts)
-            logger.info(f"✅ Triage analysis generated {len(alerts)} alerts")
 
-            # Log alert severity distribution
+            # Filter out any system/fallback alerts that shouldn't go to Firestore
+            real_alerts = [alert for alert in alerts
+                           if alert.get('category') != 'infrastructure' or
+                           'system' not in alert.get('keywords', [])]
+
+            if len(real_alerts) != len(alerts):
+                logger.info(
+                    f"🔍 Filtered out {len(alerts) - len(real_alerts)} system alerts")
+                alerts = real_alerts
+
+            if not alerts:
+                logger.info(
+                    "ℹ️  No actionable alerts after filtering - normal operation")
+                return self._generate_stats_report()
+
+            self.stats['alerts_generated'] = len(alerts)
+            logger.info(
+                f"✅ Triage analysis generated {len(alerts)} actionable alerts")
+
+            # Log alert severity and type distribution
             severity_counts = {}
+            event_type_counts = {}
             for alert in alerts:
                 severity = alert.get('severity', 0)
+                event_type = alert.get('event_type', 'unknown')
                 severity_counts[severity] = severity_counts.get(
                     severity, 0) + 1
+                event_type_counts[event_type] = event_type_counts.get(
+                    event_type, 0) + 1
+
             logger.info(f"   📈 Severity distribution: {severity_counts}")
+            logger.info(f"   🎭 Event type distribution: {event_type_counts}")
 
             # Step 3: Store alerts in Firestore
             logger.info("💾 PHASE 3: STORING ALERTS")
@@ -230,7 +263,20 @@ class MonitorJob:
             error_msg = f"Error in triage analysis: {str(e)}"
             logger.error(error_msg)
             self.stats['errors'].append(error_msg)
-            return {}
+            # Return empty results instead of fallback - no fake alerts
+            return {
+                'summary': 'Triage analysis failed due to exception',
+                'alerts': [],
+                'error': str(e),
+                'timestamp': datetime.utcnow().isoformat(),
+                'sources_analyzed': list(raw_signals.keys()) if raw_signals else [],
+                'action_required': {
+                    'urgent_investigation': [],
+                    'user_investigation': [],
+                    'monitor_only': [],
+                    'normal_activity': []
+                }
+            }
 
     async def _store_alerts(self, alerts: List[Dict]) -> int:
         """
