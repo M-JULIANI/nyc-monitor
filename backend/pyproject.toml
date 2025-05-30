@@ -27,6 +27,8 @@ uvicorn = ">=0.34.0"
 slowapi = "^0.1.8"
 python-dotenv = "^1.0.1"
 httpx = ">=0.28.1"
+google-cloud-firestore = "^2.18.0"
+redditwarp = "^0.3.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"

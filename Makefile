@@ -1,4 +1,4 @@
-.PHONY: install dev build test deploy clean lint format devcontainer-setup devcontainer-clean check-deps check-docker check-gcloud
+.PHONY: install dev build test deploy clean lint format devcontainer-setup devcontainer-clean check-deps check-docker check-gcloud deploy-monitor build-monitor setup-monitor test-monitor
 
 # Variables
 GOOGLE_CLOUD_PROJECT ?= $(shell grep -E '^GOOGLE_CLOUD_PROJECT=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
@@ -7,6 +7,17 @@ STAGING_BUCKET ?= $(shell grep -E '^STAGING_BUCKET=' .env 2>/dev/null | cut -d '
 DOCKER_REGISTRY ?= $(shell grep -E '^DOCKER_REGISTRY=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ' || echo "localhost")
 DOCKER_IMAGE_PREFIX ?= $(shell grep -E '^DOCKER_IMAGE_PREFIX=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ' || echo "atlas")
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+
+# Monitor system variables
+MONITOR_SERVICE_ACCOUNT ?= atlas-monitor-service
+MONITOR_JOB_NAME ?= atlas-monitor
+MONITOR_SCHEDULER_NAME ?= atlas-monitor-monitor
+MONITOR_IMAGE ?= gcr.io/$(GOOGLE_CLOUD_PROJECT)/atlas-monitor
+
+# Reddit API credentials (for monitor system)
+REDDIT_CLIENT_ID ?= $(shell grep -E '^REDDIT_CLIENT_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+REDDIT_CLIENT_SECRET ?= $(shell grep -E '^REDDIT_CLIENT_SECRET=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+REDDIT_REFRESH_TOKEN ?= $(shell grep -E '^REDDIT_REFRESH_TOKEN=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 
 # Ensure PATH includes user's local bin
 SHELL := /bin/bash
@@ -202,13 +213,26 @@ build-backend: check-docker
 		exit 1; \
 	fi
 
+build-monitor: check-docker
+	@echo "Building monitor system image..."
+	@if [ -f "backend/monitor/Dockerfile" ]; then \
+		docker build \
+			--platform linux/amd64 \
+			-t "$(MONITOR_IMAGE):$(VERSION)" \
+			-t "$(MONITOR_IMAGE):latest" \
+			-f backend/monitor/Dockerfile backend/; \
+	else \
+		echo "Error: backend/monitor/Dockerfile not found"; \
+		exit 1; \
+	fi
+
 # Simplified deployment variables
 CLOUD_RUN_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-frontend
 CLOUD_RUN_REGION ?= $(GOOGLE_CLOUD_LOCATION)
 CLOUD_RUN_BACKEND_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-backend
 
 # Deployment
-deploy: deploy-backend deploy-backend-api deploy-frontend
+deploy: deploy-backend deploy-backend-api deploy-frontend deploy-monitor
 	@echo "Deployment completed"
 
 deploy-backend: check-gcloud
@@ -270,6 +294,139 @@ deploy-frontend: check-docker check-gcloud
 		--region $(CLOUD_RUN_REGION) \
 		--format='value(status.url)'
 
+# NYC Monitor System Deployment
+setup-monitor: check-gcloud
+	@echo "🚀 Setting up NYC Monitor System infrastructure..."
+	@echo "Project: $(GOOGLE_CLOUD_PROJECT)"
+	@echo "Region: $(GOOGLE_CLOUD_LOCATION)"
+	@echo ""
+	@echo "🔧 Enabling required Google Cloud APIs..."
+	@gcloud services enable firestore.googleapis.com --quiet
+	@gcloud services enable aiplatform.googleapis.com --quiet
+	@gcloud services enable run.googleapis.com --quiet
+	@gcloud services enable cloudbuild.googleapis.com --quiet
+	@gcloud services enable cloudscheduler.googleapis.com --quiet
+	@echo ""
+	@echo "👤 Creating service account..."
+	@if ! gcloud iam service-accounts describe $(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com >/dev/null 2>&1; then \
+		gcloud iam service-accounts create $(MONITOR_SERVICE_ACCOUNT) \
+			--description="Service account for Atlas monitor system" \
+			--display-name="Atlas Monitor Service" --quiet; \
+	else \
+		echo "Service account already exists, skipping creation."; \
+	fi
+	@echo ""
+	@echo "🔐 Granting permissions to service account..."
+	@gcloud projects add-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/datastore.user" --quiet >/dev/null 2>&1 || true
+	@gcloud projects add-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/aiplatform.user" --quiet >/dev/null 2>&1 || true
+	@gcloud projects add-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/logging.logWriter" --quiet >/dev/null 2>&1 || true
+	@gcloud projects add-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/monitoring.metricWriter" --quiet >/dev/null 2>&1 || true
+	@echo ""
+	@echo "✅ Monitor system infrastructure setup complete!"
+	@echo "(Assuming Firestore database already exists)"
+
+deploy-monitor: setup-monitor build-monitor check-gcloud
+	@echo "☁️ Deploying NYC Monitor System..."
+	@echo ""
+	@echo "🐳 Pushing Docker image..."
+	@docker push "$(MONITOR_IMAGE):$(VERSION)"
+	@docker push "$(MONITOR_IMAGE):latest"
+	@echo ""
+	@echo "📦 Deploying Cloud Run Job..."
+	@if gcloud run jobs describe $(MONITOR_JOB_NAME) --region=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
+		echo "Updating existing Cloud Run Job..."; \
+		gcloud run jobs update $(MONITOR_JOB_NAME) \
+			--image="$(MONITOR_IMAGE):$(VERSION)" \
+			--region=$(GOOGLE_CLOUD_LOCATION) \
+			--set-env-vars="GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT)" \
+			--set-env-vars="VERTEX_AI_LOCATION=$(GOOGLE_CLOUD_LOCATION)" \
+			--set-env-vars="REDDIT_CLIENT_ID=$(REDDIT_CLIENT_ID)" \
+			--set-env-vars="REDDIT_CLIENT_SECRET=$(REDDIT_CLIENT_SECRET)" \
+			--set-env-vars="REDDIT_REFRESH_TOKEN=$(REDDIT_REFRESH_TOKEN)" \
+			--quiet; \
+	else \
+		echo "Creating new Cloud Run Job..."; \
+		gcloud run jobs create $(MONITOR_JOB_NAME) \
+			--image="$(MONITOR_IMAGE):$(VERSION)" \
+			--service-account="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+			--region=$(GOOGLE_CLOUD_LOCATION) \
+			--memory=2Gi \
+			--cpu=1 \
+			--task-timeout=900 \
+			--parallelism=1 \
+			--set-env-vars="GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT)" \
+			--set-env-vars="VERTEX_AI_LOCATION=$(GOOGLE_CLOUD_LOCATION)" \
+			--set-env-vars="REDDIT_CLIENT_ID=$(REDDIT_CLIENT_ID)" \
+			--set-env-vars="REDDIT_CLIENT_SECRET=$(REDDIT_CLIENT_SECRET)" \
+			--set-env-vars="REDDIT_REFRESH_TOKEN=$(REDDIT_REFRESH_TOKEN)" \
+			--max-retries=3 --quiet; \
+	fi
+	@echo ""
+	@echo "⏰ Setting up Cloud Scheduler..."
+	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
+		echo "Updating existing scheduler job..."; \
+		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
+			--schedule="0 * * * *" \
+			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
+			--http-method=POST \
+			--location=$(GOOGLE_CLOUD_LOCATION) \
+			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" --quiet; \
+	else \
+		echo "Creating new scheduler job..."; \
+		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
+			--schedule="0 * * * *" \
+			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
+			--http-method=POST \
+			--location=$(GOOGLE_CLOUD_LOCATION) \
+			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" --quiet; \
+	fi
+	@echo ""
+	@echo "✅ Monitor system deployment complete!"
+	@echo ""
+	@echo "📊 Monitor System Status:"
+	@echo "- Cloud Run Job: https://console.cloud.google.com/run/jobs/details/$(GOOGLE_CLOUD_LOCATION)/$(MONITOR_JOB_NAME)"
+	@echo "- Cloud Scheduler: https://console.cloud.google.com/cloudscheduler/jobs/$(GOOGLE_CLOUD_LOCATION)/$(MONITOR_SCHEDULER_NAME)"
+	@echo "- Firestore: https://console.cloud.google.com/firestore/data"
+	@echo ""
+	@echo "🔧 To test the job manually:"
+	@echo "make test-monitor"
+	@echo ""
+	@echo "⚠️  Remember to set up Reddit API credentials as secrets or environment variables!"
+	@echo "   - REDDIT_CLIENT_ID"
+	@echo "   - REDDIT_CLIENT_SECRET"
+	@echo "   - REDDIT_REFRESH_TOKEN"
+
+test-monitor: check-gcloud
+	@echo "🧪 Testing monitor system..."
+	@echo "Checking if job exists..."
+	@gcloud run jobs describe $(MONITOR_JOB_NAME) --region=$(GOOGLE_CLOUD_LOCATION) --format="value(metadata.name)" || (echo "❌ Job not found!" && exit 1)
+	@echo "Executing job..."
+	@gcloud run jobs execute $(MONITOR_JOB_NAME) --region=$(GOOGLE_CLOUD_LOCATION) --wait
+	@echo "📝 Recent logs:"
+	@gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="$(MONITOR_JOB_NAME)"' \
+		--limit=10 \
+		--format='table(timestamp,textPayload)' \
+		--freshness=5m
+
+logs-monitor: check-gcloud
+	@echo "📝 Viewing monitor system logs..."
+	@gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="$(MONITOR_JOB_NAME)"' \
+		--limit=50 \
+		--format='table(timestamp,textPayload)' \
+		--freshness=1d
+
+verify-monitor: check-gcloud
+	@echo "🔍 Verifying monitor system..."
+	cd backend && poetry run python ../scripts/verify_monitor_system.py
+
 # Cleanup
 clean:
 	@echo "Cleaning up development environment..."
@@ -298,7 +455,17 @@ help:
 	@echo "  make devcontainer-clean  - Clean devcontainer environment"
 	@echo ""
 	@echo "Production Commands:"
-	@echo "  make build            - Build frontend production image"
-	@echo "  make deploy           - Deploy both backend (Vertex AI) and frontend"
+	@echo "  make build            - Build all production images"
+	@echo "  make build-frontend   - Build frontend production image"
+	@echo "  make build-backend    - Build backend production image"
+	@echo "  make build-monitor - Build monitor system image"
+	@echo "  make deploy           - Deploy all services (backend, frontend, monitor)"
 	@echo "  make deploy-backend   - Deploy backend agent to Vertex AI"
 	@echo "  make deploy-frontend  - Deploy frontend container"
+	@echo ""
+	@echo "NYC Monitor System Commands:"
+	@echo "  make setup-monitor    - Set up monitor system infrastructure"
+	@echo "  make deploy-monitor   - Deploy monitor system with monitor"
+	@echo "  make test-monitor     - Run monitor job manually"
+	@echo "  make logs-monitor     - View monitor system logs"
+	@echo "  make verify-monitor   - Verify monitor system"
