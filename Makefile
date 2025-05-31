@@ -333,7 +333,7 @@ setup-monitor: check-gcloud
 	@echo "✅ Monitor system infrastructure setup complete!"
 	@echo "(Assuming Firestore database already exists)"
 
-deploy-monitor: setup-monitor build-monitor check-gcloud
+deploy-monitor: build-monitor check-gcloud
 	@echo "☁️ Deploying NYC Monitor System..."
 	@echo ""
 	@echo "🐳 Pushing Docker image..."
