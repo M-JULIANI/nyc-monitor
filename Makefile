@@ -316,7 +316,7 @@ setup-monitor: check-gcloud
 		echo "Service account already exists, skipping creation."; \
 	fi
 	@echo ""
-	@echo "🔐 Granting permissions to service account..."
+	@echo "🔐 Granting minimal permissions to service account..."
 	@gcloud projects add-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
 		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
 		--role="roles/datastore.user" --quiet >/dev/null 2>&1 || true
@@ -346,6 +346,7 @@ deploy-monitor: build-monitor check-gcloud
 		gcloud run jobs update $(MONITOR_JOB_NAME) \
 			--image="$(MONITOR_IMAGE):$(VERSION)" \
 			--region=$(GOOGLE_CLOUD_LOCATION) \
+			--service-account="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
 			--set-env-vars="GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT)" \
 			--set-env-vars="VERTEX_AI_LOCATION=$(GOOGLE_CLOUD_LOCATION)" \
 			--set-env-vars="REDDIT_CLIENT_ID=$(REDDIT_CLIENT_ID)" \
@@ -370,23 +371,34 @@ deploy-monitor: build-monitor check-gcloud
 			--max-retries=3 --quiet; \
 	fi
 	@echo ""
+	@echo "⚠️ Ensuring Cloud Scheduler service account can invoke job..."
+	@gcloud run jobs add-iam-policy-binding $(MONITOR_JOB_NAME) \
+		--member="serviceAccount:$(shell gcloud projects describe $(GOOGLE_CLOUD_PROJECT) --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
+		--role="roles/run.invoker" \
+		--region=$(GOOGLE_CLOUD_LOCATION) \
+		--quiet || true
+	@echo ""
 	@echo "⏰ Setting up Cloud Scheduler..."
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 * * * *" \
+			--schedule="0 */3 * * *" \
 			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
-			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" --quiet; \
+			--oidc-service-account-email="$(shell gcloud projects describe $(GOOGLE_CLOUD_PROJECT) --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
+			--oidc-token-audience="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
+			--quiet; \
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 * * * *" \
+			--schedule="0 */3 * * *" \
 			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
-			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" --quiet; \
+			--oidc-service-account-email="$(shell gcloud projects describe $(GOOGLE_CLOUD_PROJECT) --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
+			--oidc-token-audience="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
+			--quiet; \
 	fi
 	@echo ""
 	@echo "✅ Monitor system deployment complete!"
@@ -427,6 +439,21 @@ verify-monitor: check-gcloud
 	@echo "🔍 Verifying monitor system..."
 	cd backend && poetry run python ../scripts/verify_monitor_system.py
 
+# Cleanup tasks to remove excessive permissions
+cleanup-monitor-permissions: check-gcloud
+	@echo "🧹 Cleaning up excessive monitor permissions..."
+	@echo "Removing unnecessary roles from service account..."
+	@gcloud projects remove-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/run.invoker" --quiet >/dev/null 2>&1 || true
+	@gcloud projects remove-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/run.developer" --quiet >/dev/null 2>&1 || true
+	@gcloud projects remove-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/run.admin" --quiet >/dev/null 2>&1 || true
+	@echo "✅ Cleanup complete!"
+
 # Cleanup
 clean:
 	@echo "Cleaning up development environment..."
@@ -464,8 +491,8 @@ help:
 	@echo "  make deploy-frontend  - Deploy frontend container"
 	@echo ""
 	@echo "NYC Monitor System Commands:"
-	@echo "  make setup-monitor    - Set up monitor system infrastructure"
-	@echo "  make deploy-monitor   - Deploy monitor system with monitor"
+	@echo "  make setup-monitor    - Set up monitor system infrastructure (ONE TIME ONLY)"
+	@echo "  make deploy-monitor   - Deploy monitor system code updates"
 	@echo "  make test-monitor     - Run monitor job manually"
 	@echo "  make logs-monitor     - View monitor system logs"
 	@echo "  make verify-monitor   - Verify monitor system"
