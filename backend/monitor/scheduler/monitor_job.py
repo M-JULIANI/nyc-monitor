@@ -70,7 +70,8 @@ class MonitorJob:
                 'signals_collected': 0,
                 'alerts_generated': 0,
                 'alerts_stored': 0,
-                'errors': []
+                'errors': [],
+                'source_stats': {}  # NEW: Detailed stats by source
             }
 
         except Exception as e:
@@ -182,14 +183,34 @@ class MonitorJob:
                 logger.info(
                     f"   Logs: https://console.cloud.google.com/run/jobs/details/{os.getenv('GOOGLE_CLOUD_LOCATION', 'us-central1')}/atlas-monitor")
 
-            return self._generate_stats_report()
+            # Store monitor run statistics
+            run_stats = self._generate_stats_report()
+            try:
+                await self.storage.store_monitor_run(run_stats)
+                logger.info("✅ Monitor run statistics stored successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to store monitor run statistics: {e}")
+
+            return run_stats
 
         except Exception as e:
             error_msg = f"❌ Background monitor failed: {str(e)}"
             logger.error(error_msg)
             logger.error(f"   Exception type: {type(e).__name__}")
             self.stats['errors'].append(error_msg)
-            return self._generate_stats_report()
+
+            # Store monitor run statistics even on failure
+            run_stats = self._generate_stats_report()
+            run_stats['status'] = 'failed'
+            try:
+                await self.storage.store_monitor_run(run_stats)
+                logger.info(
+                    "✅ Monitor run statistics stored (with failure status)")
+            except Exception as storage_error:
+                logger.error(
+                    f"❌ Failed to store monitor run statistics: {storage_error}")
+
+            return run_stats
 
     async def _collect_all_signals(self) -> Dict:
         """
@@ -205,7 +226,16 @@ class MonitorJob:
             try:
                 logger.info(f"Collecting signals from {collector.source_name}")
 
+                # Track start time for this collector
+                collector_start_time = datetime.utcnow()
+
                 signals = await collector.collect_signals()
+
+                # Track end time and calculate duration
+                collector_end_time = datetime.utcnow()
+                collection_duration = (
+                    collector_end_time - collector_start_time).total_seconds()
+
                 if signals:
                     all_signals[collector.source_name] = signals
                     total_count += len(signals)
@@ -215,10 +245,30 @@ class MonitorJob:
                     logger.info(
                         f"No signals collected from {collector.source_name}")
 
+                # Store detailed source statistics
+                self.stats['source_stats'][collector.source_name] = {
+                    'signals_collected': len(signals) if signals else 0,
+                    'collection_duration_seconds': collection_duration,
+                    'collection_start_time': collector_start_time.isoformat(),
+                    'collection_end_time': collector_end_time.isoformat(),
+                    'success': True,
+                    'error': None
+                }
+
             except Exception as e:
                 error_msg = f"Error collecting from {collector.source_name}: {str(e)}"
                 logger.error(error_msg)
                 self.stats['errors'].append(error_msg)
+
+                # Store error statistics for this source
+                self.stats['source_stats'][collector.source_name] = {
+                    'signals_collected': 0,
+                    'collection_duration_seconds': 0,
+                    'collection_start_time': None,
+                    'collection_end_time': None,
+                    'success': False,
+                    'error': str(e)
+                }
                 continue
 
         self.stats['signals_collected'] = total_count
@@ -301,18 +351,45 @@ class MonitorJob:
                 logger.info(
                     f"📝 Storing alert {i}/{len(alerts)}: {alert.get('title', 'Unknown')}")
 
+                # Generate a descriptive document ID based on the alert
+                alert_id = self._generate_alert_document_id(alert)
+
+                # Extract event date from alert title or use current date as fallback
+                event_date = self._extract_event_date_from_alert(alert)
+
                 # Enhance alert with additional metadata
                 enhanced_alert = {
                     **alert,
                     'created_at': datetime.utcnow(),
                     'status': 'pending',
                     'monitor_cycle': datetime.utcnow().strftime('%Y%m%d_%H%M'),
-                    'expires_at': None  # Will be set based on severity
+                    'expires_at': None,  # Will be set based on severity
+                    'document_id': alert_id,  # Store the document ID for reference
+                    'event_date': event_date,  # Extracted or inferred event date
+                    # Enhanced queryability fields
+                    'date_created': datetime.utcnow().strftime('%Y-%m-%d'),
+                    'time_created': datetime.utcnow().strftime('%H:%M'),
+                    'year': datetime.utcnow().year,
+                    'month': datetime.utcnow().month,
+                    'day': datetime.utcnow().day,
+                    'hour': datetime.utcnow().hour,
+                    # Event date queryability
+                    'event_year': event_date.year if event_date else None,
+                    'event_month': event_date.month if event_date else None,
+                    'event_day': event_date.day if event_date else None,
+                    'event_date_str': event_date.strftime('%Y-%m-%d') if event_date else None,
+                    # Location queryability
+                    'has_specific_location': bool(alert.get('specific_streets') or alert.get('venue_address')),
+                    'street_count': len(alert.get('specific_streets', [])),
+                    'has_coordinates': bool(alert.get('coordinates', {}).get('lat')),
+                    'borough_primary': alert.get('area', '').split(' - ')[0] if ' - ' in alert.get('area', '') else alert.get('area', ''),
                 }
 
-                alert_id = await self.storage.store_alert(enhanced_alert)
+                # Use the custom alert_id as the document ID
+                stored_alert_id = await self.storage.store_alert(enhanced_alert, document_id=alert_id)
                 stored_count += 1
-                logger.info(f"✅ SUCCESS - Alert stored with ID: {alert_id}")
+                logger.info(
+                    f"✅ SUCCESS - Alert stored with ID: {stored_alert_id}")
 
             except Exception as e:
                 failed_count += 1
@@ -334,20 +411,138 @@ class MonitorJob:
 
         return stored_count
 
+    def _generate_alert_document_id(self, alert: Dict) -> str:
+        """
+        Generate a descriptive document ID for the alert based on date, event type, and location
+
+        Format: YYYY-MM-DD_HHMI_[event_type]_[location_key]
+        Example: 2025-06-01_1430_parade_5th_ave
+        """
+        try:
+            # Use event date if available, otherwise current time
+            event_date = self._extract_event_date_from_alert(alert)
+            date_prefix = event_date.strftime('%Y-%m-%d')
+            time_prefix = datetime.utcnow().strftime('%H%M')
+
+            # Event type (cleaned)
+            event_type = alert.get(
+                'event_type', 'event').lower().replace(' ', '_')
+
+            # Location key - extract from venue_address, specific_streets, or area
+            location_key = self._extract_location_key(alert)
+
+            # Generate document ID
+            document_id = f"{date_prefix}_{time_prefix}_{event_type}_{location_key}"
+
+            return document_id
+
+        except Exception as e:
+            # Fallback to timestamp-based ID
+            logger.warning(f"Error generating alert ID: {e}")
+            return f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{alert.get('event_type', 'alert').lower()}"
+
+    def _extract_location_key(self, alert: Dict) -> str:
+        """Extract a short location key for the document ID"""
+        try:
+            # Try venue_address first
+            venue = alert.get('venue_address', '')
+            if venue:
+                # Extract street name from address
+                # "5th Avenue from 36th Street to 8th Street" -> "5th_ave"
+                if 'avenue' in venue.lower():
+                    key = venue.lower().split('avenue')[0].strip().replace(' ', '_').replace(
+                        'th', '').replace('nd', '').replace('rd', '').replace('st', '')
+                    return f"{key}_ave"[:20]
+                elif 'street' in venue.lower():
+                    key = venue.lower().split('street')[0].strip().replace(' ', '_').replace(
+                        'th', '').replace('nd', '').replace('rd', '').replace('st', '')
+                    return f"{key}_st"[:20]
+
+            # Try specific_streets
+            streets = alert.get('specific_streets', [])
+            if streets:
+                street = streets[0].lower().replace(' ', '_').replace(
+                    'avenue', 'ave').replace('street', 'st')
+                return street[:20]
+
+            # Try area
+            area = alert.get('area', '')
+            if area:
+                # "Midtown Manhattan - 5th Avenue corridor" -> "midtown_manhattan"
+                area_clean = area.lower().split(' - ')[0].replace(' ', '_')
+                return area_clean[:20]
+
+            # Fallback
+            return 'unknown_location'
+
+        except Exception:
+            return 'unknown_location'
+
+    def _extract_event_date_from_alert(self, alert: Dict) -> datetime:
+        """Extract event date from alert or use current date as fallback"""
+        try:
+            # Check if alert has an explicit event_date field (from triage agent)
+            if alert.get('event_date'):
+                if isinstance(alert['event_date'], datetime):
+                    return alert['event_date']
+                elif isinstance(alert['event_date'], str):
+                    try:
+                        # Handle YYYY-MM-DD format from triage agent
+                        return datetime.strptime(alert['event_date'], '%Y-%m-%d')
+                    except ValueError:
+                        try:
+                            # Handle ISO format as fallback
+                            return datetime.fromisoformat(alert['event_date'].replace('Z', '+00:00'))
+                        except ValueError:
+                            pass
+
+            # Fallback to current date if no event_date provided
+            return datetime.utcnow()
+
+        except Exception:
+            return datetime.utcnow()
+
     def _generate_stats_report(self) -> Dict:
-        """Generate execution statistics report"""
+        """Generate comprehensive execution statistics report for monitor_runs collection"""
         execution_time = (datetime.utcnow() - self.start_time).total_seconds()
 
         return {
+            # Execution metadata
+            'run_id': f"{self.start_time.strftime('%Y%m%d_%H%M%S')}_{os.getpid()}",
             'execution_time_seconds': execution_time,
             'start_time': self.start_time.isoformat(),
             'end_time': datetime.utcnow().isoformat(),
+            'status': 'completed',  # Will be overridden to 'failed' in exception handler
+
+            # High-level statistics
             'collectors_used': self.stats['collectors_used'],
-            'signals_collected': self.stats['signals_collected'],
+            'total_signals_collected': self.stats['signals_collected'],
             'alerts_generated': self.stats['alerts_generated'],
             'alerts_stored': self.stats['alerts_stored'],
+            'success': len(self.stats['errors']) == 0,
+            'error_count': len(self.stats['errors']),
             'errors': self.stats['errors'],
-            'success': len(self.stats['errors']) == 0
+
+            # Detailed source statistics
+            'source_stats': self.stats['source_stats'],
+            'sources_successful': len([s for s in self.stats['source_stats'].values() if s.get('success', False)]),
+            'sources_failed': len([s for s in self.stats['source_stats'].values() if not s.get('success', True)]),
+
+            # Environment information
+            'environment': {
+                'google_cloud_project': os.getenv('GOOGLE_CLOUD_PROJECT'),
+                'google_cloud_location': os.getenv('GOOGLE_CLOUD_LOCATION'),
+                'monitor_system_version': '1.0',
+                'hostname': os.getenv('HOSTNAME', 'unknown'),
+                'container_id': os.getenv('CONTAINER_ID', 'unknown')[:12] if os.getenv('CONTAINER_ID') else 'unknown'
+            },
+
+            # Performance metrics
+            'performance': {
+                'signals_per_second': self.stats['signals_collected'] / execution_time if execution_time > 0 else 0,
+                'alerts_per_signal_ratio': self.stats['alerts_generated'] / self.stats['signals_collected'] if self.stats['signals_collected'] > 0 else 0,
+                'storage_success_rate': self.stats['alerts_stored'] / self.stats['alerts_generated'] if self.stats['alerts_generated'] > 0 else 1.0
+            }
         }
 
 # Signal handlers for graceful shutdown
@@ -375,7 +570,7 @@ async def main():
         logger.info("=== Background Monitor Complete ===")
         logger.info(
             f"Execution time: {stats['execution_time_seconds']:.2f} seconds")
-        logger.info(f"Signals collected: {stats['signals_collected']}")
+        logger.info(f"Signals collected: {stats['total_signals_collected']}")
         logger.info(f"Alerts generated: {stats['alerts_generated']}")
         logger.info(f"Alerts stored: {stats['alerts_stored']}")
 

@@ -21,47 +21,74 @@ class FirestoreManager:
         self.db = firestore.Client(project=self.project_id)
         self.alerts_collection = 'nyc_monitor_alerts'
         self.trends_collection = 'nyc_trending_topics'
+        self.monitor_runs_collection = 'monitor_runs'
 
-    async def store_alert(self, alert: Dict) -> str:
+    async def store_alert(self, alert: Dict, document_id: Optional[str] = None) -> str:
         """
         Store a monitor alert in Firestore
 
         Args:
             alert: Dictionary containing alert data from triage agent
+            document_id: Optional custom document ID to use instead of auto-generated
 
         Returns:
             Document ID of stored alert
         """
         try:
+            # Extract event date from alert title if it follows YYYY-MM-DD format
+            event_date = self._extract_event_date(alert)
+
             # Convert triage agent format to Firestore format
             alert_data = {
-                # Map triage agent fields to Firestore schema
-                'topic': alert.get('title', 'Unknown Alert'),
-                'url': alert.get('url', ''),
-                'confidence_score': alert.get('confidence', 0.0),
-                'source': ', '.join(alert.get('signals', ['unknown'])),
-                'alert_type': alert.get('category', 'general'),
-
-                # Preserve original triage data
-                'original_alert': alert,
+                # Core alert information
+                'title': alert.get('title', 'Unknown Alert'),
+                'description': alert.get('description', ''),
                 'alert_id': alert.get('id', ''),
-                'title': alert.get('title', ''),
                 'area': alert.get('area', 'Unknown'),
                 'severity': alert.get('severity', 0),
                 'category': alert.get('category', 'general'),
-                'description': alert.get('description', ''),
+                'event_type': alert.get('event_type', 'general'),
                 'keywords': alert.get('keywords', []),
 
-                # Add system metadata
+                # Date and time information
+                'event_date': event_date,  # NEW: Actual event date
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow(),
+
+                # Location information
+                'coordinates': alert.get('coordinates', {}),
+                'venue_address': alert.get('venue_address', ''),
+                'specific_streets': alert.get('specific_streets', []),
+                'cross_streets': alert.get('cross_streets', []),
+                'transportation_impact': alert.get('transportation_impact', ''),
+
+                # Event details
+                'estimated_attendance': alert.get('estimated_attendance', ''),
+                'crowd_impact': alert.get('crowd_impact', 'unknown'),
+
+                # Sources and metadata
+                'signals': alert.get('signals', []),
+                'source': ', '.join(alert.get('signals', ['unknown'])),
+                'url': alert.get('url', ''),
+
+                # System metadata
                 'location': 'NYC',
                 'status': 'active',
-                'monitor_system_version': '1.0'
+                'monitor_system_version': '1.0',
+
+                # Legacy compatibility (for existing queries)
+                'topic': alert.get('title', 'Unknown Alert'),
+                'alert_type': alert.get('category', 'general'),
+
+                # Preserve original triage data for debugging
+                'original_alert': alert
             }
 
             # Store in Firestore with custom document ID if provided
-            if alert.get('id'):
+            if document_id:
+                doc_ref = self.db.collection(
+                    self.alerts_collection).document(document_id)
+            elif alert.get('id'):
                 doc_ref = self.db.collection(
                     self.alerts_collection).document(alert['id'])
             else:
@@ -72,6 +99,7 @@ class FirestoreManager:
             # Enhanced logging for verification
             logger.info(f"✅ STORED ALERT - ID: {doc_ref.id}")
             logger.info(f"   Title: {alert_data['title']}")
+            logger.info(f"   Event Date: {alert_data['event_date']}")
             logger.info(f"   Severity: {alert_data['severity']}")
             logger.info(f"   Area: {alert_data['area']}")
             logger.info(f"   Collection: {self.alerts_collection}")
@@ -84,6 +112,39 @@ class FirestoreManager:
             logger.error(f"❌ FAILED TO STORE ALERT: {str(e)}")
             logger.error(f"   Alert data: {alert}")
             raise
+
+    def _extract_event_date(self, alert: Dict) -> Optional[datetime]:
+        """
+        Extract event date from alert data
+
+        Args:
+            alert: Alert dictionary containing event_date field
+
+        Returns:
+            datetime object or None if no date available
+        """
+        try:
+            # Get event_date directly from alert (provided by triage agent)
+            event_date = alert.get('event_date')
+
+            if event_date:
+                if isinstance(event_date, datetime):
+                    return event_date
+                elif isinstance(event_date, str):
+                    try:
+                        # Handle YYYY-MM-DD format
+                        return datetime.strptime(event_date, '%Y-%m-%d')
+                    except ValueError:
+                        try:
+                            # Handle ISO format as fallback
+                            return datetime.fromisoformat(event_date.replace('Z', '+00:00'))
+                        except ValueError:
+                            pass
+
+            return None
+        except Exception as e:
+            logger.warning(f"Error extracting event date: {e}")
+            return None
 
     async def get_alerts_by_topic(self, topic: str, limit: int = 50) -> List[Dict]:
         """
@@ -116,25 +177,25 @@ class FirestoreManager:
             logger.error(f"Error retrieving alerts by topic {topic}: {str(e)}")
             return []
 
-    async def get_high_confidence_alerts(self, min_confidence: float = 0.8, hours_back: int = 24) -> List[Dict]:
+    async def get_high_severity_alerts(self, min_severity: int = 7, hours_back: int = 24) -> List[Dict]:
         """
-        Get high-confidence alerts from the last N hours
+        Get high-severity alerts from the last N hours
 
         Args:
-            min_confidence: Minimum confidence score threshold
+            min_severity: Minimum severity score threshold (1-10)
             hours_back: Number of hours to look back
 
         Returns:
-            List of high-confidence alerts
+            List of high-severity alerts
         """
         try:
             cutoff_time = datetime.utcnow() - timedelta(hours=hours_back)
 
             query = (self.db.collection(self.alerts_collection)
-                     .where('confidence_score', '>=', min_confidence)
+                     .where('severity', '>=', min_severity)
                      .where('created_at', '>=', cutoff_time)
                      .where('status', '==', 'active')
-                     .order_by('confidence_score', direction=firestore.Query.DESCENDING))
+                     .order_by('severity', direction=firestore.Query.DESCENDING))
 
             docs = query.stream()
             alerts = []
@@ -146,7 +207,7 @@ class FirestoreManager:
             return alerts
 
         except Exception as e:
-            logger.error(f"Error retrieving high-confidence alerts: {str(e)}")
+            logger.error(f"Error retrieving high-severity alerts: {str(e)}")
             return []
 
     async def get_trending_topics(self, limit: int = 10) -> List[Dict]:
@@ -179,15 +240,15 @@ class FirestoreManager:
                     topic_stats[topic] = {
                         'topic': topic,
                         'alert_count': 0,
-                        'avg_confidence': 0,
+                        'avg_severity': 0,
                         'latest_alert': None,
                         'sources': set()
                     }
 
                 stats = topic_stats[topic]
                 stats['alert_count'] += 1
-                stats['avg_confidence'] = (
-                    stats['avg_confidence'] + alert['confidence_score']) / 2
+                stats['avg_severity'] = (
+                    stats['avg_severity'] + alert.get('severity', 0)) / 2
                 stats['sources'].add(alert['source'])
 
                 if not stats['latest_alert'] or alert['created_at'] > stats['latest_alert']:
@@ -198,7 +259,7 @@ class FirestoreManager:
             for topic, stats in topic_stats.items():
                 # Convert set to list for JSON serialization
                 stats['sources'] = list(stats['sources'])
-                trending_score = stats['alert_count'] * stats['avg_confidence']
+                trending_score = stats['alert_count'] * stats['avg_severity']
                 stats['trending_score'] = trending_score
                 trending.append(stats)
 
@@ -263,3 +324,134 @@ class FirestoreManager:
         except Exception as e:
             logger.error(f"Error cleaning up old alerts: {str(e)}")
             return 0
+
+    async def store_monitor_run(self, run_stats: Dict) -> str:
+        """
+        Store monitor run statistics
+
+        Args:
+            run_stats: Dictionary containing run statistics and metadata
+
+        Returns:
+            Document ID of stored monitor run
+        """
+        try:
+            # Add system metadata
+            run_data = {
+                **run_stats,
+                'created_at': datetime.utcnow(),
+                'monitor_system_version': '1.0',
+                'status': run_stats.get('status', 'completed')
+            }
+
+            # Store in Firestore
+            doc_ref = self.db.collection(
+                self.monitor_runs_collection).document()
+            doc_ref.set(run_data)
+
+            logger.info(f"✅ STORED MONITOR RUN - ID: {doc_ref.id}")
+            logger.info(
+                f"   Duration: {run_stats.get('execution_time_seconds', 0):.2f}s")
+            logger.info(
+                f"   Signals Collected: {run_stats.get('total_signals_collected', 0)}")
+            logger.info(
+                f"   Alerts Generated: {run_stats.get('alerts_generated', 0)}")
+            logger.info(
+                f"   Sources: {list(run_stats.get('source_stats', {}).keys())}")
+
+            return doc_ref.id
+
+        except Exception as e:
+            logger.error(f"❌ FAILED TO STORE MONITOR RUN: {str(e)}")
+            logger.error(f"   Run stats: {run_stats}")
+            raise
+
+    async def get_recent_monitor_runs(self, limit: int = 10) -> List[Dict]:
+        """
+        Get recent monitor runs for debugging and monitoring
+
+        Args:
+            limit: Maximum number of runs to return
+
+        Returns:
+            List of monitor run dictionaries
+        """
+        try:
+            query = (self.db.collection(self.monitor_runs_collection)
+                     .order_by('created_at', direction=firestore.Query.DESCENDING)
+                     .limit(limit))
+
+            docs = query.stream()
+            runs = []
+            for doc in docs:
+                run_data = doc.to_dict()
+                run_data['id'] = doc.id
+                runs.append(run_data)
+
+            return runs
+
+        except Exception as e:
+            logger.error(f"Error retrieving recent monitor runs: {str(e)}")
+            return []
+
+    async def get_monitor_run_stats(self, hours_back: int = 24) -> Dict:
+        """
+        Get aggregate statistics for monitor runs in the last N hours
+
+        Args:
+            hours_back: Number of hours to look back
+
+        Returns:
+            Dictionary with aggregate statistics
+        """
+        try:
+            cutoff_time = datetime.utcnow() - timedelta(hours=hours_back)
+
+            query = (self.db.collection(self.monitor_runs_collection)
+                     .where('created_at', '>=', cutoff_time)
+                     .order_by('created_at', direction=firestore.Query.DESCENDING))
+
+            docs = query.stream()
+
+            total_runs = 0
+            total_signals = 0
+            total_alerts = 0
+            successful_runs = 0
+            source_totals = {}
+
+            for doc in docs:
+                run = doc.to_dict()
+                total_runs += 1
+
+                if run.get('status') == 'completed' and not run.get('errors'):
+                    successful_runs += 1
+
+                total_signals += run.get('total_signals_collected', 0)
+                total_alerts += run.get('alerts_generated', 0)
+
+                # Aggregate by source
+                for source, stats in run.get('source_stats', {}).items():
+                    if source not in source_totals:
+                        source_totals[source] = 0
+                    source_totals[source] += stats.get('signals_collected', 0)
+
+            return {
+                'period_hours': hours_back,
+                'total_runs': total_runs,
+                'successful_runs': successful_runs,
+                'success_rate': successful_runs / total_runs if total_runs > 0 else 0,
+                'total_signals_collected': total_signals,
+                'total_alerts_generated': total_alerts,
+                'avg_signals_per_run': total_signals / total_runs if total_runs > 0 else 0,
+                'avg_alerts_per_run': total_alerts / total_runs if total_runs > 0 else 0,
+                'source_totals': source_totals,
+                'last_updated': datetime.utcnow().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Error calculating monitor run stats: {str(e)}")
+            return {
+                'error': str(e),
+                'period_hours': hours_back,
+                'last_updated': datetime.utcnow().isoformat()
+            }
