@@ -142,14 +142,34 @@ class TriageAgent:
             else:
                 signal_summary[source] = "1 dataset"
 
+        # Create the raw data snippet
+        raw_data_snippet = json.dumps(
+            raw_signals, indent=2, default=str)[:3000]
+        signal_sources_json = json.dumps(signal_summary, indent=2)
+        current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+
         prompt = f"""
 You are a NYC monitoring triage agent. Analyze these data signals and assign severity scores (1-10).
 
-**Current Time**: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
+**Current Time**: {current_time}
 
-**Signal Sources**: {json.dumps(signal_summary, indent=2)}
+**Signal Sources**: {signal_sources_json}
 
-**Raw Data**: {json.dumps(raw_signals, indent=2, default=str)[:3000]}...
+**Raw Data**: {raw_data_snippet}...
+
+**CRITICAL REQUIREMENT - LOCATION SPECIFICITY**: 
+Only create alerts if you can identify SPECIFIC locations with actionable geographic detail:
+- Specific street names, intersections, or addresses
+- Named venues, parks, or landmarks  
+- Specific subway stations or transportation hubs
+- Precise neighborhood boundaries with street references
+- Exact venues (Madison Square Garden, Central Park Sheep Meadow, etc.)
+
+**DO NOT create alerts for**:
+- Vague references like "affected areas", "throughout the city", "various locations"
+- General borough mentions without specific areas
+- Events without clear geographic boundaries
+- Broad descriptions like "downtown" or "uptown" without street references
 
 **Your Task**: 
 1. Identify potential alerts, incidents, emergencies, OR major public events affecting NYC residents
@@ -168,31 +188,47 @@ You are a NYC monitoring triage agent. Analyze these data signals and assign sev
    - **Infrastructure impacts**: Events affecting traffic, transit, utilities, city services
    - **Seasonal/planned events**: Major NYC events (Pride, marathons, street fairs, holiday events)
 
-4. Event Examples to Capture:
-   - **Emergency (High severity)**: "Fire in Manhattan", "Subway system failure", "Major accident"
-   - **Major Events (Medium-High)**: "Pride Parade route", "Marathon street closures", "Central Park concert"
-   - **Local Events (Medium)**: "Street fair in Brooklyn", "Block party permits", "Neighborhood festival"
-   - **Routine (Low)**: "Restaurant opening", "Small gathering", "Individual complaints"
+4. Event Examples to Capture (WITH SPECIFIC LOCATIONS):
+   - **Emergency (High severity)**: "Fire at 123 Main St, Manhattan", "Subway shutdown at Union Square-14th St", "Water main break on Broadway between 42nd-45th St"
+   - **Major Events (Medium-High)**: "Pride Parade on 5th Ave from 36th to 8th St", "Marathon closures on Verrazzano Bridge and 4th Ave Brooklyn", "Concert at Central Park Great Lawn"
+   - **Local Events (Medium)**: "Street fair on Smith St between Atlantic-Pacific", "Block party on 85th St between 2nd-3rd Ave", "Festival in Prospect Park Bandshell area"
 
-5. Group related signals by geographical area or event type
+5. For alert titles, use descriptive event names WITHOUT date prefixes:
+   - Example: "Pride Parade - 5th Ave (36th to 8th St)"
+   - Example: "Water Main Break - Broadway/42nd St" 
+   - Example: "Concert - Central Park Great Lawn"
+
+6. For event dates, include as a separate field in YYYY-MM-DD format
+
+7. For descriptions, include:
+   - Specific streets, cross-streets, or landmarks affected
+   - Estimated crowd size and duration
+   - Transportation/traffic impacts with specific routes
+   - Recommended alternate routes when applicable
 
 **Response Format** (JSON only):
 {{
   "summary": "Brief overview of current NYC situation including events and emergencies",
   "alerts": [
     {{
-      "id": "unique_alert_id",
-      "title": "Brief alert title",
-      "area": "Geographic area or 'Citywide'",
+      "id": "example_event_id",
+      "title": "Example Event - Specific Location",
+      "event_date": "2025-06-01",
+      "area": "Specific Area - Street/Venue Description",
       "severity": 8,
-      "category": "emergency|event|transportation|infrastructure|social|safety",
-      "event_type": "emergency|parade|festival|concert|protest|sports|seasonal|routine",
-      "signals": ["reddit", "traffic"],
-      "description": "What's happening, expected crowd size/impact, and why it matters",
-      "keywords": ["pride", "parade", "street closure"],
+      "category": "event",
+      "event_type": "parade",
+      "signals": ["reddit"],
+      "description": "Detailed description with specific streets, times, and transportation impacts.",
+      "keywords": ["example", "keywords"],
       "confidence": 0.85,
-      "crowd_impact": "high|medium|low|none",
-      "estimated_attendance": "number or range if applicable"
+      "crowd_impact": "high",
+      "estimated_attendance": "50000-100000",
+      "specific_streets": ["Main Street", "First Avenue"],
+      "cross_streets": ["1st St", "2nd St", "3rd St"],
+      "transportation_impact": "Street closures and alternative routes",
+      "venue_address": "Specific address or area description",
+      "coordinates": {{"lat": 40.7505, "lng": -73.9858}}
     }}
   ],
   "normal_activity": [
@@ -200,16 +236,24 @@ You are a NYC monitoring triage agent. Analyze these data signals and assign sev
       "source": "reddit",
       "note": "Normal discussions without significant events"
     }}
+  ],
+  "rejected_signals": [
+    {{
+      "reason": "Insufficient location specificity",
+      "example": "Event mentioned without specific streets or venues"
+    }}
   ]
 }}
 
 IMPORTANT: 
 - Respond with ONLY valid JSON - no markdown, no explanations, no code blocks
-- Start your response with {{ and end with }}
+- Start your response with '{{' and end with '}}'
 - Do not wrap the JSON in ```json``` or any other formatting
 - Ensure all strings are properly quoted and escaped
-- Capture BOTH emergencies AND major public events/gatherings
-- If no significant alerts are needed, use an empty alerts array: "alerts": []
+- ONLY create alerts with specific, actionable location information
+- Include "specific_streets", "cross_streets", "venue_address", and "coordinates" fields when possible
+- Use descriptive titles WITHOUT date prefixes - dates go in separate "event_date" field
+- If no locationally-specific alerts can be created, use an empty alerts array: "alerts": []
 """
         return prompt
 

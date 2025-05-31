@@ -13,6 +13,7 @@ import re
 
 from .base_collector import BaseCollector
 from monitor.utils.location_extractor import NYCLocationExtractor
+from monitor.utils.geocode import geocode_nyc_location
 
 logger = logging.getLogger(__name__)
 
@@ -248,7 +249,7 @@ class RedditCollector(BaseCollector):
                         logger.debug(
                             f"  Available attributes: {[attr for attr in dir(submission) if not attr.startswith('_')]}")
 
-                    signal = self._submission_to_signal(submission, subreddit)
+                    signal = await self._submission_to_signal(submission, subreddit)
                     if signal is not None:  # Only add if not filtered out
                         hot_posts.append(signal)
                     hot_count += 1
@@ -286,7 +287,7 @@ class RedditCollector(BaseCollector):
                         continue
 
                     if post_time >= cutoff_time:
-                        signal = self._submission_to_signal(
+                        signal = await self._submission_to_signal(
                             submission, subreddit)
                         if signal is not None:  # Only add if not filtered out
                             new_posts.append(signal)
@@ -324,7 +325,7 @@ class RedditCollector(BaseCollector):
             logger.error(f"   Exception type: {type(e).__name__}")
             return []
 
-    def _submission_to_signal(self, submission, subreddit: str) -> Dict:
+    async def _submission_to_signal(self, submission, subreddit: str) -> Dict:
         """Convert Reddit submission to standardized signal format"""
         try:
             # Use created_at directly since it's already a datetime object in redditwarp
@@ -355,6 +356,23 @@ class RedditCollector(BaseCollector):
             location_info = self.location_extractor.extract_location_info(
                 title, content)
 
+            # NEW: Get real coordinates using geocoding service
+            geocoding_result = await self._geocode_location_info(location_info, title, content)
+
+            # NEW: Check location specificity - only pass signals with actionable location data
+            location_specificity = self._assess_location_specificity(
+                title, content, location_info)
+
+            # Filter out signals without sufficient location specificity
+            # Only pass signals that have either:
+            # 1. Specific street addresses/intersections, OR
+            # 2. Named venues/landmarks, OR
+            # 3. Priority emergency content (regardless of location specificity)
+            if not location_specificity['is_specific'] and not keyword_analysis['has_priority_content']:
+                logger.debug(
+                    f"🚫 Filtered out due to insufficient location specificity: {title[:60]}...")
+                return None
+
             raw_signal = {
                 'title': title,
                 'content': content,
@@ -377,13 +395,22 @@ class RedditCollector(BaseCollector):
                     'priority_flags': keyword_analysis['priority_flags'],
                     'keyword_count': keyword_analysis['keyword_count'],
                     'nyc_relevant': True,  # All returned signals are NYC-relevant
-                    # Location data
+                    # Enhanced location data with real geocoding
                     'locations': location_info['locations_found'],
-                    'latitude': location_info['center_latitude'],
-                    'longitude': location_info['center_longitude'],
+                    'latitude': geocoding_result.get('lat'),
+                    'longitude': geocoding_result.get('lng'),
+                    'formatted_address': geocoding_result.get('formatted_address'),
+                    'geocoding_confidence': geocoding_result.get('confidence', 0.0),
+                    'geocoding_source': geocoding_result.get('source', 'none'),
                     'location_count': location_info['location_count'],
                     'primary_borough': location_info['primary_borough'],
-                    'has_coordinates': location_info['has_coordinates']
+                    'has_coordinates': geocoding_result.get('success', False),
+                    # NEW: Location specificity assessment
+                    'location_specificity': location_specificity['specificity_score'],
+                    'specific_streets': location_specificity['specific_streets'],
+                    'named_venues': location_specificity['named_venues'],
+                    'cross_streets': location_specificity['cross_streets'],
+                    'has_actionable_location': location_specificity['is_specific']
                 }
             }
 
@@ -495,3 +522,148 @@ class RedditCollector(BaseCollector):
                 return True
 
         return False
+
+    def _assess_location_specificity(self, title: str, content: str, location_info: Dict) -> Dict:
+        """
+        Assess whether a post has sufficient location specificity for actionable alerts
+
+        Returns:
+            Dict with specificity assessment including specific streets, venues, etc.
+        """
+        full_text = f"{title} {content}".lower()
+
+        specificity_score = 0
+        specific_streets = []
+        named_venues = []
+        cross_streets = []
+
+        # 1. Check for specific street addresses and intersections
+        street_patterns = [
+            # "123 Main Street"
+            r'\b\d+\s+\w+\s+(street|st|avenue|ave|road|rd|boulevard|blvd|place|pl|drive|dr)\b',
+            # "Main St and 5th Ave"
+            r'\b\w+\s+(street|st|avenue|ave)\s+(and|&|at|\+)\s+\w+\s+(street|st|avenue|ave)\b',
+            # "5th Ave between 42nd and 45th"
+            r'\b\w+\s+(street|st|avenue|ave)\s+between\s+\w+\s+and\s+\w+\b',
+            # Major avenues with cross streets
+            r'\b(broadway|5th avenue|madison avenue|park avenue|lexington avenue|third avenue|second avenue|first avenue)\s+(and|at|between)\s+\w+\b',
+        ]
+
+        for pattern in street_patterns:
+            matches = re.findall(pattern, full_text, re.IGNORECASE)
+            if matches:
+                specific_streets.extend([match[0] if isinstance(
+                    match, tuple) else match for match in matches])
+                specificity_score += 3
+
+        # 2. Check for named venues and landmarks
+        venue_patterns = [
+            r'\b(madison square garden|msg|central park|prospect park|brooklyn bridge|manhattan bridge|times square|union square|washington square park)\b',
+            r'\b(yankee stadium|citi field|barclays center|lincoln center|grand central|penn station)\b',
+            r'\b(world trade center|wtc|freedom tower|high line|chelsea market|south street seaport)\b',
+            r'\b(\w+\s+museum|\w+\s+theater|\w+\s+hotel|\w+\s+center|\w+\s+plaza|\w+\s+square)\b',
+        ]
+
+        for pattern in venue_patterns:
+            matches = re.findall(pattern, full_text, re.IGNORECASE)
+            if matches:
+                named_venues.extend(matches)
+                specificity_score += 2
+
+        # 3. Check for cross-street references
+        cross_street_patterns = [
+            # "42nd St and 5th Ave"
+            r'\b(\d+)(st|nd|rd|th)\s+(street|st)\s+(and|&|at)\s+(\w+\s+(avenue|ave))\b',
+            # "Main St and Park Ave"
+            r'\b(\w+\s+(street|st))\s+(and|&|at)\s+(\w+\s+(avenue|ave))\b',
+        ]
+
+        for pattern in cross_street_patterns:
+            matches = re.findall(pattern, full_text, re.IGNORECASE)
+            if matches:
+                cross_streets.extend(
+                    [f"{match[0]}{match[1]} {match[2]} & {match[4]}" for match in matches])
+                specificity_score += 2
+
+        # 4. Check for subway station references with specificity
+        subway_patterns = [
+            r'\b(\w+\s+\w+)\s+station\b',  # "Union Square station"
+            # "42nd St station"
+            r'\b(\d+)(st|nd|rd|th)\s+(st\s+)?(station|subway)\b',
+        ]
+
+        for pattern in subway_patterns:
+            matches = re.findall(pattern, full_text, re.IGNORECASE)
+            if matches:
+                specificity_score += 1
+
+        # 5. Penalty for vague location references
+        vague_patterns = [
+            r'\b(throughout|across|various|multiple|different)\s+(areas|locations|places|neighborhoods)\b',
+            r'\b(all over|around|near|somewhere in)\s+(manhattan|brooklyn|queens|bronx|staten island)\b',
+            # "downtown" without specific area
+            r'\b(downtown|uptown|midtown)\b(?!\s+(manhattan|area))',
+        ]
+
+        for pattern in vague_patterns:
+            if re.search(pattern, full_text, re.IGNORECASE):
+                specificity_score -= 2
+
+        # Determine if location is specific enough
+        is_specific = (
+            specificity_score >= 2 or  # Has street addresses or multiple venue references
+            len(specific_streets) > 0 or  # Has specific street addresses
+            len(cross_streets) > 0 or  # Has intersection references
+            # Has named venues with some specificity
+            (len(named_venues) > 0 and specificity_score >= 1)
+        )
+
+        return {
+            'is_specific': is_specific,
+            'specificity_score': specificity_score,
+            'specific_streets': specific_streets,
+            'named_venues': named_venues,
+            'cross_streets': cross_streets,
+            'has_intersections': len(cross_streets) > 0,
+            'has_venues': len(named_venues) > 0
+        }
+
+    async def _geocode_location_info(self, location_info: Dict, title: str, content: str) -> Dict:
+        """
+        Geocode location information to get real coordinates
+
+        Returns:
+            Dict with geocoding result including latitude, longitude, formatted address, and confidence
+        """
+        try:
+            # Extract relevant location information
+            locations = location_info['locations_found']
+            borough = location_info.get('primary_borough')
+
+            # Try to geocode the most specific location available
+            if locations:
+                # Use the first (most relevant) location
+                location_text = locations[0]
+                geocoding_result = await geocode_nyc_location(location_text, borough)
+            elif borough:
+                # Fall back to borough-level geocoding
+                geocoding_result = await geocode_nyc_location(borough)
+            else:
+                # No specific location information available
+                return self._empty_geocoding_result()
+
+            return geocoding_result
+        except Exception as e:
+            logger.warning(f"Warning: Failed to geocode location: {e}")
+            return self._empty_geocoding_result()
+
+    def _empty_geocoding_result(self) -> Dict:
+        """Return empty geocoding result"""
+        return {
+            'lat': None,
+            'lng': None,
+            'formatted_address': None,
+            'confidence': 0.0,
+            'source': 'none',
+            'success': False
+        }
