@@ -240,3 +240,49 @@ Monitor your custom domain in:
 - [Google Cloud Console](https://console.cloud.google.com/run)
 - [Google Search Console](https://search.google.com/search-console)
 - Domain registrar analytics 
+
+## Authentication Configuration Updates
+
+After setting up your custom domain, you need to update authentication configurations:
+
+### 1. Google OAuth Console
+
+**Most Important**: Update your Google OAuth credentials:
+
+1. Go to [Google Cloud Console OAuth Credentials](https://console.cloud.google.com/apis/credentials)
+2. Find your OAuth 2.0 Client ID (starts with your project number)
+3. Click to edit it
+4. Add to **"Authorized JavaScript origins"**:
+   - `https://nyc-monitor.app` (or your custom domain)
+5. Add to **"Authorized redirect URIs"** (if needed):
+   - `https://nyc-monitor.app`
+   - `https://nyc-monitor.app/login`
+
+### 2. Backend Configuration
+
+The backend CORS settings have been updated to include your custom domain. After domain setup, redeploy the backend:
+
+```bash
+make deploy-backend-api
+```
+
+### 3. Frontend Configuration  
+
+The nginx configuration includes API proxying to your backend. After domain setup, redeploy the frontend:
+
+```bash
+make deploy-frontend
+```
+
+### 4. Testing Authentication
+
+After DNS propagation and redeployment:
+
+1. Visit `https://nyc-monitor.app`
+2. Try logging in with Google OAuth
+3. Verify API calls work properly
+
+If authentication fails, check:
+- Google OAuth console configuration
+- Browser developer tools for CORS errors
+- Backend logs for authentication errors 
