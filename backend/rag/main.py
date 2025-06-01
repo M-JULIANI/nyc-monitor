@@ -23,9 +23,14 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this!
+    allow_origins=[
+        "https://nyc-monitor.app",  # Production custom domain
+        "https://atlas-frontend-290750569862.us-central1.run.app",  # Original Cloud Run URL
+        "http://localhost:3000",  # Local development
+        "http://localhost:5173",  # Vite dev server
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 

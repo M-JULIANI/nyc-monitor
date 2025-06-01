@@ -1,4 +1,4 @@
-.PHONY: install dev build test deploy clean lint format devcontainer-setup devcontainer-clean check-deps check-docker check-gcloud deploy-monitor build-monitor setup-monitor test-monitor
+.PHONY: install dev build test deploy clean lint format devcontainer-setup devcontainer-clean check-deps check-docker check-gcloud deploy-monitor build-monitor setup-monitor test-monitor check-domain remove-domain list-domains setup-domain-direct
 
 # Variables
 GOOGLE_CLOUD_PROJECT ?= $(shell grep -E '^GOOGLE_CLOUD_PROJECT=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
@@ -557,3 +557,41 @@ help:
 	@echo "Troubleshooting:"
 	@echo "  If monitor not running automatically, use 'make debug-monitor-full'"
 	@echo "  to check scheduler logs, job executions, and job logs"
+
+# Domain management
+CUSTOM_DOMAIN ?= $(shell grep -E '^CUSTOM_DOMAIN=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+
+
+check-domain: check-gcloud
+	@if [ -z "$(CUSTOM_DOMAIN)" ]; then \
+		echo "Error: CUSTOM_DOMAIN not set in .env file"; \
+		exit 1; \
+	fi
+	@echo "🔍 Checking domain mapping status for $(CUSTOM_DOMAIN)..."
+	@gcloud alpha run domain-mappings describe --domain="$(CUSTOM_DOMAIN)" \
+		--region=$(CLOUD_RUN_REGION) \
+		--format="yaml" || echo "Domain mapping not found"
+
+remove-domain: check-gcloud
+	@if [ -z "$(CUSTOM_DOMAIN)" ]; then \
+		echo "Error: CUSTOM_DOMAIN not set in .env file"; \
+		exit 1; \
+	fi
+	@echo "🗑️ Removing domain mapping for $(CUSTOM_DOMAIN)..."
+	@gcloud alpha run domain-mappings delete --domain="$(CUSTOM_DOMAIN)" \
+		--region=$(CLOUD_RUN_REGION) \
+		--quiet
+
+list-domains: check-gcloud
+	@echo "📋 Listing all domain mappings..."
+	@gcloud alpha run domain-mappings list \
+		--region=$(CLOUD_RUN_REGION)
+
+setup-domain-direct: check-gcloud
+	@if [ -z "$(CUSTOM_DOMAIN)" ]; then \
+		echo "Error: CUSTOM_DOMAIN not set in .env file"; \
+		echo "Add CUSTOM_DOMAIN=your-domain.com to your .env file"; \
+		exit 1; \
+	fi
+	@chmod +x scripts/setup-custom-domain-direct.sh
+	@./scripts/setup-custom-domain-direct.sh "$(CUSTOM_DOMAIN)"
