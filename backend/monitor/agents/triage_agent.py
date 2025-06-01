@@ -136,17 +136,42 @@ class TriageAgent:
 
         # Count signals for context
         signal_summary = {}
+        recent_alerts_summary = []
+
         for source, data in raw_signals.items():
-            if isinstance(data, list):
+            if source == 'recent_alerts':
+                # Handle recent alerts for duplicate detection
+                recent_alerts_summary = data if isinstance(data, list) else []
+                continue
+            elif isinstance(data, list):
                 signal_summary[source] = f"{len(data)} items"
             else:
                 signal_summary[source] = "1 dataset"
 
-        # Create the raw data snippet
+        # Create the raw data snippet (excluding recent alerts from main data)
+        signals_for_analysis = {k: v for k, v in raw_signals.items(
+        ) if k not in ['recent_alerts', 'timestamp', 'collection_window']}
         raw_data_snippet = json.dumps(
-            raw_signals, indent=2, default=str)[:3000]
+            signals_for_analysis, indent=2, default=str)[:4000]
         signal_sources_json = json.dumps(signal_summary, indent=2)
         current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+
+        # Recent alerts summary for duplicate detection
+        recent_alerts_snippet = ""
+        if recent_alerts_summary:
+            recent_alerts_snippet = f"""
+**RECENT ALERTS (for duplicate detection)**:
+{json.dumps([{
+    'title': alert.get('title', ''),
+    'event_type': alert.get('event_type', ''),
+    'area': alert.get('area', ''),
+    'specific_streets': alert.get('specific_streets', []),
+    'venue_address': alert.get('venue_address', ''),
+    'event_date': alert.get('event_date', ''),
+    'created_at': alert.get('created_at', ''),
+    'document_id': alert.get('document_id', '')
+} for alert in recent_alerts_summary[:10]], indent=2, default=str)}
+"""
 
         prompt = f"""
 You are a NYC monitoring triage agent. Analyze these data signals and assign severity scores (1-10).
@@ -155,7 +180,30 @@ You are a NYC monitoring triage agent. Analyze these data signals and assign sev
 
 **Signal Sources**: {signal_sources_json}
 
+{recent_alerts_snippet}
+
 **Raw Data**: {raw_data_snippet}...
+
+**DUPLICATE DETECTION REQUIREMENTS**:
+1. **Check Recent Alerts**: Before creating new alerts, compare against recent alerts from the last 6 hours
+2. **Same Event Criteria**: Consider events duplicates if they share:
+   - Same or overlapping specific streets/intersections
+   - Same venue or landmark
+   - Same event type (parade, concert, emergency, etc.) 
+   - Same or adjacent time period (within 6 hours)
+3. **New Information Assessment**: Create a new alert ONLY if:
+   - Significant new details (route changes, time updates, new safety concerns)
+   - Different perspective or community reaction
+   - Escalation in severity or scope
+   - First-hand witness accounts vs. second-hand reports
+4. **Update vs. New Alert**: If it's the same event with minor updates, mark it as "duplicate_of" and include the original alert's document_id
+
+**CONTENT AND SENTIMENT ANALYSIS**:
+1. **Analyze Actual Content**: Examine the full text, sentiment, and tone of Reddit posts
+2. **Community Reaction**: Note if posts show concern, excitement, avoidance, or participation
+3. **Information Quality**: Prioritize first-hand accounts and detailed reports over vague references
+4. **Urgency Markers**: Look for "happening now", "urgent", "breaking", "just saw" etc.
+5. **Tone Analysis**: Consider whether posts are informational, questioning, concerned, or angry
 
 **CRITICAL REQUIREMENT - LOCATION SPECIFICITY**: 
 Only create alerts if you can identify SPECIFIC locations with actionable geographic detail:
@@ -228,7 +276,23 @@ Only create alerts if you can identify SPECIFIC locations with actionable geogra
       "cross_streets": ["1st St", "2nd St", "3rd St"],
       "transportation_impact": "Street closures and alternative routes",
       "venue_address": "Specific address or area description",
-      "coordinates": {{"lat": 40.7505, "lng": -73.9858}}
+      "coordinates": {{"lat": 40.7505, "lng": -73.9858}},
+      "is_duplicate": false,
+      "duplicate_of": null,
+      "duplicate_reason": null,
+      "new_information": null,
+      "community_sentiment": "concerned",
+      "information_quality": "first-hand",
+      "urgency_markers": ["happening now", "urgent"],
+      "tone_analysis": "informational"
+    }}
+  ],
+  "duplicates_detected": [
+    {{
+      "original_alert_id": "2025-06-01_1234_parade_5th_ave",
+      "reason": "Same parade route and timing",
+      "new_information": "Updated crowd size estimate",
+      "action": "no_new_alert_needed"
     }}
   ],
   "normal_activity": [
