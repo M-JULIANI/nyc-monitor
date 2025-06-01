@@ -382,7 +382,7 @@ deploy-monitor: build-monitor check-gcloud
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
+			--schedule="*/30 * * * *" \
 			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
@@ -392,7 +392,7 @@ deploy-monitor: build-monitor check-gcloud
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
+			--schedule="*/30 * * * *" \
 			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
@@ -482,7 +482,7 @@ debug-job-logs: check-gcloud
 debug-monitor-full: debug-scheduler debug-job-executions debug-job-logs
 	@echo ""
 	@echo "🎯 SUMMARY:"
-	@echo "1. Check scheduler logs above - should show HTTP POST requests every 3 hours"
+	@echo "1. Check scheduler logs above - should show HTTP POST requests every 30 minutes"
 	@echo "2. Check job executions - should show successful completions"
 	@echo "3. Check job logs - should show monitor cycle completion messages"
 	@echo ""
