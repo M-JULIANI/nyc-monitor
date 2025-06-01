@@ -336,34 +336,21 @@ class FirestoreManager:
             Document ID of stored monitor run
         """
         try:
-            # Add system metadata
-            run_data = {
-                **run_stats,
-                'created_at': datetime.utcnow(),
-                'monitor_system_version': '1.0',
-                'status': run_stats.get('status', 'completed')
-            }
+            logger.info("📊 Storing monitor run statistics...")
 
-            # Store in Firestore
-            doc_ref = self.db.collection(
-                self.monitor_runs_collection).document()
-            doc_ref.set(run_data)
+            # Add server timestamp
+            run_stats['server_timestamp'] = firestore.SERVER_TIMESTAMP
 
-            logger.info(f"✅ STORED MONITOR RUN - ID: {doc_ref.id}")
-            logger.info(
-                f"   Duration: {run_stats.get('execution_time_seconds', 0):.2f}s")
-            logger.info(
-                f"   Signals Collected: {run_stats.get('total_signals_collected', 0)}")
-            logger.info(
-                f"   Alerts Generated: {run_stats.get('alerts_generated', 0)}")
-            logger.info(
-                f"   Sources: {list(run_stats.get('source_stats', {}).keys())}")
+            # Store in monitor_runs collection
+            doc_ref = self.db.collection('monitor_runs').document()
+            doc_ref.set(run_stats)
 
+            logger.info(
+                f"✅ Monitor run statistics stored with ID: {doc_ref.id}")
             return doc_ref.id
 
         except Exception as e:
-            logger.error(f"❌ FAILED TO STORE MONITOR RUN: {str(e)}")
-            logger.error(f"   Run stats: {run_stats}")
+            logger.error(f"❌ Failed to store monitor run statistics: {e}")
             raise
 
     async def get_recent_monitor_runs(self, limit: int = 10) -> List[Dict]:
@@ -455,3 +442,40 @@ class FirestoreManager:
                 'period_hours': hours_back,
                 'last_updated': datetime.utcnow().isoformat()
             }
+
+    async def get_recent_alerts(self, hours_back: int = 6) -> List[Dict]:
+        """
+        Get recent alerts from Firestore for duplicate detection
+
+        Args:
+            hours_back: How many hours back to search
+
+        Returns:
+            List of recent alert documents
+        """
+        try:
+            logger.info(
+                f"🔍 Querying recent alerts (last {hours_back} hours)...")
+
+            # Calculate cutoff time
+            cutoff_time = datetime.utcnow() - timedelta(hours=hours_back)
+
+            # Query recent alerts
+            alerts_ref = self.db.collection('nyc_monitor_alerts')
+            query = alerts_ref.where('created_at', '>=', cutoff_time).order_by(
+                'created_at', direction=firestore.Query.DESCENDING).limit(50)
+
+            docs = query.stream()
+            recent_alerts = []
+
+            for doc in docs:
+                alert_data = doc.to_dict()
+                alert_data['document_id'] = doc.id
+                recent_alerts.append(alert_data)
+
+            logger.info(f"✅ Found {len(recent_alerts)} recent alerts")
+            return recent_alerts
+
+        except Exception as e:
+            logger.error(f"❌ Failed to query recent alerts: {e}")
+            return []

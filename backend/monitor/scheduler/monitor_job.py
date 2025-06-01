@@ -109,9 +109,15 @@ class MonitorJob:
                 if isinstance(data, list):
                     logger.info(f"   📊 {source}: {len(data)} items")
 
-            # Step 2: Run triage analysis on collected signals
-            logger.info("🧠 PHASE 2: TRIAGE ANALYSIS")
-            triage_results = await self._run_triage_analysis(raw_signals)
+            # Step 2: Query recent alerts for duplicate detection
+            logger.info("🔍 PHASE 2: QUERYING RECENT ALERTS")
+            recent_alerts = await self.storage.get_recent_alerts(hours_back=6)
+            logger.info(
+                f"📋 Found {len(recent_alerts)} recent alerts for duplicate checking")
+
+            # Step 3: Run triage analysis on collected signals with duplicate detection
+            logger.info("🧠 PHASE 3: TRIAGE ANALYSIS WITH DUPLICATE DETECTION")
+            triage_results = await self._run_triage_analysis(raw_signals, recent_alerts)
 
             if not triage_results or not triage_results.get('alerts'):
                 if triage_results and triage_results.get('error'):
@@ -161,8 +167,8 @@ class MonitorJob:
             logger.info(f"   📈 Severity distribution: {severity_counts}")
             logger.info(f"   🎭 Event type distribution: {event_type_counts}")
 
-            # Step 3: Store alerts in Firestore
-            logger.info("💾 PHASE 3: STORING ALERTS")
+            # Step 4: Store alerts in Firestore
+            logger.info("💾 PHASE 4: STORING ALERTS")
             stored_count = await self._store_alerts(alerts)
             self.stats['alerts_stored'] = stored_count
 
@@ -274,27 +280,30 @@ class MonitorJob:
         self.stats['signals_collected'] = total_count
         return all_signals
 
-    async def _run_triage_analysis(self, raw_signals: Dict) -> Dict:
+    async def _run_triage_analysis(self, raw_signals: Dict, recent_alerts: List[Dict] = None) -> Dict:
         """
         Run lightweight triage analysis on collected signals
 
         Args:
             raw_signals: Dictionary of signals organized by source
+            recent_alerts: List of recent alerts for duplicate detection
 
         Returns:
             Triage analysis results with severity-scored alerts
         """
         try:
-            logger.info("Running triage analysis on collected signals")
+            logger.info(
+                "Running triage analysis on collected signals with duplicate detection")
 
-            # Add timestamp for analysis context
+            # Add timestamp and recent alerts for analysis context
             signals_with_metadata = {
                 **raw_signals,
                 'timestamp': datetime.utcnow().isoformat(),
-                'collection_window': '15_minutes'
+                'collection_window': '15_minutes',
+                'recent_alerts': recent_alerts or []
             }
 
-            # Run triage analysis
+            # Run triage analysis with duplicate detection
             triage_results = await self.triage_agent.analyze_signals(signals_with_metadata)
 
             # Log triage summary

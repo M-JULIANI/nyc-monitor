@@ -382,6 +382,8 @@ class RedditCollector(BaseCollector):
                 'shares': 0,  # Reddit doesn't track shares
                 'created_at': created_at,
                 'timestamp': created_at,
+                'full_text': f"{title}\n\n{content}".strip(),
+                'content_length': len(content),
                 'metadata': {
                     'subreddit': subreddit,
                     'post_id': id36,
@@ -410,7 +412,7 @@ class RedditCollector(BaseCollector):
                     'specific_streets': location_specificity['specific_streets'],
                     'named_venues': location_specificity['named_venues'],
                     'cross_streets': location_specificity['cross_streets'],
-                    'has_actionable_location': location_specificity['is_specific']
+                    'has_actionable_location': location_specificity['is_specific'],
                 }
             }
 
