@@ -12,7 +12,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 MONITOR_SERVICE_ACCOUNT ?= atlas-monitor-service
 MONITOR_JOB_NAME ?= atlas-monitor
 MONITOR_SCHEDULER_NAME ?= atlas-monitor-monitor
-MONITOR_IMAGE ?= gcr.io/$(GOOGLE_CLOUD_PROJECT)/atlas-monitor
+MONITOR_IMAGE ?= $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-monitor
 
 # Reddit API credentials (for monitor system)
 REDDIT_CLIENT_ID ?= $(shell grep -E '^REDDIT_CLIENT_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
@@ -382,7 +382,7 @@ deploy-monitor: build-monitor check-gcloud
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
+			--schedule="*/30 * * * *" \
 			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
@@ -392,7 +392,7 @@ deploy-monitor: build-monitor check-gcloud
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
+			--schedule="*/30 * * * *" \
 			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
@@ -438,6 +438,59 @@ logs-monitor: check-gcloud
 verify-monitor: check-gcloud
 	@echo "🔍 Verifying monitor system..."
 	cd backend && poetry run python ../scripts/verify_monitor_system.py
+
+# Debug scheduler and job execution
+debug-scheduler: check-gcloud
+	@echo "🔍 DEBUGGING SCHEDULER EXECUTION HISTORY..."
+	@echo "Scheduler job: $(MONITOR_SCHEDULER_NAME)"
+	@echo "Region: $(GOOGLE_CLOUD_LOCATION)"
+	@echo ""
+	@echo "📅 Recent scheduler executions (last 7 days):"
+	@gcloud logging read 'resource.type="cloud_scheduler_job" AND resource.labels.job_id="$(MONITOR_SCHEDULER_NAME)"' \
+		--limit=20 \
+		--format='table(timestamp,severity,jsonPayload.message)' \
+		--freshness=7d || echo "No scheduler logs found"
+	@echo ""
+	@echo "📊 Scheduler job details:"
+	@gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) || echo "Scheduler job not found"
+
+debug-job-executions: check-gcloud
+	@echo "🔍 DEBUGGING CLOUD RUN JOB EXECUTIONS..."
+	@echo "Job name: $(MONITOR_JOB_NAME)"
+	@echo "Region: $(GOOGLE_CLOUD_LOCATION)"
+	@echo ""
+	@echo "📋 Recent job executions (last 7 days):"
+	@gcloud run jobs executions list \
+		--job=$(MONITOR_JOB_NAME) \
+		--region=$(GOOGLE_CLOUD_LOCATION) \
+		--limit=10 \
+		--format='table(metadata.name,status.completionTime,status.conditions[0].type,status.conditions[0].status,status.conditions[0].reason)' || echo "No executions found"
+	@echo ""
+	@echo "🏃 Job configuration:"
+	@gcloud run jobs describe $(MONITOR_JOB_NAME) --region=$(GOOGLE_CLOUD_LOCATION) \
+		--format='table(metadata.name,spec.template.spec.template.spec.containers[0].image,spec.template.spec.template.spec.serviceAccountName)'
+
+debug-job-logs: check-gcloud
+	@echo "🔍 DEBUGGING CLOUD RUN JOB LOGS..."
+	@echo "Recent job logs (last 24 hours):"
+	@echo ""
+	@gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="$(MONITOR_JOB_NAME)"' \
+		--limit=100 \
+		--format='table(timestamp,severity,textPayload)' \
+		--freshness=1d
+
+debug-monitor-full: debug-scheduler debug-job-executions debug-job-logs
+	@echo ""
+	@echo "🎯 SUMMARY:"
+	@echo "1. Check scheduler logs above - should show HTTP POST requests every 30 minutes"
+	@echo "2. Check job executions - should show successful completions"
+	@echo "3. Check job logs - should show monitor cycle completion messages"
+	@echo ""
+	@echo "💡 TROUBLESHOOTING TIPS:"
+	@echo "- If no scheduler logs: Check if scheduler job exists and is enabled"
+	@echo "- If scheduler logs show errors: Check IAM permissions"
+	@echo "- If no job executions: Check if scheduler is triggering the job"
+	@echo "- If job executions fail: Check job logs for errors"
 
 # Cleanup tasks to remove excessive permissions
 cleanup-monitor-permissions: check-gcloud
@@ -496,3 +549,11 @@ help:
 	@echo "  make test-monitor     - Run monitor job manually"
 	@echo "  make logs-monitor     - View monitor system logs"
 	@echo "  make verify-monitor   - Verify monitor system"
+	@echo "  make debug-scheduler  - Check scheduler execution history"
+	@echo "  make debug-job-executions - Check job executions"
+	@echo "  make debug-job-logs   - Check job logs"
+	@echo "  make debug-monitor-full - Run all debug checks"
+	@echo ""
+	@echo "Troubleshooting:"
+	@echo "  If monitor not running automatically, use 'make debug-monitor-full'"
+	@echo "  to check scheduler logs, job executions, and job logs"
