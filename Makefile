@@ -14,6 +14,9 @@ MONITOR_JOB_NAME ?= atlas-monitor
 MONITOR_SCHEDULER_NAME ?= atlas-monitor-monitor
 MONITOR_IMAGE ?= $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-monitor
 
+# Get project number for Cloud Run API endpoints (needed for scheduler URLs)
+GOOGLE_CLOUD_PROJECT_NUMBER ?= $(shell gcloud projects describe $(GOOGLE_CLOUD_PROJECT) --format='value(projectNumber)')
+
 # Reddit API credentials (for monitor system)
 REDDIT_CLIENT_ID ?= $(shell grep -E '^REDDIT_CLIENT_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 REDDIT_CLIENT_SECRET ?= $(shell grep -E '^REDDIT_CLIENT_SECRET=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
@@ -329,6 +332,9 @@ setup-monitor: check-gcloud
 	@gcloud projects add-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
 		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
 		--role="roles/monitoring.metricWriter" --quiet >/dev/null 2>&1 || true
+	@gcloud projects add-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/iam.serviceAccountTokenCreator" --quiet >/dev/null 2>&1 || true
 	@echo ""
 	@echo "✅ Monitor system infrastructure setup complete!"
 	@echo "(Assuming Firestore database already exists)"
@@ -373,31 +379,36 @@ deploy-monitor: build-monitor check-gcloud
 	@echo ""
 	@echo "⚠️ Ensuring Cloud Scheduler service account can invoke job..."
 	@gcloud run jobs add-iam-policy-binding $(MONITOR_JOB_NAME) \
-		--member="serviceAccount:$(shell gcloud projects describe $(GOOGLE_CLOUD_PROJECT) --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
 		--role="roles/run.invoker" \
 		--region=$(GOOGLE_CLOUD_LOCATION) \
+		--quiet || true
+	@echo "⚠️ Ensuring Cloud Scheduler service account can create OIDC tokens..."
+	@gcloud projects add-iam-policy-binding $(GOOGLE_CLOUD_PROJECT) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/iam.serviceAccountTokenCreator" \
 		--quiet || true
 	@echo ""
 	@echo "⏰ Setting up Cloud Scheduler..."
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="*/30 * * * *" \
-			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
+			--schedule="*/15 * * * *" \
+			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
-			--oidc-service-account-email="$(shell gcloud projects describe $(GOOGLE_CLOUD_PROJECT) --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
-			--oidc-token-audience="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
+			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+			--oidc-token-audience="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run" \
 			--quiet; \
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="*/30 * * * *" \
-			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
+			--schedule="*/15 * * * *" \
+			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
-			--oidc-service-account-email="$(shell gcloud projects describe $(GOOGLE_CLOUD_PROJECT) --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
-			--oidc-token-audience="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT)/jobs/$(MONITOR_JOB_NAME):run" \
+			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+			--oidc-token-audience="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run" \
 			--quiet; \
 	fi
 	@echo ""
@@ -482,7 +493,7 @@ debug-job-logs: check-gcloud
 debug-monitor-full: debug-scheduler debug-job-executions debug-job-logs
 	@echo ""
 	@echo "🎯 SUMMARY:"
-	@echo "1. Check scheduler logs above - should show HTTP POST requests every 30 minutes"
+	@echo "1. Check scheduler logs above - should show HTTP POST requests every 15 minutes"
 	@echo "2. Check job executions - should show successful completions"
 	@echo "3. Check job logs - should show monitor cycle completion messages"
 	@echo ""
