@@ -8,29 +8,54 @@ const Login = () => {
   return (
     <div style={{
       minHeight: '100vh',
+      width: '100%',
       display: 'flex',
-      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: '#222'
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      padding: '20px'
     }}>
-      <h2 style={{ color: '#fff', marginBottom: '2rem' }}>Sign in to continue</h2>
-      <GoogleLogin
-        onSuccess={credentialResponse => {
-          const idToken = credentialResponse.credential;
-          localStorage.setItem('idToken', idToken || '');
-          axios.post(
-            '/api/ask',
-            { text: 'What is Vertex AI?' },
-            { headers: { Authorization: `Bearer ${idToken}` } }
-          ).then(() => {
-            navigate('/home');
-          });
-        }}
-        onError={() => {
-          alert('Login Failed');
-        }}
-      />
+      <div style={{
+        background: '#fff',
+        borderRadius: '12px',
+        padding: '3rem 2.5rem',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+        maxWidth: '400px',
+        width: '100%',
+        textAlign: 'center'
+      }}>
+        <h2 style={{ 
+          color: '#1f2937', 
+          marginBottom: '0.5rem',
+          fontSize: '1.875rem',
+          fontWeight: '700'
+        }}>
+          Welcome to nyc-monitor
+        </h2>
+        <p style={{
+          color: '#6b7280',
+          marginBottom: '2rem',
+          fontSize: '1rem'
+        }}>
+          Sign in to continue to your dashboard
+        </p>
+        <GoogleLogin
+          onSuccess={credentialResponse => {
+            const idToken = credentialResponse.credential;
+            localStorage.setItem('idToken', idToken || '');
+            axios.post(
+              '/api/ask',
+              { text: 'What is Vertex AI?' },
+              { headers: { Authorization: `Bearer ${idToken}` } }
+            ).then(() => {
+              navigate('/home');
+            });
+          }}
+          onError={() => {
+            alert('Login Failed');
+          }}
+        />
+      </div>
     </div>
   );
 };

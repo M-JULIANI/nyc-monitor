@@ -22,7 +22,7 @@ const Navbar = () => {
       zIndex: 1000,
       boxSizing: 'border-box'
     }}>
-      <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>Atlas App</div>
+      <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>nyc monitor</div>
       <button onClick={handleLogout} style={{ background: '#444', color: '#fff', border: 'none', borderRadius: '4px', padding: '0.5rem 1rem', cursor: 'pointer' }}>Log out</button>
     </nav>
   );
