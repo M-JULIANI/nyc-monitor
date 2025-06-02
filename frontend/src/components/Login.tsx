@@ -43,12 +43,18 @@ const Login = () => {
           onSuccess={credentialResponse => {
             const idToken = credentialResponse.credential;
             localStorage.setItem('idToken', idToken || '');
+            
+            // Navigate immediately on successful login
+            navigate('/home');
+            
+            // Optional: Test API connection in background (non-blocking)
             axios.post(
               '/api/ask',
               { text: 'What is Vertex AI?' },
               { headers: { Authorization: `Bearer ${idToken}` } }
-            ).then(() => {
-              navigate('/home');
+            ).catch(error => {
+              console.warn('API connection test failed:', error);
+              // Don't block the user experience
             });
           }}
           onError={() => {
