@@ -122,12 +122,12 @@ const MapView: React.FC = () => {
   });
 
   // Create GeoJSON for alert points
-  const alertsGeoJSON = {
+  const alertsGeoJSON: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
     features: filteredAlerts.map(alert => ({
-      type: 'Feature',
+      type: 'Feature' as const,
       geometry: {
-        type: 'Point',
+        type: 'Point' as const,
         coordinates: [alert.longitude, alert.latitude]
       },
       properties: {
