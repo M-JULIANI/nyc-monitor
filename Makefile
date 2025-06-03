@@ -17,6 +17,10 @@ MONITOR_IMAGE ?= $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-monitor
 # Get project number for Cloud Run API endpoints (needed for scheduler URLs)
 GOOGLE_CLOUD_PROJECT_NUMBER ?= $(shell gcloud projects describe $(GOOGLE_CLOUD_PROJECT) --format='value(projectNumber)')
 
+# Cloud Run API URL for scheduler (split to prevent line wrapping)
+CLOUD_RUN_API_BASE := https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1
+CLOUD_RUN_JOB_URL := $(CLOUD_RUN_API_BASE)/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run
+
 # Reddit API credentials (for monitor system)
 REDDIT_CLIENT_ID ?= $(shell grep -E '^REDDIT_CLIENT_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 REDDIT_CLIENT_SECRET ?= $(shell grep -E '^REDDIT_CLIENT_SECRET=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
@@ -393,22 +397,22 @@ deploy-monitor: build-monitor check-gcloud
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="*/15 * * * *" \
-			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run" \
+			--schedule="0 */3 * * *" \
+			--uri="$(CLOUD_RUN_JOB_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
 			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
-			--oidc-token-audience="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run" \
+			--oidc-token-audience="$(CLOUD_RUN_JOB_URL)" \
 			--quiet; \
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="*/15 * * * *" \
-			--uri="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run" \
+			--schedule="0 */3 * * *" \
+			--uri="$(CLOUD_RUN_JOB_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
 			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
-			--oidc-token-audience="https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run" \
+			--oidc-token-audience="$(CLOUD_RUN_JOB_URL)" \
 			--quiet; \
 	fi
 	@echo ""
@@ -493,7 +497,7 @@ debug-job-logs: check-gcloud
 debug-monitor-full: debug-scheduler debug-job-executions debug-job-logs
 	@echo ""
 	@echo "🎯 SUMMARY:"
-	@echo "1. Check scheduler logs above - should show HTTP POST requests every 15 minutes"
+	@echo "1. Check scheduler logs above - should show HTTP POST requests every 3 hours"
 	@echo "2. Check job executions - should show successful completions"
 	@echo "3. Check job logs - should show monitor cycle completion messages"
 	@echo ""

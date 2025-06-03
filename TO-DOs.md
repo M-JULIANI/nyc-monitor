@@ -8,26 +8,26 @@
 - [x] deploy frontend
 - [x] fix deployment frontend
 - [x] connect backend to frontend
-- [ ] serve frontend to a proper url
-- [ ] buy a simple domain?
+- [x] serve frontend to a proper url
+- [x] buy a simple domain?
 - [x] CI/CD? (when we merge an MR get it auto-deployed)
     - [x] run build & test for a PR pipeline
-    - [ ] push to artifact registry & deploy on PR merge
+    - [x] push to artifact registry & deploy on PR merge
 
 ## Explore datasets and APIs
 Decide which of these are valuable and worth pursuing as we will build an integration/api call to fetch data from them (our `searcher` agent). Are these api calls searchable by topic, lat, lon?
 
-- [ ] reddit
+- [x] reddit
 - [ ] twitter
 - [ ] yelp
 - [ ] tripadvisor
 - [ ] google trends
 
-## MCP implementations to study
-- [ ] [reddit mcp](https://github.com/adhikasp/mcp-reddit)
-- [ ] [trip advisor mcp](https://github.com/pab1it0/tripadvisor-mcp)
-- [ ] [google search](https://github.com/mixelpixx/Google-Search-MCP-Server)
-- [ ] [twitter mcp](https://github.com/EnesCinr/twitter-mcp)
+~~## MCP implementations to study~~
+~~- [ ] [reddit mcp](https://github.com/adhikasp/mcp-reddit)~~
+~~- [ ] [trip advisor mcp](https://github.com/pab1it0/tripadvisor-mcp)~~
+~~- [ ] [google search](https://github.com/mixelpixx/Google-Search-MCP-Server)~~
+~~- [ ] [twitter mcp](https://github.com/EnesCinr/twitter-mcp)~~
 
 
 ## Agents (Backend)
