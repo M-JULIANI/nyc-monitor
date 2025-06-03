@@ -28,13 +28,11 @@ flowchart TD
     end
 
     subgraph Investigation["🔍 On-Demand Investigation System"]
-        Orchestrator[🎯 Orchestrator Agent<br/>Alert Review & Decision]
-        RAG[🤖 RAG Agent<br/>Internal Data Librarian<br/>Tool Calling for Static Data]
-        LiveAgent[📱 Targeted Search Agent<br/>Deep Twitter/Reddit Dive]
-        WebAgent[🌐 Web Search Agent<br/>News & Official Sources]
-        Synthesizer[🔗 Pattern Synthesizer<br/>Connect Cross-Domain Insights]
-        Validator[✅ Validator Agent<br/>Fact-Check & Confidence]
-        Reporter[📝 Report Creator<br/>Google Slides API + Templates]
+        Orchestrator[🎯 Orchestrator Agent<br/>Alert Review & Coordination]
+        ResearchAgent[🔍 Research Agent<br/>Multi-Source Data Collection<br/>Web Search + Social Media + Live APIs]
+        DataAgent[📊 Data Agent<br/>Internal Knowledge Expert<br/>Vector DB + BigQuery + Tool Calling]
+        AnalysisAgent[🧠 Analysis Agent<br/>Pattern Recognition & Synthesis<br/>Cross-Domain Insights]
+        ReportAgent[📝 Report Agent<br/>Validation + Report Generation<br/>Fact-Check + Google Slides]
     end
 
     subgraph Outputs["📤 Generated Outputs"]
@@ -63,39 +61,34 @@ flowchart TD
     Firestore --> Orchestrator
 
     %% Investigation Flow - Orchestrator assigns tasks
-    Orchestrator --> LiveAgent
-    Orchestrator --> WebAgent
+    Orchestrator --> ResearchAgent
+    Orchestrator --> DataAgent
+    Orchestrator --> AnalysisAgent
+    Orchestrator --> ReportAgent
     
-    %% Agents query RAG for internal data
-    Orchestrator -.-> RAG
-    LiveAgent -.-> RAG
-    WebAgent -.-> RAG
-    Synthesizer -.-> RAG
-    Validator -.-> RAG
+    %% Agents query data experts
+    ResearchAgent --> Vector
+    DataAgent --> Vector
+    AnalysisAgent --> Vector
+    ReportAgent --> Vector
     
-    %% RAG Agent data access
-    RAG --> Vector
-    RAG --> BigQuery
+    %% Data expert access
+    ResearchAgent --> BigQuery
+    DataAgent --> BigQuery
     
     %% External data collection
-    LiveAgent --> Vector
-    WebAgent --> Vector
+    ResearchAgent --> CloudStorage
+    DataAgent --> CloudStorage
     
     %% Analysis and synthesis
-    LiveAgent --> Synthesizer
-    WebAgent --> Synthesizer
-    RAG --> Synthesizer
+    AnalysisAgent --> ReportAgent
     
-    Synthesizer --> Validator
-    Validator --> Reporter
-    
-    %% Output generation
-    Reporter --> GSlides
-    Reporter --> CloudStorage
-    Reporter --> Firestore
+    ReportAgent --> GSlides
+    ReportAgent --> CloudStorage
+    ReportAgent --> Firestore
     
     %% Knowledge building
-    Validator --> Vector
+    ReportAgent --> Vector
     GSlides -.-> Reports
 
     %% Styling
@@ -107,9 +100,8 @@ flowchart TD
     classDef rag fill:#e8eaf6
 
     class Cron,Collector,Triage background
-    class Orchestrator,LiveAgent,WebAgent,Synthesizer,Validator,Reporter investigation
-    class RAG rag
-    class Firestore,Vector,BigQuery,CloudStorage storage
+    class Orchestrator,ResearchAgent,DataAgent,AnalysisAgent,ReportAgent investigation
+    class Vector,BigQuery,CloudStorage storage
     class Map,Dashboard,Reports frontend
     class GSlides,Insights output
 ```
@@ -123,14 +115,11 @@ flowchart TD
 - **Alert Storage**: Prioritized alerts stored in Firestore with status tracking
 
 ### 🎯 **Smart Investigation System**
-- **Orchestrator Agent**: Reviews recent alerts, decides which warrant deep investigation
-- **RAG Agent**: Internal data librarian with tool calling for static datasets - answers questions about census, permits, historical data, and existing knowledge base
-- **Specialized Agents**: 
-  - **Targeted Search Agent**: Deep dive into social media for specific alerts
-  - **Web Search Agent**: Comprehensive web search for official sources and news
-  - **Pattern Synthesizer**: Connects insights across data domains (queries RAG for context)
-  - **Validator Agent**: Fact-checks findings, assigns confidence scores (queries RAG for verification)
-  - **Report Creator**: Generates professional Google Slides reports
+- **Orchestrator Agent**: Reviews recent alerts, decides which warrant deep investigation, coordinates agent assignments
+- **Research Agent**: Multi-source data collection from web search, social media, and live APIs
+- **Data Agent**: Internal knowledge expert in Vector DB and BigQuery, capable of tool calling
+- **Analysis Agent**: Pattern recognition and synthesis across data domains
+- **Report Agent**: Validation and report generation, fact-checking and Google Slides report creation
 
 ### 💾 **Intelligent Data Layer**
 - **Firestore**: Real-time alert queue with status tracking (New → Investigating → Resolved)
@@ -152,7 +141,7 @@ flowchart TD
     "created_at": "2025-06-03T15:30:00Z",
     "sources": ["reddit", "twitter"],
     "investigation_metadata": {
-      "assigned_agents": ["LiveAgent", "WebAgent"],
+      "assigned_agents": ["ResearchAgent", "DataAgent"],
       "document_count": 15,
       "confidence_score": 0.85
     }
@@ -285,95 +274,50 @@ This approach gives you:
 - **Google Slides API**: Professional, templated reports generated programmatically
 - **Cloud Storage**: File management and template storage
 
-## RAG Agent - Internal Data Librarian
-
-### 🤖 **Core Capabilities**
-The RAG agent serves as the central knowledge expert that other agents can query for internal data insights. It has access to all static datasets and historical knowledge without needing to perform web searches.
-
-**Tool Calling Functions:**
-```python
-@tool
-def query_census_data(location: str, metrics: List[str]) -> Dict:
-    """Query census demographics for specific NYC areas"""
-    # Returns population, income, demographics for neighborhoods/zip codes
-
-@tool  
-def get_construction_permits(area: str, date_range: str) -> List[Dict]:
-    """Retrieve construction permits for analysis"""
-    # Returns permit data, project types, timelines
-
-@tool
-def analyze_historical_incidents(location: str, incident_type: str) -> Dict:
-    """Analyze past incidents for pattern recognition"""
-    # Returns frequency, seasonal patterns, resolution times
-
-@tool
-def search_knowledge_base(query: str) -> List[Dict]:
-    """Semantic search across all collected documents"""
-    # Searches Vector DB for relevant past investigations
-
-@tool
-def get_traffic_patterns(location: str, time_period: str) -> Dict:
-    """Retrieve historical traffic and transit data"""
-    # Returns volume patterns, incident frequency, delay statistics
-```
-
-### 💬 **Agent Interaction Examples**
-
-**Pattern Synthesizer asks RAG:**
-```
-"What's the historical context for traffic incidents near Brooklyn Bridge during evening hours?"
-
-RAG Response: "Based on 2-year analysis: 15% increase in incidents during 5-7pm, correlates with construction permit #NYC-2024-456 for nearby building project. Similar pattern occurred during 2022 infrastructure work."
-```
-
-**Validator asks RAG:**
-```
-"Can you verify if the claim about increased 311 complaints in this area is accurate?"
-
-RAG Response: "Confirmed: 311 complaints increased 23% in zip code 11201 over last 30 days. Primary categories: noise (45%), traffic (30%), construction (25%). This aligns with current investigation findings."
-```
-
-**Orchestrator asks RAG:**
-```
-"Should we investigate this traffic alert given historical patterns?"
-
-RAG Response: "Recommend investigation. This location had 3 similar incidents in past 6 months, each escalating to city-wide traffic disruption. Early investigation prevented major issues in 2 of 3 cases."
-```
-
-### 🎯 **Benefits of Centralized RAG Agent**
-
-1. **Simplified Architecture**: Other agents don't need direct database connections
-2. **Consistent Data Access**: All static data queries go through one expert agent  
-3. **Context-Aware Responses**: RAG can provide relevant historical context automatically
-4. **Reduced Complexity**: Eliminates multiple database connection paths in the diagram
-5. **Knowledge Synthesis**: Can answer complex questions spanning multiple datasets
-6. **Cost Efficiency**: Single agent optimized for internal data queries
-
-The RAG agent essentially becomes the "institutional memory" of the system, allowing other agents to focus on their specialized tasks while having access to comprehensive background knowledge through natural language queries.
-
 ## Data Flow Examples
 
 ### 🚨 **Emergency Alert Path**
 ```
 Reddit Post: "Fire on 5th Ave" → Triage Agent (Severity: 9) 
 → Firestore Alert → Dashboard Notification → User Triggers Investigation 
-→ Multi-Agent Deep Dive → Validated Report → Public Google Slides
+→ Orchestrator → ResearchAgent (social media dive) + DataAgent (area demographics) 
+→ AnalysisAgent (risk assessment) → ReportAgent (validated emergency report)
 ```
 
 ### 🎭 **Event Monitoring Path**
 ```
 Twitter: "Pride Parade prep" → Triage Agent (Severity: 6) 
-→ Orchestrator Auto-Investigation → Static Agent (Historical Crowd Data) 
-→ Pattern Synthesizer (Traffic Predictions) → Resource Planning Report
+→ Orchestrator Auto-Investigation → ResearchAgent (news + social monitoring) 
+→ DataAgent (historical crowd data + permits) → AnalysisAgent (traffic predictions) 
+→ ReportAgent (resource planning report)
 ```
 
 ### 📊 **Pattern Discovery Path**
 ```
 Multiple 311 Complaints → Triage Agent Groups by Area 
-→ Investigation Reveals Construction Permits + Air Quality Issues 
-→ Cross-Domain Analysis → Policy Recommendation Report
+→ DataAgent (construction permits + demographic analysis) 
+→ ResearchAgent (resident social media sentiment) 
+→ AnalysisAgent (cross-domain correlation) → ReportAgent (policy recommendation)
 ```
+
+## **Benefits of 5-Agent Architecture**
+
+### ✅ **Balanced Specialization**
+- **Clear Roles**: Each agent has distinct, meaningful responsibilities
+- **Reduced Overhead**: Fewer coordination handoffs while maintaining specialization
+- **Tool-Rich Agents**: Each agent has comprehensive tool access for their domain
+
+### 🎯 **Competition-Friendly**
+- **Multi-Agent Coordination**: Still demonstrates sophisticated agent interactions
+- **Autonomous Operation**: Each agent can work independently with their toolset
+- **Meaningful Specialization**: Not over-engineered, but clearly differentiated roles
+
+### 🔄 **Data Flow Efficiency**
+- **Research Agent**: All external data collection in one place
+- **Data Agent**: All internal knowledge queries centralized
+- **Analysis Agent**: Dedicated pattern recognition and synthesis
+- **Report Agent**: Combined validation and output generation
+- **Orchestrator**: Simplified coordination with fewer agents to manage
 
 ## Alert Status Lifecycle
 
@@ -407,3 +351,170 @@ This hybrid approach provides continuous intelligence while keeping compute cost
 1. **Map View**: Geographic alert heatmap with real-time pins and priority color-coding
 2. **Dashboard**: Alert stream with triage controls and investigation triggers  
 3. **Reports Gallery**: Links to generated insights and Google Slides reports
+
+### 🤔 **Agent Coordination Strategy**
+
+**Current Model: Orchestrator as Coordinator**
+The Orchestrator currently handles:
+- Alert triage and investigation decisions
+- Initial agent assignments
+- Basic workflow coordination
+
+**Potential Enhancement: Dedicated Moderator Agent**
+A specialized moderator could provide:
+- **Task Assignment Intelligence**: "Given traffic incident X, assign ResearchAgent to search recent posts, DataAgent to pull historical traffic data for this intersection"
+- **Focus Management**: Prevent agents from going off-topic or down rabbit holes
+- **Quality Control**: Ensure agents stay within scope and deliver relevant results
+- **Dynamic Re-assignment**: Adjust agent tasks based on emerging findings
+- **Collaboration Orchestration**: Coordinate multi-agent conversations and debates
+
+**Recommendation**: Start with enhanced Orchestrator, evolve to dedicated Moderator if coordination becomes complex.
+
+## **Architectural Decision: 5-Agent Sweet Spot**
+
+### 🎯 **Why 5 Agents Instead of 8+?**
+
+**Previously**: 8 specialized agents (Orchestrator, RAG, BigQuery, Targeted Search, Web Search, Synthesizer, Validator, Reporter)
+**Now**: 5 balanced agents with comprehensive tooling
+
+### 🔧 **Tool-Rich Agents vs Many Simple Agents**
+
+**Advantages of Current Approach:**
+- **Meaningful Specialization**: Each agent has a clear, substantial domain
+- **Reduced Coordination Overhead**: Fewer handoffs, simpler orchestration  
+- **Tool Autonomy**: Agents can choose appropriate tools for their tasks
+- **Competition-Ready**: Demonstrates sophisticated multi-agent coordination without over-engineering
+- **Scalable**: Easy to add tools to existing agents rather than creating new agents
+
+**Agent Tool Distribution:**
+```
+Orchestrator: Coordination & assignment tools
+ResearchAgent: 4+ external data collection tools  
+DataAgent: 6+ internal knowledge & static data tools
+AnalysisAgent: 4+ pattern recognition & synthesis tools
+ReportAgent: 4+ validation & output generation tools
+```
+
+This approach balances **multi-agent sophistication** with **practical architecture**, giving you intelligent specialization without coordination complexity.
+
+## Research Agent - Multi-Source Data Collection
+
+### 🔍 **Core Capabilities**
+The Research Agent handles all external data collection from multiple sources using appropriate tools for each data type.
+
+**Tool Calling Functions:**
+```python
+@tool
+def search_social_media(platform: str, query: str, location: str = None, time_range: str = "24h") -> List[Dict]:
+    """Search Reddit, Twitter for recent posts and discussions"""
+    # Returns social media content, sentiment, engagement metrics
+
+@tool
+def web_search(query: str, source_types: List[str] = ["news", "official", "academic"]) -> List[Dict]:
+    """Comprehensive web search across multiple source types"""
+    # Returns news articles, official statements, research papers
+xw
+@tool
+def query_live_apis(api_name: str, location: str, parameters: Dict) -> Dict:
+    """Query live data APIs (311, traffic, weather, transit)"""
+    # Returns real-time city data, traffic conditions, service alerts
+
+@tool
+def collect_media_content(search_terms: List[str], content_types: List[str]) -> List[Dict]:
+    """Gather images, videos, and multimedia content"""
+    # Returns relevant visual content from social media and web sources
+```
+
+## Data Agent - Internal Knowledge & Static Data Expert
+
+### 📊 **Core Capabilities**
+The Data Agent serves as the expert on both ingested knowledge corpus and static datasets, combining both Vector DB and BigQuery access.
+
+**Tool Calling Functions:**
+```python
+@tool
+def search_knowledge_base(query: str, filters: Dict = None) -> List[Dict]:
+    """Semantic search across all collected documents and past investigations"""
+xw    # Searches Vector DB for relevant content from past investigations
+
+@tool
+def query_census_demographics(location: str, metrics: List[str]) -> Dict:
+    """Query ACS census data for specific NYC areas"""
+    # Returns population, income, age, education, housing data
+
+@tool
+def get_crime_statistics(area: str, time_period: str, crime_types: List[str] = None) -> Dict:
+    """Retrieve historical crime data for area analysis"""
+    # Returns NYPD crime statistics, trends, comparisons
+
+@tool
+def find_similar_incidents(incident_description: str, location: str = None) -> List[Dict]:
+    """Find past incidents similar to current investigation"""
+    # Uses embeddings to find pattern matches in historical data
+
+@tool
+def get_construction_permits(area: str, date_range: str) -> List[Dict]:
+    """Retrieve construction and development permits"""
+    # Returns DOB permits, project types, timelines, impact assessments
+
+@tool
+def analyze_housing_market(area: str, time_period: str) -> Dict:
+    """Analyze housing costs, availability, and displacement patterns"""
+    # Returns rent prices, eviction rates, gentrification indicators
+```
+
+## Analysis Agent - Pattern Recognition & Synthesis
+
+### 🧠 **Core Capabilities**
+The Analysis Agent synthesizes information from multiple sources to identify patterns, connections, and insights across data domains.
+
+**Tool Calling Functions:**
+```python
+@tool
+def analyze_temporal_patterns(events: List[Dict], time_window: str) -> Dict:
+    """Identify temporal patterns in event data"""
+    # Returns frequency analysis, seasonal trends, peak times
+
+@tool
+def correlate_data_sources(research_data: Dict, static_data: Dict) -> Dict:
+    """Find correlations between live data and historical patterns"""
+    # Cross-references social media sentiment with demographic/economic data
+
+@tool
+def identify_risk_factors(incident_data: Dict, area_context: Dict) -> Dict:
+    """Assess risk factors and potential escalation patterns"""
+    # Combines multiple data sources to assess incident severity and spread risk
+
+@tool
+def generate_hypotheses(collected_data: Dict) -> List[Dict]:
+    """Generate testable hypotheses about incident causes and implications"""
+    # Creates structured hypotheses for validation based on available evidence
+```
+
+## Report Agent - Validation & Report Generation
+
+### 📝 **Core Capabilities**
+The Report Agent handles fact-checking, confidence assessment, and professional report generation.
+
+**Tool Calling Functions:**
+```python
+@tool
+def fact_check_claims(claims: List[str], evidence_sources: List[Dict]) -> Dict:
+    """Validate claims against multiple evidence sources"""
+    # Returns confidence scores and supporting/contradicting evidence
+
+@tool
+def assess_source_reliability(sources: List[Dict]) -> Dict:
+    """Evaluate the reliability and bias of information sources"""
+    # Returns credibility scores and potential bias indicators
+
+@tool
+def generate_confidence_scores(analysis_results: Dict) -> Dict:
+    """Calculate confidence levels for different findings"""
+    # Returns statistical confidence measures for investigation conclusions
+
+@tool
+def create_slides_report(investigation_data: Dict, template_type: str) -> Dict:
+    """Generate professional Google Slides report"""
+    # Creates formatted presentation with charts, maps, and recommendations
+```
