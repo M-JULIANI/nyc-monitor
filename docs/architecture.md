@@ -16,7 +16,7 @@ flowchart TD
 
     subgraph Background["⏰ Background Intelligence (Every 15min)"]
         Cron[🕐 Cloud Scheduler<br/>15-minute intervals]
-        Collector[📡 Live Data Collector<br/>Reddit, Twitter, 311, Traffic]
+        Collector[📡 Live Data Collector<br/>Reddit, HackerNews, Twitter, 311, Traffic]
         Triage[🧠 Triage Agent<br/>Vertex AI - Quick Analysis]
     end
 
@@ -110,7 +110,7 @@ flowchart TD
 
 ### 🔄 **Continuous Background Intelligence**
 - **Cloud Scheduler**: Triggers data collection every 15 minutes
-- **Live Data Collector**: Scans Reddit, Twitter, 311, traffic APIs for NYC signals
+- **Live Data Collector**: Scans Reddit, HackerNews, Twitter, 311, HackerNews, traffic APIs for NYC signals
 - **Triage Agent**: Lightweight Vertex AI analysis assigns severity scores (1-10)
 - **Alert Storage**: Prioritized alerts stored in Firestore with status tracking
 
@@ -139,7 +139,7 @@ flowchart TD
     "event_type": "traffic_incident", 
     "location": {"lat": 40.7, "lng": -73.9, "address": "Brooklyn Bridge"},
     "created_at": "2025-06-03T15:30:00Z",
-    "sources": ["reddit", "twitter"],
+    "sources": ["reddit", "twitter", "hackernews"],
     "investigation_metadata": {
       "assigned_agents": ["ResearchAgent", "DataAgent"],
       "document_count": 15,
@@ -406,7 +406,7 @@ The Research Agent handles all external data collection from multiple sources us
 ```python
 @tool
 def search_social_media(platform: str, query: str, location: str = None, time_range: str = "24h") -> List[Dict]:
-    """Search Reddit, Twitter for recent posts and discussions"""
+    """Search Reddit, HackerNews, Twitter for recent posts and discussions"""
     # Returns social media content, sentiment, engagement metrics
 
 @tool
