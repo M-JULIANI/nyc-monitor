@@ -413,7 +413,7 @@ def search_social_media(platform: str, query: str, location: str = None, time_ra
 def web_search(query: str, source_types: List[str] = ["news", "official", "academic"]) -> List[Dict]:
     """Comprehensive web search across multiple source types"""
     # Returns news articles, official statements, research papers
-xw
+
 @tool
 def query_live_apis(api_name: str, location: str, parameters: Dict) -> Dict:
     """Query live data APIs (311, traffic, weather, transit)"""
@@ -435,7 +435,7 @@ The Data Agent serves as the expert on both ingested knowledge corpus and static
 @tool
 def search_knowledge_base(query: str, filters: Dict = None) -> List[Dict]:
     """Semantic search across all collected documents and past investigations"""
-xw    # Searches Vector DB for relevant content from past investigations
+    # Searches Vector DB for relevant content from past investigations
 
 @tool
 def query_census_demographics(location: str, metrics: List[str]) -> Dict:
@@ -518,3 +518,238 @@ def create_slides_report(investigation_data: Dict, template_type: str) -> Dict:
     """Generate professional Google Slides report"""
     # Creates formatted presentation with charts, maps, and recommendations
 ```
+
+## Investigation Workflow Deep Dive
+
+### 🔄 **Iterative Investigation Process**
+
+The investigation system operates as an **adaptive, iterative workflow** rather than a simple linear task delegation. The Orchestrator Agent manages a dynamic process that evolves based on findings, with the ability to:
+
+1. **Create initial task assignments**
+2. **Review intermediate findings** 
+3. **Generate follow-up questions and subtasks**
+4. **Coordinate agent collaboration**
+5. **Adapt investigation scope** based on discoveries
+
+### 🎯 **Three-Phase Investigation Cycle**
+
+#### **Phase 1: Initial Reconnaissance (Parallel)**
+```
+Orchestrator → [ResearchAgent, DataAgent] (simultaneous)
+├── ResearchAgent: "Scan social media and news for [incident_type] at [location]"
+├── DataAgent: "Pull demographics, crime stats, and recent incidents for [area]"
+└── Timeline: 60-90 seconds for initial data collection
+```
+
+#### **Phase 2: Analysis & Hypothesis Generation (Sequential)**
+```
+Findings Review → Analysis Agent → Hypothesis Formation
+├── Orchestrator: "Based on initial findings, what patterns emerge?"
+├── AnalysisAgent: "Cross-reference social sentiment with demographic stress factors"
+├── Output: 2-3 testable hypotheses with evidence requirements
+└── Timeline: 45-60 seconds for pattern analysis
+```
+
+#### **Phase 3: Targeted Deep Dive (Adaptive Iteration)**
+```
+Hypothesis Testing → Refined Questions → Additional Data Collection
+├── Orchestrator: "Hypothesis X needs validation - ResearchAgent, find more evidence on Y"
+├── Dynamic Subtasks: Based on emerging questions
+├── Collaborative Validation: Agents cross-check each other's findings
+└── Timeline: 120-180 seconds (may repeat if new questions arise)
+```
+
+### 🧠 **Orchestrator Decision Logic**
+
+#### **Initial Task Assignment Strategy**
+```python
+def create_initial_investigation_plan(alert_data):
+    """Orchestrator generates adaptive task assignments"""
+    
+    investigation_scope = determine_scope(alert_data.severity, alert_data.event_type)
+    
+    initial_tasks = {
+        "research_agent": {
+            "primary": f"Collect recent social media and news about {alert_data.summary}",
+            "focus_areas": get_search_keywords(alert_data),
+            "time_range": "last 4 hours" if alert_data.severity > 7 else "last 24 hours",
+            "success_criteria": "Find 5+ relevant posts with location confirmation"
+        },
+        "data_agent": {
+            "primary": f"Analyze area context for {alert_data.location}",
+            "datasets": ["demographics", "recent_incidents", "infrastructure"],
+            "success_criteria": "Identify 3+ contextual risk factors"
+        }
+    }
+    
+    return initial_tasks
+```
+
+#### **Adaptive Iteration Logic**
+```python
+def review_and_iterate(investigation_state):
+    """Orchestrator evaluates findings and decides next steps"""
+    
+    findings_quality = assess_findings_completeness(investigation_state.findings)
+    
+    if findings_quality.confidence < 0.7:
+        # Generate targeted follow-up questions
+        follow_up_tasks = generate_targeted_questions(
+            initial_findings=investigation_state.findings,
+            knowledge_gaps=findings_quality.gaps
+        )
+        return continue_investigation(follow_up_tasks)
+    
+    elif findings_quality.new_hypotheses:
+        # New patterns discovered - need validation
+        validation_tasks = create_validation_tasks(findings_quality.new_hypotheses)
+        return continue_investigation(validation_tasks)
+    
+    else:
+        # Sufficient evidence collected - proceed to analysis
+        return trigger_synthesis_phase(investigation_state.findings)
+```
+
+### 📋 **Dynamic Task Refinement Examples**
+
+#### **Example 1: Traffic Incident Investigation**
+```
+Initial Alert: "Major delays on Brooklyn Bridge - Reddit reports"
+
+Phase 1 Tasks:
+├── ResearchAgent: "Search social media for Brooklyn Bridge traffic incidents"
+├── DataAgent: "Get current traffic patterns and recent construction permits"
+
+Phase 1 Findings:
+├── ResearchAgent: "Multiple posts about 'police activity', not just traffic"
+├── DataAgent: "No scheduled construction, but area has 3x normal incident rate"
+
+Orchestrator Analysis: "Incident type unclear - need clarification"
+
+Phase 2 Iteration:
+├── ResearchAgent: "Narrow search to 'police activity Brooklyn Bridge' last 2 hours"
+├── DataAgent: "Pull crime statistics and recent police reports for this area"
+├── New Question: "Is this a traffic incident or security event?"
+
+Phase 2 Findings:
+├── ResearchAgent: "Social media mentions 'suspicious package investigation'"
+├── DataAgent: "Area flagged for recent security concerns in city database"
+
+Orchestrator Decision: "Security event confirmed - escalate priority, different report template"
+```
+
+#### **Example 2: Community Pattern Discovery**
+```
+Initial Alert: "Multiple 311 complaints - noise issues in Williamsburg"
+
+Phase 1 Tasks:
+├── ResearchAgent: "Search resident social media complaints about noise"
+├── DataAgent: "Analyze 311 complaint patterns and area demographics"
+
+Phase 1 Findings:
+├── ResearchAgent: "Residents posting about 'construction noise' but also 'late night parties'"
+├── DataAgent: "Complaints increased 400% in last month, area gentrifying rapidly"
+
+Orchestrator Analysis: "Two distinct noise sources - need to separate patterns"
+
+Phase 2 Iteration:
+├── ResearchAgent: "Separate search: construction vs. nightlife noise complaints"
+├── DataAgent: "Cross-reference building permits with entertainment licenses"
+├── AnalysisAgent: "Look for correlation between demographic changes and complaint types"
+
+Phase 2 Findings:
+├── ResearchAgent: "Construction complaints: daytime, older residents. Party complaints: weekend nights, newer residents"
+├── DataAgent: "3 new construction projects + 5 new bars/restaurants opened recently"
+├── AnalysisAgent: "Classic gentrification tension pattern - old vs. new resident priorities"
+
+Orchestrator Decision: "Policy recommendation needed - multi-stakeholder mediation report"
+```
+
+### 🔀 **Agent Collaboration Patterns**
+
+#### **Parallel Collection → Cross-Validation**
+```python
+# Agents work simultaneously, then validate each other's findings
+research_findings = ResearchAgent.collect_social_media_data()
+static_findings = DataAgent.get_historical_context()
+
+# Cross-validation step
+validated_social = DataAgent.verify_claims(research_findings.claims)
+contextualized_data = ResearchAgent.find_recent_examples(static_findings.patterns)
+```
+
+#### **Hypothesis Testing Chain**
+```python
+# AnalysisAgent generates testable hypotheses
+hypotheses = AnalysisAgent.generate_hypotheses(all_findings)
+
+# Other agents collect targeted evidence
+for hypothesis in hypotheses:
+    supporting_evidence = ResearchAgent.find_evidence(hypothesis.research_questions)
+    statistical_support = DataAgent.test_hypothesis(hypothesis.statistical_claims)
+    
+    confidence_score = ReportAgent.assess_evidence_quality(supporting_evidence, statistical_support)
+```
+
+### ⚡ **Real-Time Adaptation Triggers**
+
+#### **Quality Thresholds**
+- **Low Confidence (<0.6)**: Automatically trigger additional data collection
+- **Contradictory Evidence**: Pause investigation, resolve conflicts before proceeding
+- **High Urgency (Severity 9+)**: Skip iterations, proceed with available evidence
+
+#### **Discovery-Driven Pivots**
+- **Scope Expansion**: Minor incident reveals larger pattern → expand investigation area
+- **Event Type Reclassification**: Traffic incident is actually security event → change agent assignments
+- **Stakeholder Discovery**: Investigation reveals additional affected communities → broaden data collection
+
+### 🎛️ **Orchestrator Prompting Strategy**
+
+#### **Adaptive Investigation Prompts**
+```python
+ORCHESTRATOR_SYSTEM_PROMPT = """
+You are the Orchestrator Agent managing a dynamic investigation workflow. Your role is to:
+
+1. **Initial Assessment**: Review alert data and assign appropriate initial tasks
+2. **Progress Monitoring**: Continuously evaluate investigation quality and completeness  
+3. **Adaptive Refinement**: Generate follow-up questions when findings are incomplete or contradictory
+4. **Resource Management**: Balance investigation depth with time constraints
+5. **Quality Control**: Ensure agents stay focused and deliver actionable insights
+
+**Decision Framework**:
+- If findings confidence < 70%: Create targeted follow-up tasks
+- If new patterns emerge: Assign validation tasks to other agents
+- If contradictions found: Coordinate agent collaboration to resolve
+- If sufficient evidence: Proceed to synthesis and reporting
+
+**Investigation Termination Criteria**:
+- High confidence (>85%) with actionable insights
+- Maximum investigation time reached (8 minutes)  
+- Critical/emergency situations requiring immediate response
+- Diminishing returns on additional data collection
+
+For each investigation step, provide:
+- Task assignment rationale
+- Success criteria for each agent
+- Estimated timeline
+- Conditions for proceeding to next phase
+"""
+```
+
+This iterative approach enables the system to **start broad, narrow focus through iteration**, and **adapt to discoveries** while maintaining efficiency and avoiding endless investigation loops.
+
+### ⏱️ **Investigation Timeline Example**
+
+**Total Investigation Time: 6-8 minutes**
+```
+00:00 - Alert received, Orchestrator reviews
+00:30 - Initial tasks assigned (Research + Data agents)
+02:00 - Phase 1 findings reviewed
+02:30 - Follow-up questions generated, refined tasks assigned
+04:30 - Phase 2 findings cross-validated
+05:00 - Analysis agent synthesizes patterns
+06:30 - Report agent validates and generates output
+08:00 - Investigation complete, report delivered
+```
+
+The investigation can terminate early for high-confidence findings or extend with additional iterations based on the complexity and importance of the alert.
