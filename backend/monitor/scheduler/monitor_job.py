@@ -4,6 +4,7 @@ Implements the background_monitor() flow: collect signals → triage analysis �
 Designed to run every 15 minutes as a Cloud Run Job.
 """
 from monitor.collectors.reddit_collector import RedditCollector
+from monitor.collectors.hackernews_collector import HackerNewsCollector
 from monitor.agents.triage_agent import TriageAgent
 from monitor.storage.firestore_manager import FirestoreManager
 import os
@@ -49,10 +50,21 @@ class MonitorJob:
             # Reddit collector (only if credentials are available)
             try:
                 reddit_collector = RedditCollector()
+                self.collectors.append(hackernews_collector)
+                logger.info("✅ Reddit collector initialized successfully")
                 self.collectors.append(reddit_collector)
-                logger.info("Reddit collector initialized successfully")
             except ValueError as e:
-                logger.warning(f"Reddit collector not initialized: {str(e)}")
+                logger.warning(
+                    f"⚠️  Reddit collector not initialized: {str(e)}")
+
+            # HackerNews collector (no credentials required)
+            try:
+                hackernews_collector = HackerNewsCollector()
+                self.collectors.append(hackernews_collector)
+                logger.info("✅ HackerNews collector initialized successfully")
+            except Exception as e:
+                logger.warning(
+                    f"⚠️  HackerNews collector not initialized: {str(e)}")
 
             # TODO: Add more collectors here (traffic, crime, 311, etc.)
 

@@ -18,7 +18,7 @@
 Decide which of these are valuable and worth pursuing as we will build an integration/api call to fetch data from them (our `searcher` agent). Are these api calls searchable by topic, lat, lon?
 
 - [x] reddit
-- [ ] hackernews
+- [x] hackernews
 - [ ] twitter
 - [ ] yelp
 - [ ] tripadvisor
