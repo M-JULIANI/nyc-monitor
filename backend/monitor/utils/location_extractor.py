@@ -150,16 +150,31 @@ class NYCLocationExtractor:
 
             # Find exact location matches
             for location, (lat, lon, borough, loc_type) in self.nyc_locations.items():
-                if location in full_text:
-                    found_locations.append({
-                        'name': location,
-                        'latitude': lat,
-                        'longitude': lon,
-                        'borough': borough,
-                        'type': loc_type,
-                        'confidence': 0.8  # High confidence for exact matches
-                    })
-                    coordinates.append((lat, lon))
+                # For short abbreviations like 'lic', require word boundaries
+                if len(location) <= 3:
+                    # Use word boundary regex for short terms
+                    if re.search(rf'\b{re.escape(location)}\b', full_text, re.IGNORECASE):
+                        found_locations.append({
+                            'name': location,
+                            'latitude': lat,
+                            'longitude': lon,
+                            'borough': borough,
+                            'type': loc_type,
+                            'confidence': 0.8  # High confidence for exact matches
+                        })
+                        coordinates.append((lat, lon))
+                else:
+                    # Regular substring match for longer location names
+                    if location in full_text:
+                        found_locations.append({
+                            'name': location,
+                            'latitude': lat,
+                            'longitude': lon,
+                            'borough': borough,
+                            'type': loc_type,
+                            'confidence': 0.8  # High confidence for exact matches
+                        })
+                        coordinates.append((lat, lon))
 
             # Extract street intersections (e.g., "5th Ave and 42nd St")
             intersection_locations = self._extract_intersections(full_text)
