@@ -8,8 +8,10 @@ from slowapi.errors import RateLimitExceeded
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from pydantic import BaseModel
-from .agent import root_agent
+from .agent import root_agent, investigate_alert
+from .investigation.state_manager import AlertData
 import os
+from datetime import datetime
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")  # Set this in your .env
 
@@ -62,6 +64,14 @@ class Answer(BaseModel):
     response: str
 
 
+class InvestigationResult(BaseModel):
+    investigation_id: str
+    status: str
+    findings: str
+    artifacts: list
+    confidence_score: float
+
+
 @app.get("/")
 async def root():
     return RedirectResponse(url="/docs")
@@ -75,11 +85,62 @@ async def ask_question(
     user=Depends(verify_google_token)
 ):
     try:
-       # response = root_agent(question.text)
-        response = "Hello"
-        return Answer(response=response)
+        # Create a mock alert based on the question for demonstration
+        alert_data = AlertData(
+            alert_id=f"user_query_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
+            severity=5,  # Default severity for user queries
+            event_type="user_investigation",
+            location="NYC",  # Default location
+            summary=question.text,
+            timestamp=datetime.utcnow(),
+            sources=["user_input"]
+        )
+
+        # Use the investigation system
+        response_text = investigate_alert(alert_data)
+
+        return Answer(response=response_text)
     except Exception as e:
         print("ERROR in /ask:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/investigate", response_model=InvestigationResult)
+@limiter.limit("3/minute")  # Lower limit for more intensive operations
+async def investigate_alert_endpoint(
+    request: Request,
+    alert_data: AlertData,
+    user=Depends(verify_google_token)
+):
+    """
+    Investigate a specific alert using the multi-agent system.
+
+    This endpoint triggers a full investigation including:
+    - Research agent collecting data and artifacts
+    - Analysis of findings
+    - Generation of investigation report
+    """
+    try:
+        # Run the investigation
+        findings = investigate_alert(alert_data)
+
+        # For now, return mock investigation results
+        # TODO: Implement actual artifact collection and analysis
+        investigation_result = InvestigationResult(
+            investigation_id=alert_data.alert_id,
+            status="completed",
+            findings=findings,
+            artifacts=[
+                f"media_{alert_data.event_type}_0_0.png",
+                f"screenshot_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.png"
+            ],
+            confidence_score=0.8
+        )
+
+        return investigation_result
+
+    except Exception as e:
+        print("ERROR in /investigate:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
