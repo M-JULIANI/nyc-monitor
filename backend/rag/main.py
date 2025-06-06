@@ -8,12 +8,21 @@ from slowapi.errors import RateLimitExceeded
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from pydantic import BaseModel
-from .agent import root_agent, investigate_alert
+from typing import Optional, List, Dict
+from .agent import investigate_alert
+from .agents.chat_agent import (
+    chat_with_corpus,
+    clear_chat_session,
+    get_active_sessions,
+    get_conversation_history,
+    get_session_info
+)
 from .investigation.state_manager import AlertData
 import os
 from datetime import datetime
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")  # Set this in your .env
+RAG_CORPUS_ID = os.environ.get("RAG_CORPUS_ID")  # Set this in your .env
 
 app = FastAPI(
     title="RAG Backend",
@@ -56,6 +65,18 @@ def verify_google_token(token: str = Depends(oauth2_scheme)):
             status_code=401, detail="Invalid authentication credentials")
 
 
+class ChatMessage(BaseModel):
+    text: str
+    # Optional session ID for conversation continuity
+    session_id: Optional[str] = None
+
+
+class ChatResponse(BaseModel):
+    response: str
+    session_id: str  # Always return session ID for future requests
+    conversation_history: List[Dict] = []  # Include conversation history
+
+
 class Question(BaseModel):
     text: str
 
@@ -77,55 +98,139 @@ async def root():
     return RedirectResponse(url="/docs")
 
 
-@app.post("/ask", response_model=Answer)
-@limiter.limit("5/minute")
-async def ask_question(
-    request: Request,
-    question: Question,
+@app.post("/chat", response_model=ChatResponse)
+@limiter.limit("10/minute")  # Higher limit for chat
+async def chat_endpoint(
+    request: Request,  # Used by rate limiter to track per-IP limits
+    chat_message: ChatMessage,
+    include_history: bool = False,  # Query param to control history inclusion
     user=Depends(verify_google_token)
 ):
+    """
+    Chat with the existing data corpus with conversation memory.
+
+    This endpoint maintains conversation sessions so users can have ongoing dialogues.
+    Pass session_id from previous responses to continue the same conversation.
+
+    Query Parameters:
+    - include_history: If True, returns full conversation history. If False (default), 
+      returns empty history for better performance with frontend state management.
+
+    For full conversation history, use GET /chat/{session_id}/history
+    For real-time investigations, use the /investigate endpoint.
+    """
     try:
-        # Create a mock alert based on the question for demonstration
-        alert_data = AlertData(
-            alert_id=f"user_query_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-            severity=5,  # Default severity for user queries
-            event_type="user_investigation",
-            location="NYC",  # Default location
-            summary=question.text,
-            timestamp=datetime.utcnow(),
-            sources=["user_input"]
+        # Use the session-aware chat function
+        response_text, session_id, conversation_history = await chat_with_corpus(
+            chat_message.text,
+            RAG_CORPUS_ID,
+            chat_message.session_id
         )
 
-        # Use the investigation system
-        response_text = investigate_alert(alert_data)
+        # Return history based on query parameter
+        history_to_return = conversation_history if include_history else []
 
-        return Answer(response=response_text)
+        return ChatResponse(
+            response=response_text,
+            session_id=session_id,
+            conversation_history=history_to_return
+        )
     except Exception as e:
-        print("ERROR in /ask:", e)
+        print("ERROR in /chat:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/chat/{session_id}/history")
+async def get_chat_history(
+    session_id: str,
+    user=Depends(verify_google_token)
+):
+    """
+    Get conversation history for a specific session.
+    """
+    try:
+        history = await get_conversation_history(session_id)
+        session_info = get_session_info(session_id)
+
+        return {
+            "session_id": session_id,
+            "session_info": session_info,
+            "conversation_history": history,
+            "message_count": len(history)
+        }
+    except Exception as e:
+        print("ERROR in /chat/history:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/chat/{session_id}")
+async def clear_chat_session_endpoint(
+    session_id: str,
+    user=Depends(verify_google_token)
+):
+    """
+    Clear a specific chat session to start fresh.
+    """
+    try:
+        cleared = clear_chat_session(session_id)
+        if cleared:
+            return {"message": f"Session {session_id} cleared successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+    except Exception as e:
+        print("ERROR in /chat/clear:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/chat/sessions")
+async def get_chat_sessions(
+    user=Depends(verify_google_token)
+):
+    """
+    Get list of active chat sessions (for debugging/admin).
+    """
+    try:
+        sessions = get_active_sessions()
+
+        # Get detailed info for each session
+        session_details = []
+        for session_id in sessions:
+            info = get_session_info(session_id)
+            if info:
+                history = await get_conversation_history(session_id)
+                info["message_count"] = len(history)
+                session_details.append(info)
+
+        return {
+            "active_sessions": session_details,
+            "count": len(sessions)
+        }
+    except Exception as e:
+        print("ERROR in /chat/sessions:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/investigate", response_model=InvestigationResult)
 @limiter.limit("3/minute")  # Lower limit for more intensive operations
 async def investigate_alert_endpoint(
-    request: Request,
+    request: Request,  # Used by rate limiter to track per-IP limits
     alert_data: AlertData,
     user=Depends(verify_google_token)
 ):
     """
     Investigate a specific alert using the multi-agent system.
+    This is where everything becomes "live" - the main entry funnel for investigations.
 
     This endpoint triggers a full investigation including:
     - Research agent collecting data and artifacts
-    - Analysis of findings
+    - Analysis of findings  
     - Generation of investigation report
     """
     try:
-        # Run the investigation
-        findings = investigate_alert(alert_data)
+        # Run the async investigation - this is the main entry funnel
+        findings = await investigate_alert(alert_data)
 
-        # For now, return mock investigation results
-        # TODO: Implement actual artifact collection and analysis
+        # Return structured investigation results
         investigation_result = InvestigationResult(
             investigation_id=alert_data.alert_id,
             status="completed",

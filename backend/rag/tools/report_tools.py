@@ -19,6 +19,7 @@ from typing import List, Dict
 from datetime import datetime
 from google.genai import types
 from google.adk.tools import FunctionTool, ToolContext
+from ..investigation.state_manager import state_manager
 
 # TODO: Implement report tools
 
@@ -108,7 +109,8 @@ def generate_confidence_scores_func(
 async def create_investigation_report_func(
     context: ToolContext,
     investigation_data: Dict,
-    template_type: str = "standard"
+    template_type: str = "standard",
+    alert_id: str = "unknown"
 ) -> Dict:
     """Generate and save investigation report as artifacts.
 
@@ -116,6 +118,7 @@ async def create_investigation_report_func(
         context: Tool context for artifact operations
         investigation_data: Complete investigation findings
         template_type: Type of report template to use
+        alert_id: Alert ID for naming convention
 
     Returns:
         Generated report metadata including artifact references
@@ -132,9 +135,9 @@ async def create_investigation_report_func(
             mime_type="application/json"
         )
 
-        # Save JSON report as artifact
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        json_filename = f"investigation_report_{investigation_data.get('alert_id', 'unknown')}_{timestamp}.json"
+        # Get next ticker from state manager
+        json_ticker = state_manager.get_next_artifact_ticker(alert_id)
+        json_filename = f"report_{alert_id}_{json_ticker:03d}_summary.json"
         json_version = await context.save_artifact(json_filename, json_artifact)
 
         # Generate PDF version (mock implementation)
@@ -144,7 +147,8 @@ async def create_investigation_report_func(
             mime_type="application/pdf"
         )
 
-        pdf_filename = f"investigation_report_{investigation_data.get('alert_id', 'unknown')}_{timestamp}.pdf"
+        pdf_ticker = state_manager.get_next_artifact_ticker(alert_id)
+        pdf_filename = f"report_{alert_id}_{pdf_ticker:03d}_summary.pdf"
         pdf_version = await context.save_artifact(pdf_filename, pdf_artifact)
 
         return {
@@ -153,15 +157,16 @@ async def create_investigation_report_func(
             "json_report": {
                 "filename": json_filename,
                 "version": json_version,
-                "mime_type": "application/json"
+                "mime_type": "application/json",
+                "ticker": json_ticker
             },
             "pdf_report": {
                 "filename": pdf_filename,
                 "version": pdf_version,
-                "mime_type": "application/pdf"
+                "mime_type": "application/pdf",
+                "ticker": pdf_ticker
             },
-            "timestamp": timestamp,
-            "alert_id": investigation_data.get('alert_id', 'unknown')
+            "alert_id": alert_id
         }
 
     except Exception as e:
@@ -174,7 +179,8 @@ async def create_investigation_report_func(
 async def create_slides_presentation_func(
     context: ToolContext,
     investigation_data: Dict,
-    template_id: str = "default"
+    template_id: str = "default",
+    alert_id: str = "unknown"
 ) -> Dict:
     """Create Google Slides presentation and save as artifact.
 
@@ -182,6 +188,7 @@ async def create_slides_presentation_func(
         context: Tool context for artifact operations
         investigation_data: Investigation data for the presentation
         template_id: Google Slides template ID to use
+        alert_id: Alert ID for naming convention
 
     Returns:
         Presentation metadata and artifact information
@@ -198,8 +205,9 @@ async def create_slides_presentation_func(
             mime_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
         )
 
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        filename = f"investigation_slides_{investigation_data.get('alert_id', 'unknown')}_{timestamp}.pptx"
+        # Get next ticker from state manager
+        ticker = state_manager.get_next_artifact_ticker(alert_id)
+        filename = f"report_{alert_id}_{ticker:03d}_presentation.pptx"
         version = await context.save_artifact(filename, slides_artifact)
 
         return {
@@ -208,9 +216,9 @@ async def create_slides_presentation_func(
             "artifact_filename": filename,
             "artifact_version": version,
             "mime_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "timestamp": timestamp,
             "slide_count": 5,  # Mock slide count
-            "public_url": f"https://atlas-reports.example.com/{filename}"
+            "ticker": ticker,
+            "alert_id": alert_id
         }
 
     except Exception as e:

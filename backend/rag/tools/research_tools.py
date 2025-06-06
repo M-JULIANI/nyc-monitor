@@ -18,6 +18,44 @@ import requests
 from typing import List, Dict, Optional
 from google.genai import types
 from google.adk.tools import FunctionTool, ToolContext
+from ..investigation.state_manager import state_manager
+from google.adk.tools.retrieval.vertex_ai_rag_retrieval import VertexAiRagRetrieval
+from vertexai.preview import rag
+
+logger = logging.getLogger(__name__)
+
+
+def create_rag_retrieval_tool(
+    rag_corpus: Optional[str] = None,
+    name: str = 'retrieve_rag_documentation',
+    description: str = 'Use this tool to retrieve documentation and reference materials for the question from the RAG corpus',
+    similarity_top_k: int = 10,
+    vector_distance_threshold: float = 0.6,
+) -> Optional[VertexAiRagRetrieval]:
+    """
+    Create a RAG retrieval tool if a corpus is provided.
+    Returns None if no corpus is provided, allowing the agent to work without RAG.
+    """
+    if not rag_corpus:
+        logger.info(
+            "No RAG corpus provided, agent will run without RAG capabilities")
+        return None
+
+    try:
+        return VertexAiRagRetrieval(
+            name=name,
+            description=description,
+            rag_resources=[
+                rag.RagResource(
+                    rag_corpus=rag_corpus
+                )
+            ],
+            similarity_top_k=similarity_top_k,
+            vector_distance_threshold=vector_distance_threshold,
+        )
+    except Exception as e:
+        logger.error(f"Failed to create RAG retrieval tool: {e}")
+        return None
 
 
 def web_search_func(
@@ -49,7 +87,8 @@ def web_search_func(
 async def collect_media_content_func(
     context: ToolContext,
     search_terms: List[str],
-    content_types: List[str] = ["images"]
+    content_types: List[str] = ["images"],
+    alert_id: str = "unknown"
 ) -> List[Dict]:
     """Gather images, videos, and multimedia content and save as artifacts.
 
@@ -57,6 +96,7 @@ async def collect_media_content_func(
         context: Tool context for artifact operations
         search_terms: Terms to search for in media content
         content_types: Types of media to collect (images, videos, etc.)
+        alert_id: Alert ID for naming convention
 
     Returns:
         List of media content with artifact references, descriptions, relevance scores
@@ -91,8 +131,9 @@ async def collect_media_content_func(
                         mime_type="image/png"
                     )
 
-                    # Save as artifact with descriptive filename
-                    filename = f"media_{search_term}_{i}_{j}.png"
+                    # Get next ticker from state manager
+                    ticker = state_manager.get_next_artifact_ticker(alert_id)
+                    filename = f"evidence_{alert_id}_{ticker:03d}_media_{search_term}.png"
                     version = await context.save_artifact(filename, image_artifact)
 
                     collected_media.append({
@@ -104,7 +145,8 @@ async def collect_media_content_func(
                         "artifact_filename": filename,
                         "artifact_version": version,
                         "mime_type": "image/png",
-                        "relevance_score": 0.8
+                        "relevance_score": 0.8,
+                        "ticker": ticker
                     })
 
                 except Exception as e:
@@ -118,7 +160,8 @@ async def collect_media_content_func(
 async def save_investigation_screenshot_func(
     context: ToolContext,
     url: str,
-    description: str
+    description: str,
+    alert_id: str = "unknown"
 ) -> Dict:
     """Take and save a screenshot of a webpage for investigation evidence.
 
@@ -126,6 +169,7 @@ async def save_investigation_screenshot_func(
         context: Tool context for artifact operations
         url: URL to screenshot
         description: Description of what the screenshot shows
+        alert_id: Alert ID for naming convention
 
     Returns:
         Information about the saved screenshot artifact
@@ -141,11 +185,9 @@ async def save_investigation_screenshot_func(
             mime_type="image/png"
         )
 
-        # Generate filename based on URL and timestamp
-        import datetime
-        timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        filename = f"screenshot_{timestamp}.png"
-
+        # Get next ticker from state manager
+        ticker = state_manager.get_next_artifact_ticker(alert_id)
+        filename = f"evidence_{alert_id}_{ticker:03d}_screenshot.png"
         version = await context.save_artifact(filename, screenshot_artifact)
 
         return {
@@ -155,7 +197,8 @@ async def save_investigation_screenshot_func(
             "artifact_filename": filename,
             "artifact_version": version,
             "mime_type": "image/png",
-            "timestamp": timestamp
+            "ticker": ticker,
+            "alert_id": alert_id
         }
 
     except Exception as e:

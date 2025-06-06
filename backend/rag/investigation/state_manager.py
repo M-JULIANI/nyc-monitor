@@ -34,6 +34,10 @@ class InvestigationState:
     alert_data: AlertData
     phase: InvestigationPhase
     iteration_count: int
+    artifact_ticker: int  # Auto-incrementing counter for artifact naming
+    findings: list  # Investigation findings
+    confidence_score: float  # Overall confidence score
+    is_complete: bool  # Whether investigation is complete
     agent_findings: Dict[str, Any]
     confidence_scores: Dict[str, float]
     next_actions: list
@@ -64,6 +68,10 @@ class InvestigationStateManager:
             alert_data=alert_data,
             phase=InvestigationPhase.RECONNAISSANCE,
             iteration_count=0,
+            artifact_ticker=0,
+            findings=[],
+            confidence_score=0.0,
+            is_complete=False,
             agent_findings={},
             confidence_scores={},
             next_actions=[],
@@ -144,6 +152,23 @@ class InvestigationStateManager:
         # Simple average of all confidence scores
         scores = list(state.confidence_scores.values())
         return sum(scores) / len(scores)
+
+    def get_next_artifact_ticker(self, investigation_id: str) -> int:
+        """Get next artifact ticker and increment counter.
+
+        Args:
+            investigation_id: ID of investigation
+
+        Returns:
+            Next available ticker value for artifact naming
+        """
+        state = self.get_investigation(investigation_id)
+        if not state:
+            return 1
+
+        state.artifact_ticker += 1
+        state.updated_at = datetime.utcnow()
+        return state.artifact_ticker
 
     def should_terminate_investigation(self, investigation_id: str) -> bool:
         """Determine if investigation should be terminated.
