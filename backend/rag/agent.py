@@ -30,6 +30,7 @@ from .prompts.orchestrator import return_orchestrator_instructions
 from .sub_agents.research_agent import research_agent
 from .tools.coordination_tools import update_alert_status, manage_investigation_state
 from .investigation.state_manager import AlertData, state_manager
+from .investigation.progress_tracker import progress_tracker, ProgressStatus
 
 logger = logging.getLogger(__name__)
 date_today = date.today()
@@ -51,13 +52,15 @@ def _create_artifact_service() -> InMemoryArtifactService:
     return InMemoryArtifactService()
 
 
-def _create_investigation_runner():
+def _create_investigation_runner(investigation_state):
     """
-    Create a runner for investigation with artifact service.
-    Generic runner that can handle any investigation.
+    Create a runner for investigation with artifact service and investigation context.
+
+    Args:
+        investigation_state: InvestigationState object containing alert data and investigation context
 
     Returns:
-        Configured Runner instance ready for investigation execution
+        Configured Runner instance ready for investigation execution with proper context
     """
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
@@ -68,7 +71,7 @@ def _create_investigation_runner():
     # Get RAG corpus from environment
     rag_corpus = os.getenv("RAG_CORPUS_ID")
 
-    # Create orchestrator agent with RAG corpus access
+    # Create orchestrator agent with RAG corpus access and progress callbacks
     orchestrator = create_orchestrator_agent(rag_corpus=rag_corpus)
 
     # Create session service for investigation tracking
@@ -81,6 +84,39 @@ def _create_investigation_runner():
         session_service=session_service,
         artifact_service=artifact_service
     )
+
+    # Set investigation context in runner's session state (the ADK way)
+    # This ensures callbacks have access to investigation_id and other context
+    if hasattr(runner, '_session_service') and runner._session_service:
+        # Create a session for this investigation
+        session_id = investigation_state.investigation_id
+
+        # Initialize session state with investigation context
+        session_state = {
+            "investigation_id": investigation_state.investigation_id,
+            "alert_id": investigation_state.alert_data.alert_id,
+            "alert_severity": investigation_state.alert_data.severity,
+            "alert_type": investigation_state.alert_data.event_type,
+            "alert_location": investigation_state.alert_data.location,
+            "investigation_phase": investigation_state.phase.value,
+            "iteration_count": investigation_state.iteration_count,
+            "current_investigation": investigation_state.investigation_id  # Fallback key
+        }
+
+        # Store session state in the session service
+        if hasattr(session_service, '_sessions'):
+            session_service._sessions[session_id] = {
+                "state": session_state,
+                "created_at": investigation_state.created_at,
+                "investigation_context": investigation_state
+            }
+
+        # Also set the session ID on the runner if possible
+        if hasattr(runner, '_session_id'):
+            runner._session_id = session_id
+
+        logger.info(
+            f"Set investigation context in runner session: {investigation_state.investigation_id}")
 
     return runner
 
@@ -102,8 +138,12 @@ async def investigate_alert(alert_data: AlertData) -> str:
         logger.info(
             f"Created investigation {investigation_state.investigation_id} for alert {alert_data.alert_id}")
 
+        # Start progress tracking
+        progress_tracker.start_investigation(
+            investigation_state.investigation_id)
+
         # Create investigation runner (stateless, generic)
-        runner = _create_investigation_runner()
+        runner = _create_investigation_runner(investigation_state)
 
         # Create investigation prompt based on alert data
         investigation_prompt = f"""
@@ -125,6 +165,14 @@ Please coordinate a thorough investigation using your sub-agents:
 
 Begin the investigation now.
 """
+
+        # Update progress before starting ADK execution
+        progress_tracker.add_progress(
+            investigation_id=investigation_state.investigation_id,
+            status=ProgressStatus.AGENT_ACTIVE,
+            active_agent="investigation_orchestrator",
+            message="Starting ADK investigation execution"
+        )
 
         # Execute the investigation via ADK runner
         logger.info(
@@ -153,6 +201,12 @@ Begin the investigation now.
                 "is_complete": True
             })
 
+            # Mark progress as completed
+            progress_tracker.complete_investigation(
+                investigation_state.investigation_id,
+                "Investigation completed successfully"
+            )
+
             logger.info(
                 f"ADK investigation completed for alert {alert_data.alert_id}")
 
@@ -171,6 +225,12 @@ Investigation completed successfully via ADK multi-agent system."""
 
         except Exception as adk_error:
             logger.error(f"ADK execution failed: {adk_error}")
+
+            # Mark progress as error
+            progress_tracker.error_investigation(
+                investigation_state.investigation_id,
+                str(adk_error)
+            )
 
             # Fallback to structured mock response if ADK fails
             logger.info(
@@ -202,4 +262,15 @@ Investigation Status: Ready for ADK execution when available"""
 
     except Exception as e:
         logger.error(f"Error during investigation: {e}")
+
+        # Try to mark progress as error if we have an investigation state
+        try:
+            if 'investigation_state' in locals():
+                progress_tracker.error_investigation(
+                    investigation_state.investigation_id,
+                    str(e)
+                )
+        except:
+            pass
+
         return f"Investigation failed for alert {alert_data.alert_id}: {str(e)}"

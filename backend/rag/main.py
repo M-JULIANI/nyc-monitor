@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -9,6 +9,8 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 from pydantic import BaseModel
 from typing import Optional, List, Dict
+import json
+import asyncio
 from .agent import investigate_alert
 from .agents.chat_agent import (
     chat_with_corpus,
@@ -18,6 +20,7 @@ from .agents.chat_agent import (
     get_session_info
 )
 from .investigation.state_manager import AlertData
+from .investigation.progress_tracker import get_progress_tracker
 import os
 from datetime import datetime
 
@@ -225,6 +228,8 @@ async def investigate_alert_endpoint(
     - Research agent collecting data and artifacts
     - Analysis of findings  
     - Generation of investigation report
+
+    Use /investigate/{investigation_id}/progress for real-time progress updates.
     """
     try:
         # Run the async investigation - this is the main entry funnel
@@ -247,6 +252,92 @@ async def investigate_alert_endpoint(
     except Exception as e:
         print("ERROR in /investigate:", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/investigate/{investigation_id}/progress")
+async def get_investigation_progress(
+    investigation_id: str,
+    user=Depends(verify_google_token)
+):
+    """
+    Get current progress for an investigation (polling endpoint).
+    """
+    try:
+        tracker = get_progress_tracker()
+        progress = tracker.get_progress(investigation_id)
+        latest = tracker.get_latest_progress(investigation_id)
+        is_active = tracker.is_active(investigation_id)
+
+        return {
+            "investigation_id": investigation_id,
+            "is_active": is_active,
+            "latest_status": latest.status.value if latest else "unknown",
+            "latest_message": latest.message if latest else None,
+            "active_agent": latest.active_agent if latest else None,
+            "current_task": latest.current_task if latest else None,
+            "progress_history": [
+                {
+                    "timestamp": update.timestamp.isoformat(),
+                    "status": update.status.value,
+                    "active_agent": update.active_agent,
+                    "current_task": update.current_task,
+                    "message": update.message,
+                    "metadata": update.metadata
+                }
+                for update in progress
+            ],
+            "total_updates": len(progress)
+        }
+    except Exception as e:
+        print("ERROR in /investigate/progress:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/investigate/{investigation_id}/stream")
+async def stream_investigation_progress(
+    investigation_id: str,
+    user=Depends(verify_google_token)
+):
+    """
+    Stream real-time progress updates for an investigation (Server-Sent Events).
+    """
+    async def generate_progress_stream():
+        tracker = get_progress_tracker()
+
+        try:
+            async for update in tracker.stream_progress(investigation_id):
+                data = {
+                    "timestamp": update.timestamp.isoformat(),
+                    "investigation_id": update.investigation_id,
+                    "status": update.status.value,
+                    "active_agent": update.active_agent,
+                    "current_task": update.current_task,
+                    "message": update.message,
+                    "metadata": update.metadata
+                }
+
+                yield f"data: {json.dumps(data)}\n\n"
+
+                if update.status.value in ["completed", "error"]:
+                    break
+
+        except Exception as e:
+            error_data = {
+                "error": str(e),
+                "investigation_id": investigation_id,
+                "status": "error"
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
+
+    return StreamingResponse(
+        generate_progress_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream"
+        }
+    )
 
 
 @app.get("/health")
