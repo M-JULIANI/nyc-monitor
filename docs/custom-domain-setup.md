@@ -214,7 +214,7 @@ CUSTOM_DOMAIN=app.nyc-monitor.com make setup-domain-direct
 After domain setup, deploy normally:
 
 ```bash
-make deploy-frontend
+make deploy-web
 ```
 
 Your service will be accessible via both:
@@ -271,7 +271,7 @@ make deploy-api
 The nginx configuration includes API proxying to your backend. After domain setup, redeploy the frontend:
 
 ```bash
-make deploy-frontend
+make deploy-web
 ```
 
 ### 4. Testing Authentication
