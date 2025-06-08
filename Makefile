@@ -8,9 +8,18 @@ DOCKER_REGISTRY ?= $(shell grep -E '^DOCKER_REGISTRY=' .env 2>/dev/null | cut -d
 DOCKER_IMAGE_PREFIX ?= $(shell grep -E '^DOCKER_IMAGE_PREFIX=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ' || echo "atlas")
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
-# Auth variables
-GOOGLE_CLIENT_ID ?= $(shell grep -E '^GOOGLE_CLIENT_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
-RAG_CORPUS ?= $(shell grep -E '^RAG_CORPUS=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+# Auth variables - check environment first, then .env file
+ifeq ($(origin GOOGLE_CLIENT_ID), environment)
+    # Use environment variable as-is
+else
+    GOOGLE_CLIENT_ID := $(shell grep -E '^GOOGLE_CLIENT_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
+
+ifeq ($(origin RAG_CORPUS), environment)
+    # Use environment variable as-is
+else
+    RAG_CORPUS := $(shell grep -E '^RAG_CORPUS=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
 
 # Monitor system variables
 MONITOR_SERVICE_ACCOUNT ?= atlas-monitor-service
@@ -277,7 +286,6 @@ deploy-vertex-ai: check-gcloud
 	fi
 
 deploy-api: check-docker check-gcloud
-	@env | grep GOOGLE
 	@echo "Deploying FastAPI backend to Cloud Run..."
 	@if [ -z "$(GOOGLE_CLIENT_ID)" ]; then \
 		echo "Error: GOOGLE_CLIENT_ID not found in .env file"; \
@@ -584,7 +592,6 @@ help:
 	@echo "  make lint             - Run linters"
 	@echo "  make format           - Format code"
 	@echo "  make clean            - Clean up development environment"
-	@echo ""f
 	@echo "Devcontainer Commands:"
 	@echo "  make devcontainer-setup  - Set up devcontainer environment"
 	@echo "  make devcontainer-clean  - Clean devcontainer environment"
