@@ -260,10 +260,10 @@ CLOUD_RUN_REGION ?= $(GOOGLE_CLOUD_LOCATION)
 CLOUD_RUN_BACKEND_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-backend
 
 # Deployment
-deploy: deploy-api deploy-api-api deploy-web deploy-monitor
+deploy: deploy-api deploy-vertex-ai deploy-web deploy-monitor
 	@echo "Deployment completed"
 
-deploy-api: check-gcloud
+deploy-vertex-ai: check-gcloud
 	@echo "Deploying backend to Vertex AI..."
 	@if [ -f "backend/deployment/deploy.py" ]; then \
 		cd backend && poetry run python deployment/deploy.py; \
@@ -272,7 +272,7 @@ deploy-api: check-gcloud
 		exit 1; \
 	fi
 
-deploy-api-api: check-docker check-gcloud
+deploy-api: check-docker check-gcloud
 	@env | grep GOOGLE
 	@echo "Deploying FastAPI backend to Cloud Run..."
 	@docker build \
@@ -579,7 +579,8 @@ help:
 	@echo "  make build-api    - Build backend production image"
 	@echo "  make build-monitor - Build monitor system image"
 	@echo "  make deploy           - Deploy all services (backend, frontend, monitor)"
-	@echo "  make deploy-api   - Deploy backend agent to Vertex AI"
+	@echo "  make deploy-api   - Deploy fastapi backend"
+	@echo "  make deploy-vertex-ai   - Deploy backend agent to Vertex AI"
 	@echo "  make deploy-web  - Deploy frontend container"
 	@echo ""
 	@echo "NYC Monitor System Commands:"
