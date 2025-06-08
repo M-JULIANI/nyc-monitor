@@ -49,7 +49,7 @@ const Login = () => {
             
             // Optional: Test API connection in background (non-blocking)
             axios.post(
-              '/api/ask',
+              '/api/chat',
               { text: 'What is Vertex AI?' },
               { headers: { Authorization: `Bearer ${idToken}` } }
             ).catch(error => {

@@ -7,6 +7,7 @@ from slowapi.util import get_remote_address
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import os
+import logging
 
 from ..agents.chat_agent import (
     chat_with_corpus,
@@ -16,9 +17,10 @@ from ..agents.chat_agent import (
     get_session_info
 )
 from ..auth import verify_google_token
+from ..config import get_config
 
-# Environment variables
-RAG_CORPUS_ID = os.environ.get("RAG_CORPUS_ID")
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Router
 chat_router = APIRouter(prefix="/chat", tags=["chat"])
@@ -57,21 +59,41 @@ async def chat_endpoint(
       returns empty history for better performance with frontend state management.
     """
     try:
+        # Use central configuration
+        config = get_config()
+
+        logger.info(
+            f"Chat endpoint called with message: {chat_message.text[:100]}...")
+        logger.info(f"User authenticated: {user}")
+        logger.info(f"RAG_CORPUS: {config.RAG_CORPUS}")
+
+        if not config.RAG_CORPUS:
+            logger.error("RAG_CORPUS environment variable not set")
+            raise HTTPException(
+                status_code=500, detail="RAG corpus not configured")
+
         response_text, session_id, conversation_history = await chat_with_corpus(
             chat_message.text,
-            RAG_CORPUS_ID,
+            config.RAG_CORPUS,
             chat_message.session_id
         )
 
         history_to_return = conversation_history if include_history else []
+
+        logger.info(
+            f"Chat response generated successfully. Session ID: {session_id}")
 
         return ChatResponse(
             response=response_text,
             session_id=session_id,
             conversation_history=history_to_return
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Chat endpoint error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
 
 
 @chat_router.get("/{session_id}/history")

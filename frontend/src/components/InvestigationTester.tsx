@@ -48,8 +48,8 @@ const InvestigationTester: React.FC = () => {
     setResult(null);
 
     try {
-      // Get auth token (assuming it's stored in localStorage or context)
-      const token = localStorage.getItem('authToken');
+      // Get auth token (stored as 'idToken' by Login component)
+      const token = localStorage.getItem('idToken');
       
       const response = await fetch('/api/investigate', {
         method: 'POST',
@@ -80,7 +80,7 @@ const InvestigationTester: React.FC = () => {
     if (!investigationId) return;
 
     try {
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('idToken');
       
       // Open trace timeline in new tab
       const traceUrl = `/api/investigate/${investigationId}/trace/timeline`;
@@ -104,7 +104,7 @@ const InvestigationTester: React.FC = () => {
     if (!investigationId) return;
 
     try {
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('idToken');
       
       const response = await fetch(`/api/investigate/${investigationId}/agent-flow`, {
         headers: { 'Authorization': `Bearer ${token}` }
