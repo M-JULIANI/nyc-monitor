@@ -12,5 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This package contains the RAG (Retrieval-Augmented Generation) backend implementation
-# Individual modules should be imported directly from their respective submodules
+"""Sub-agents module for multi-agent investigation system."""
+
+from .research_agent import create_research_agent
+
+# TODO: Add other agents as they are implemented
+# from .data_agent import data_agent
+# from .analysis_agent import analysis_agent
+# from .report_agent import report_agent
+
+__all__ = [
+    "create_research_agent",
+    # "data_agent",
+    # "analysis_agent",
+    # "report_agent",
+]

@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException, Request, Depends
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -7,11 +7,11 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
-from pydantic import BaseModel
-from .agent import root_agent
 import os
 
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")  # Set this in your .env
+from .endpoints import chat_router, investigation_router
+
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 
 app = FastAPI(
     title="RAG Backend",
@@ -24,10 +24,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://nyc-monitor.app",  # Production custom domain
-        "https://atlas-frontend-290750569862.us-central1.run.app",  # Original Cloud Run URL
-        "http://localhost:3000",  # Local development
-        "http://localhost:5173",  # Vite dev server
+        "https://nyc-monitor.app",
+        "https://atlas-frontend-290750569862.us-central1.run.app",
+        "http://localhost:3000",
+        "http://localhost:5173",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
@@ -39,48 +39,17 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# OAuth2 (Google)
-# Not used for Google, but required by FastAPI
+# OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-
-def verify_google_token(token: str = Depends(oauth2_scheme)):
-    try:
-        idinfo = id_token.verify_oauth2_token(
-            token, grequests.Request(), GOOGLE_CLIENT_ID)
-        return idinfo
-    except Exception:
-        raise HTTPException(
-            status_code=401, detail="Invalid authentication credentials")
-
-
-class Question(BaseModel):
-    text: str
-
-
-class Answer(BaseModel):
-    response: str
+# Include routers
+app.include_router(chat_router)
+app.include_router(investigation_router)
 
 
 @app.get("/")
 async def root():
     return RedirectResponse(url="/docs")
-
-
-@app.post("/ask", response_model=Answer)
-@limiter.limit("5/minute")
-async def ask_question(
-    request: Request,
-    question: Question,
-    user=Depends(verify_google_token)
-):
-    try:
-       # response = root_agent(question.text)
-        response = "Hello"
-        return Answer(response=response)
-    except Exception as e:
-        print("ERROR in /ask:", e)
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health")
@@ -90,4 +59,5 @@ async def health_check():
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
+    from fastapi.responses import JSONResponse
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})

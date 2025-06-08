@@ -12,5 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This package contains the RAG (Retrieval-Augmented Generation) backend implementation
-# Individual modules should be imported directly from their respective submodules
+"""Authentication module for Google OAuth token verification."""
+
+from .auth import verify_google_token, oauth2_scheme
+
+__all__ = ["verify_google_token", "oauth2_scheme"]
