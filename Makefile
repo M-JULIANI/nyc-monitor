@@ -141,6 +141,27 @@ dev-web:
 	@echo "Starting frontend development server..."
 	cd frontend && npm run dev -- --host 0.0.0.0
 
+# Test against deployed backend
+dev-web-deployed:
+	@echo "Starting frontend with deployed backend..."
+	@echo "Backend URL: https://atlas-backend-blz2r3yjgq-uc.a.run.app"
+	@cd frontend && REACT_APP_USE_DEPLOYED_BACKEND=true npm run dev -- --host 0.0.0.0
+
+# Get deployed backend URL
+get-api-url: check-gcloud
+	@echo "🔗 Deployed backend URL:"
+	@gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
+		--platform managed \
+		--region $(CLOUD_RUN_REGION) \
+		--format='value(status.url)'
+
+# Test deployed services
+test-deployed-api:
+	@echo "🧪 Testing deployed backend health..."
+	@BACKEND_URL=$$(gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) --platform managed --region $(CLOUD_RUN_REGION) --format='value(status.url)' 2>/dev/null || echo "https://atlas-backend-blz2r3yjgq-uc.a.run.app"); \
+	echo "Testing: $$BACKEND_URL/api/health"; \
+	curl -f "$$BACKEND_URL/api/health" || echo "❌ Backend health check failed"
+
 # Testing
 test: test-api test-web
 	@echo "All tests completed"
@@ -538,9 +559,12 @@ help:
 	@echo "  make dev              - Start development environment (both services)"
 	@echo "  make dev-api      - Start backend development server"
 	@echo "  make dev-web     - Start frontend development server"
+	@echo "  make dev-web-deployed - Start frontend using deployed backend"
 	@echo "  make test             - Run all tests"
 	@echo "  make test-api     - Run backend tests"
 	@echo "  make test-web    - Run frontend tests"
+	@echo "  make test-deployed-api    - Test deployed backend health"
+	@echo "  make get-api-url  - Get deployed backend URL"
 	@echo "  make lint             - Run linters"
 	@echo "  make format           - Format code"
 	@echo "  make clean            - Clean up development environment"
@@ -568,6 +592,11 @@ help:
 	@echo "  make debug-job-executions - Check job executions"
 	@echo "  make debug-job-logs   - Check job logs"
 	@echo "  make debug-monitor-full - Run all debug checks"
+	@echo ""
+	@echo "Testing Against Deployed Services:"
+	@echo "  make dev-web-deployed - Test frontend locally against deployed backend"
+	@echo "  make test-deployed-api    - Check if deployed backend is healthy"
+	@echo "  make get-api-url  - Get the deployed backend URL"
 	@echo ""
 	@echo "Troubleshooting:"
 	@echo "  If monitor not running automatically, use 'make debug-monitor-full'"
