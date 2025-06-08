@@ -46,7 +46,7 @@ def update_env_file(agent_engine_id, env_file_path):
 
 logger.info("Deploying Atlas Root Agent to Vertex AI ADK...")
 app = AdkApp(
-    agent=root_agent.orchestrator,
+    agent=root_agent,  # root_agent is now the orchestrator agent
     enable_tracing=True,
 )
 
@@ -60,7 +60,37 @@ remote_app = agent_engines.create(
         "python-dotenv",
         "google-auth",
         "tqdm",
-        "requests"
+        "requests",
+        "deprecated",
+        "pydantic",
+        "cloudpickle",
+        "fastapi",
+        "uvicorn",
+        "httpx",
+        "aiohttp",
+        "websockets",
+        "protobuf",
+        "grpcio",
+        "googleapis-common-protos",
+        "google-api-core",
+        "google-auth-httplib2",
+        "google-cloud-core",
+        "typing_extensions",
+        "annotated-types",
+        "wrapt",
+        "six",
+        "certifi",
+        "charset-normalizer",
+        "idna",
+        "urllib3",
+        "toml",
+        # Dependencies from pyproject.toml that are missing
+        "llama-index>=0.12",
+        "pydantic-settings>=2.8.1",
+        "tabulate>=0.9.0",
+        "slowapi>=0.1.8",
+        "google-cloud-firestore>=2.18.0",
+        "redditwarp>=0.3.0"
     ],
     extra_packages=[
         "./rag",
