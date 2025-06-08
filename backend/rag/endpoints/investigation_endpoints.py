@@ -19,6 +19,7 @@ from ..investigation.state_manager import AlertData, state_manager
 from ..investigation.progress_tracker import progress_tracker
 from ..investigation.tracing import get_distributed_tracer
 from ..auth import verify_google_token
+from ..config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,8 @@ limiter = Limiter(key_func=get_remote_address)
 tracer = get_distributed_tracer()
 
 # Configuration for investigation approach
-INVESTIGATION_APPROACH = os.getenv(
-    "INVESTIGATION_APPROACH", "simple")  # "simple" or "adk"
+# config.INVESTIGATION_APPROACH = os.getenv(
+#     "config.INVESTIGATION_APPROACH", "simple")  # "simple" or "adk"
 
 
 class AlertRequest(BaseModel):
@@ -64,9 +65,14 @@ async def start_investigation(
     Supports both simple (direct model) and complex (ADK) approaches.
     """
     try:
+        # Use central configuration
+        config = get_config()
+
+        logger.info(f"Investigation endpoint called by user: {user}")
         logger.info(
             f"Starting investigation for alert {alert_request.alert_id}")
-        logger.info(f"Investigation approach: {INVESTIGATION_APPROACH}")
+        logger.info(f"Investigation approach: {config.INVESTIGATION_APPROACH}")
+        logger.info(f"Alert details: {alert_request}")
 
         # Create AlertData object
         alert_data = AlertData(
@@ -79,39 +85,65 @@ async def start_investigation(
             sources=alert_request.sources
         )
 
+        logger.info(f"AlertData object created: {alert_data}")
+
         # Choose investigation approach based on configuration
-        if INVESTIGATION_APPROACH == "adk":
+        if config.INVESTIGATION_APPROACH == "adk":
             logger.info("Using ADK multi-agent investigation approach")
-            investigation_result = await investigate_alert_adk(alert_data)
+            try:
+                investigation_result, investigation_id = await investigate_alert_adk(alert_data)
+            except Exception as adk_error:
+                logger.error(
+                    f"ADK investigation failed: {adk_error}", exc_info=True)
+                raise
         else:
             logger.info("Using simple direct model investigation approach")
-            investigation_result = await investigate_alert_simple(alert_data)
+            try:
+                investigation_result, investigation_id = await investigate_alert_simple(alert_data)
+            except Exception as simple_error:
+                logger.error(
+                    f"Simple investigation failed: {simple_error}", exc_info=True)
+                raise
 
-        # Get the investigation state to return structured response
-        investigations = state_manager.get_investigations_by_alert(
-            alert_request.alert_id)
-        if investigations:
-            investigation_state = investigations[0]  # Get most recent
+        logger.info(
+            f"Investigation completed. Result length: {len(investigation_result) if investigation_result else 0}")
+        logger.info(f"Investigation ID: {investigation_id}")
 
-            return InvestigationResponse(
-                investigation_id=investigation_state.investigation_id,
-                status="completed",
-                findings=investigation_result,
-                artifacts=investigation_state.artifacts,
-                confidence_score=investigation_state.confidence_score
-            )
-        else:
-            # Fallback if state not found
-            return InvestigationResponse(
-                investigation_id=f"fallback_{alert_request.alert_id}",
-                status="completed",
-                findings=investigation_result,
-                artifacts=[],
-                confidence_score=0.7
-            )
+        # Get the investigation state using the returned investigation_id
+        if investigation_id:
+            investigation_state = state_manager.get_investigation(
+                investigation_id)
+            if investigation_state:
+                logger.info(
+                    f"Found investigation state: {investigation_state.investigation_id}")
 
+                return InvestigationResponse(
+                    investigation_id=investigation_state.investigation_id,
+                    status="completed",
+                    findings=investigation_result,
+                    artifacts=investigation_state.artifacts,
+                    confidence_score=investigation_state.confidence_score
+                )
+            else:
+                logger.warning(
+                    f"No investigation state found for ID: {investigation_id}")
+
+        # Fallback if state not found or no investigation_id
+        logger.warning(
+            "Using fallback response - no investigation state available")
+        return InvestigationResponse(
+            investigation_id=investigation_id or f"fallback_{alert_request.alert_id}",
+            status="completed",
+            findings=investigation_result,
+            artifacts=[],
+            confidence_score=0.7
+        )
+
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        logger.error(f"Failed to start investigation: {e}")
+        logger.error(f"Investigation endpoint error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500, detail=f"Investigation failed: {str(e)}")
 
@@ -123,6 +155,7 @@ async def get_investigation_progress(
 ):
     """Get the current progress of an investigation"""
     try:
+        config = get_config()
         progress = progress_tracker.get_progress(investigation_id)
         if not progress:
             raise HTTPException(
@@ -131,7 +164,7 @@ async def get_investigation_progress(
         return {
             "investigation_id": investigation_id,
             "progress": progress,
-            "approach": INVESTIGATION_APPROACH
+            "approach": config.INVESTIGATION_APPROACH
         }
 
     except HTTPException:
@@ -151,7 +184,7 @@ async def stream_investigation_progress(
         """Generate Server-Sent Events for progress updates"""
         try:
             # Send initial connection
-            yield f"data: {{'status': 'connected', 'investigation_id': '{investigation_id}', 'approach': '{INVESTIGATION_APPROACH}'}}\n\n"
+            yield f"data: {{'status': 'connected', 'investigation_id': '{investigation_id}', 'approach': '{config.INVESTIGATION_APPROACH}'}}\n\n"
 
             # Stream progress updates
             last_update_count = 0
@@ -211,7 +244,7 @@ async def get_trace_summary(
         return {
             "investigation_id": investigation_id,
             "trace_summary": summary,
-            "approach": INVESTIGATION_APPROACH
+            "approach": config.INVESTIGATION_APPROACH
         }
 
     except HTTPException:
@@ -237,7 +270,7 @@ async def get_trace_timeline(
         return {
             "investigation_id": investigation_id,
             "timeline": timeline,
-            "approach": INVESTIGATION_APPROACH
+            "approach": config.INVESTIGATION_APPROACH
         }
 
     except HTTPException:
@@ -262,7 +295,7 @@ async def export_trace_data(
         return {
             "investigation_id": investigation_id,
             "trace_data": trace_data,
-            "approach": INVESTIGATION_APPROACH,
+            "approach": config.INVESTIGATION_APPROACH,
             "exported_at": datetime.utcnow().isoformat()
         }
 
@@ -289,7 +322,7 @@ async def get_agent_message_flow(
         return {
             "investigation_id": investigation_id,
             "agent_message_flow": agent_flow,
-            "approach": INVESTIGATION_APPROACH
+            "approach": config.INVESTIGATION_APPROACH
         }
 
     except HTTPException:
@@ -305,7 +338,7 @@ async def get_agent_message_flow(
 async def get_investigation_config(user=Depends(verify_google_token)):
     """Get current investigation system configuration"""
     return {
-        "investigation_approach": INVESTIGATION_APPROACH,
+        "investigation_approach": config.INVESTIGATION_APPROACH,
         "approaches_available": ["simple", "adk"],
         "simple_approach": {
             "description": "Direct model calls, no deployment required",
@@ -321,6 +354,6 @@ async def get_investigation_config(user=Depends(verify_google_token)):
             "distributed_tracing": True,
             "progress_tracking": True,
             "state_management": True,
-            "multi_agent": INVESTIGATION_APPROACH == "adk"
+            "multi_agent": config.INVESTIGATION_APPROACH == "adk"
         }
     }

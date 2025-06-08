@@ -36,6 +36,7 @@ class InvestigationState:
     iteration_count: int
     artifact_ticker: int  # Auto-incrementing counter for artifact naming
     findings: list  # Investigation findings
+    artifacts: list  # Collected artifacts during investigation
     confidence_score: float  # Overall confidence score
     is_complete: bool  # Whether investigation is complete
     agent_findings: Dict[str, Any]
@@ -70,6 +71,7 @@ class InvestigationStateManager:
             iteration_count=0,
             artifact_ticker=0,
             findings=[],
+            artifacts=[],
             confidence_score=0.0,
             is_complete=False,
             agent_findings={},

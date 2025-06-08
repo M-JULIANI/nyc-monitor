@@ -41,9 +41,12 @@ class SimpleInvestigationService:
                     f"❌ Failed to initialize Vertex AI model: {e}, {e2}")
                 raise
 
-    async def investigate_alert(self, alert_data: AlertData) -> str:
+    async def investigate_alert(self, alert_data: AlertData) -> tuple[str, str]:
         """
         Simple investigation using direct model calls (no ADK deployment needed)
+
+        Returns:
+            Tuple of (investigation_results_string, investigation_id)
         """
         try:
             # Create investigation state
@@ -109,7 +112,7 @@ class SimpleInvestigationService:
                     )
 
                     # Return formatted results
-                    return self._format_investigation_results(alert_data, investigation_state, investigation_result)
+                    return self._format_investigation_results(alert_data, investigation_state, investigation_result), investigation_state.investigation_id
 
                 else:
                     raise Exception("Empty response from model")
@@ -124,11 +127,11 @@ class SimpleInvestigationService:
                 )
 
                 # Return fallback response
-                return self._create_fallback_response(alert_data, investigation_state, str(model_error))
+                return self._create_fallback_response(alert_data, investigation_state, str(model_error)), investigation_state.investigation_id
 
         except Exception as e:
             logger.error(f"Error during simple investigation: {e}")
-            return f"Investigation failed for alert {alert_data.alert_id}: {str(e)}"
+            return f"Investigation failed for alert {alert_data.alert_id}: {str(e)}", ""
 
     def _create_investigation_prompt(self, alert_data: AlertData, investigation_state) -> str:
         """Create comprehensive investigation prompt for single model call"""
@@ -339,6 +342,6 @@ This demonstrates the system is ready for both simple and complex approaches."""
 simple_investigation_service = SimpleInvestigationService()
 
 
-async def investigate_alert_simple(alert_data: AlertData) -> str:
+async def investigate_alert_simple(alert_data: AlertData) -> tuple[str, str]:
     """Simple investigation entry point - no deployment required"""
     return await simple_investigation_service.investigate_alert(alert_data)

@@ -52,11 +52,11 @@ if [ -z "$RAG_CORPUS" ]; then
   exit 1
 fi
 
-# Extract RAG_CORPUS_ID from the full RAG_CORPUS path
-RAG_CORPUS_ID=$(echo $RAG_CORPUS | awk -F'/' '{print $NF}')
+# Extract RAG_CORPUS from the full RAG_CORPUS path
+RAG_CORPUS=$(echo $RAG_CORPUS | awk -F'/' '{print $NF}')
 
 # Define the RAG Corpus resource
-RAG_CORPUS="projects/${PROJECT_NUMBER}/locations/us-central1/ragCorpora/${RAG_CORPUS_ID}"
+RAG_CORPUS="projects/${PROJECT_NUMBER}/locations/us-central1/ragCorpora/${RAG_CORPUS}"
 
 echo "Granting permissions to $SERVICE_ACCOUNT..."
 

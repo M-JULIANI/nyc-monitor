@@ -73,7 +73,7 @@ def _create_investigation_runner(investigation_state):
     artifact_service = _create_artifact_service()
 
     # Get RAG corpus from environment
-    rag_corpus = os.getenv("RAG_CORPUS_ID")
+    rag_corpus = os.getenv("RAG_CORPUS")
 
     # Create orchestrator agent with RAG corpus access and progress callbacks
     orchestrator = create_orchestrator_agent(rag_corpus=rag_corpus)
@@ -127,7 +127,7 @@ def _create_investigation_runner(investigation_state):
     return runner
 
 
-async def investigate_alert(alert_data: AlertData) -> str:
+async def investigate_alert(alert_data: AlertData) -> tuple[str, str]:
     """
     Main stateless entry point for investigating an alert.
     This is where the investigation becomes "live" - creates state, executes runner, returns results.
@@ -136,7 +136,7 @@ async def investigate_alert(alert_data: AlertData) -> str:
         alert_data: Alert information to investigate
 
     Returns:
-        Investigation results as a string
+        Tuple of (investigation_results_string, investigation_id)
     """
     try:
         # Create investigation state first
@@ -231,7 +231,7 @@ Begin the investigation now.
                 f"ADK investigation completed for alert {alert_data.alert_id}")
 
             # Return the actual investigation results from ADK
-            return f"""Investigation Results for Alert {alert_data.alert_id}:
+            return (f"""Investigation Results for Alert {alert_data.alert_id}:
 
 Event: {alert_data.event_type} at {alert_data.location}
 Severity: {alert_data.severity}/10
@@ -241,7 +241,8 @@ Investigation ID: {investigation_state.investigation_id}
 ADK Investigation Results:
 {investigation_result}
 
-Investigation completed successfully via ADK multi-agent system."""
+Investigation completed successfully via ADK multi-agent system.""",
+                    investigation_state.investigation_id)
 
         except Exception as adk_error:
             logger.error(f"ADK execution failed: {adk_error}")
@@ -278,7 +279,7 @@ Investigation Infrastructure:
 Note: ADK execution failed ({str(adk_error)}), using fallback response.
 Investigation Status: Ready for ADK execution when available"""
 
-            return investigation_summary
+            return (investigation_summary, investigation_state.investigation_id)
 
     except Exception as e:
         logger.error(f"Error during investigation: {e}")
@@ -293,4 +294,4 @@ Investigation Status: Ready for ADK execution when available"""
         except:
             pass
 
-        return f"Investigation failed for alert {alert_data.alert_id}: {str(e)}"
+        return (f"Investigation failed for alert {alert_data.alert_id}: {str(e)}", "")

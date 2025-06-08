@@ -41,7 +41,7 @@ class AtlasRootAgent:
         self.instructions = return_orchestrator_instructions()
 
         # Initialize core orchestrator agent
-        rag_corpus = os.getenv("RAG_CORPUS_ID")
+        rag_corpus = os.getenv("RAG_CORPUS")
         self.orchestrator = create_orchestrator_agent(
             model='gemini-2.0-flash-001',
             name=self.agent_name,
@@ -121,7 +121,7 @@ Error: {str(e)}
 Investigation Infrastructure:
 - Root Agent: ✅ Initialized and callable
 - Orchestrator Agent: ✅ Created with ADK framework
-- RAG Corpus: {'✅ Connected' if os.getenv('RAG_CORPUS_ID') else '❌ Not configured'}
+- RAG Corpus: {'✅ Connected' if os.getenv('RAG_CORPUS') else '❌ Not configured'}
 - Distributed Tracing: ✅ Available
 - Multi-Agent Coordination: ✅ Framework ready
 

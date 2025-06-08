@@ -8,6 +8,10 @@ DOCKER_REGISTRY ?= $(shell grep -E '^DOCKER_REGISTRY=' .env 2>/dev/null | cut -d
 DOCKER_IMAGE_PREFIX ?= $(shell grep -E '^DOCKER_IMAGE_PREFIX=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ' || echo "atlas")
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 
+# Auth variables
+GOOGLE_CLIENT_ID ?= $(shell grep -E '^GOOGLE_CLIENT_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+RAG_CORPUS ?= $(shell grep -E '^RAG_CORPUS=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+
 # Monitor system variables
 MONITOR_SERVICE_ACCOUNT ?= atlas-monitor-service
 MONITOR_JOB_NAME ?= atlas-monitor
@@ -275,6 +279,15 @@ deploy-vertex-ai: check-gcloud
 deploy-api: check-docker check-gcloud
 	@env | grep GOOGLE
 	@echo "Deploying FastAPI backend to Cloud Run..."
+	@if [ -z "$(GOOGLE_CLIENT_ID)" ]; then \
+		echo "Error: GOOGLE_CLIENT_ID not found in .env file"; \
+		exit 1; \
+	fi
+	@if [ -z "$(RAG_CORPUS)" ]; then \
+		echo "Warning: RAG_CORPUS not found in .env file (chat functionality may not work)"; \
+	fi
+	@echo "✅ Using GOOGLE_CLIENT_ID: $(shell echo "$(GOOGLE_CLIENT_ID)" | head -c 20)..."
+	@echo "✅ Using RAG_CORPUS: $(RAG_CORPUS)"
 	@docker build \
 		--platform linux/amd64 \
 		-t "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)" \
@@ -287,7 +300,10 @@ deploy-api: check-docker check-gcloud
 		--platform managed \
 		--region $(CLOUD_RUN_REGION) \
 		--allow-unauthenticated \
-		--port 8000
+		--port 8000 \
+		--set-env-vars="ENV=production" \
+		--set-env-vars="GOOGLE_CLIENT_ID=$(GOOGLE_CLIENT_ID)" \
+		--set-env-vars="RAG_CORPUS=$(RAG_CORPUS)"
 	@echo "Backend API deployed. Service URL:"
 	@gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
 		--platform managed \
@@ -568,7 +584,7 @@ help:
 	@echo "  make lint             - Run linters"
 	@echo "  make format           - Format code"
 	@echo "  make clean            - Clean up development environment"
-	@echo ""
+	@echo ""f
 	@echo "Devcontainer Commands:"
 	@echo "  make devcontainer-setup  - Set up devcontainer environment"
 	@echo "  make devcontainer-clean  - Clean devcontainer environment"
