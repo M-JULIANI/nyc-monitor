@@ -138,7 +138,7 @@ jobs:
 
       - name: Deploy Frontend
         run: |
-          make deploy-frontend
+          make deploy-web
         env:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
