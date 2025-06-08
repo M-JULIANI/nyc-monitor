@@ -173,7 +173,11 @@ Error Details: {str(e)}
 
 
 # Create the root agent instance for ADK deployment
-root_agent = AtlasRootAgent()
+root_agent_instance = AtlasRootAgent()
+
+# Export the orchestrator agent for ADK deployment
+# This is what should be deployed to Vertex AI
+root_agent = root_agent_instance.orchestrator
 
 # ADK expects a callable agent - create the interface
 
@@ -184,7 +188,7 @@ async def adk_investigate(prompt: str, context: CallbackContext = None) -> str:
     This is what gets called when the agent is deployed to Vertex AI.
     """
     context_dict = context.session_data if context else {}
-    return await root_agent.investigate(prompt, context_dict)
+    return await root_agent_instance.investigate(prompt, context_dict)
 
 # Export the agent for deployment
-__all__ = ["root_agent", "adk_investigate"]
+__all__ = ["root_agent", "adk_investigate", "root_agent_instance"]
