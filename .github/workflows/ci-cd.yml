@@ -124,6 +124,8 @@ jobs:
           DOCKER_IMAGE_PREFIX: ${{ env.DOCKER_IMAGE_PREFIX }}
           VERSION: ${{ env.VERSION }}
           STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          RAG_CORPUS: ${{ secrets.RAG_CORPUS }}
 
       - name: Deploy Vertex AI Backend
         run: |
