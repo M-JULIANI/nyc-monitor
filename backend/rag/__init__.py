@@ -12,4 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import agent
+# This package contains the RAG (Retrieval-Augmented Generation) backend implementation
+# Individual modules should be imported directly from their respective submodules

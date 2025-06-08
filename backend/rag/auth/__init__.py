@@ -12,18 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Sub-agents module for multi-agent investigation system."""
+"""Authentication module for Google OAuth token verification."""
 
-from .research_agent import create_research_agent
+from .auth import verify_google_token, oauth2_scheme
 
-# TODO: Add other agents as they are implemented
-# from .data_agent import data_agent
-# from .analysis_agent import analysis_agent
-# from .report_agent import report_agent
-
-__all__ = [
-    "create_research_agent",
-    # "data_agent",
-    # "analysis_agent",
-    # "report_agent",
-]
+__all__ = ["verify_google_token", "oauth2_scheme"]

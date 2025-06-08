@@ -15,6 +15,7 @@
 """Research tools for external data collection with artifact support."""
 
 import requests
+import logging
 from typing import List, Dict, Optional
 from google.genai import types
 from google.adk.tools import FunctionTool, ToolContext

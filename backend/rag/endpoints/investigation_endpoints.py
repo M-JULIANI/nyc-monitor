@@ -14,6 +14,7 @@ from datetime import datetime
 from ..investigation_service import investigate_alert
 from ..investigation.state_manager import AlertData
 from ..investigation.progress_tracker import get_progress_tracker
+from ..investigation.tracing import get_distributed_tracer
 from ..auth import verify_google_token
 
 # Router
@@ -22,24 +23,8 @@ investigation_router = APIRouter(prefix="/investigate", tags=["investigation"])
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-
-def verify_google_token(token: str = Depends(oauth2_scheme)):
-    """Token verification - should be moved to a shared auth module."""
-    from google.oauth2 import id_token
-    from google.auth.transport import requests as grequests
-
-    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
-
-    try:
-        idinfo = id_token.verify_oauth2_token(
-            token, grequests.Request(), GOOGLE_CLIENT_ID)
-        return idinfo
-    except Exception:
-        raise HTTPException(
-            status_code=401, detail="Invalid authentication credentials")
+# Get tracing service
+tracer = get_distributed_tracer()
 
 
 class InvestigationResult(BaseModel):
@@ -169,3 +154,111 @@ async def stream_investigation_progress(
             "Content-Type": "text/event-stream"
         }
     )
+
+
+@investigation_router.get("/{investigation_id}/trace/summary")
+async def get_trace_summary(
+    investigation_id: str,
+    user=Depends(verify_google_token)
+):
+    """Get distributed tracing summary for an investigation."""
+    try:
+        summary = tracer.get_trace_summary(investigation_id)
+        return {
+            "investigation_id": investigation_id,
+            "tracing_summary": summary
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@investigation_router.get("/{investigation_id}/trace/timeline")
+async def get_trace_timeline(
+    investigation_id: str,
+    user=Depends(verify_google_token)
+):
+    """Get chronological timeline of all trace events for an investigation."""
+    try:
+        timeline = tracer.get_trace_timeline(investigation_id)
+        return {
+            "investigation_id": investigation_id,
+            "trace_timeline": timeline,
+            "total_events": len(timeline)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@investigation_router.get("/{investigation_id}/trace/export")
+async def export_trace_data(
+    investigation_id: str,
+    user=Depends(verify_google_token)
+):
+    """Export complete trace data for an investigation (spans, messages, timeline)."""
+    try:
+        trace_data = tracer.export_trace(investigation_id)
+        return {
+            "investigation_id": investigation_id,
+            "trace_export": trace_data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@investigation_router.get("/{investigation_id}/agent-flow")
+async def get_agent_message_flow(
+    investigation_id: str,
+    user=Depends(verify_google_token)
+):
+    """Get a visualization-friendly view of agent message flow and interactions."""
+    try:
+        timeline = tracer.get_trace_timeline(investigation_id)
+        summary = tracer.get_trace_summary(investigation_id)
+
+        # Extract agent interactions
+        agent_interactions = []
+        message_events = [
+            event for event in timeline if event.get("type") == "message"]
+
+        for msg in message_events:
+            agent_interactions.append({
+                "timestamp": msg["timestamp"],
+                "from": msg["from_agent"],
+                "to": msg["to_agent"],
+                "message_type": msg["message_type"],
+                "content_preview": msg["content_preview"],
+                "metadata": msg.get("metadata", {})
+            })
+
+        # Extract agent execution spans
+        span_events = [event for event in timeline if event.get(
+            "type") in ["span_start", "span_end"]]
+        agent_executions = []
+
+        for event in span_events:
+            if event.get("type") == "span_start" and event.get("agent"):
+                agent_executions.append({
+                    "timestamp": event["timestamp"],
+                    "agent": event["agent"],
+                    "operation": event["operation"],
+                    "span_id": event["span_id"],
+                    "tool": event.get("tool"),
+                    "metadata": event.get("metadata", {})
+                })
+
+        return {
+            "investigation_id": investigation_id,
+            "agent_message_flow": {
+                "agent_interactions": agent_interactions,
+                "agent_executions": agent_executions,
+                "summary": {
+                    "total_messages": len(message_events),
+                    "total_agent_executions": len(agent_executions),
+                    "agents_involved": summary.get("agents_involved", []),
+                    "tools_used": summary.get("tools_used", []),
+                    "total_duration_ms": summary.get("total_duration_ms", 0)
+                }
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

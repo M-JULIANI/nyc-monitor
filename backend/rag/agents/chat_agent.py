@@ -10,7 +10,7 @@ from google.adk.agents import Agent
 from google.genai import types
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
-from ..tools.research_tools import _create_rag_retrieval_tool
+from ..tools.research_tools import create_rag_retrieval_tool
 
 logger = logging.getLogger(__name__)
 date_today = date.today()
@@ -33,7 +33,7 @@ def create_chat_agent(rag_corpus: Optional[str] = None) -> Agent:
     tools = []
 
     # Add RAG tool for corpus queries
-    rag_tool = _create_rag_retrieval_tool(rag_corpus)
+    rag_tool = create_rag_retrieval_tool(rag_corpus)
     if rag_tool:
         tools.append(rag_tool)
     else:

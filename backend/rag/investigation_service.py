@@ -17,7 +17,7 @@ import logging
 from typing import Optional, List
 from datetime import datetime, date
 
-from backend.rag.agents.orchestrator_agent import create_orchestrator_agent
+from .agents.orchestrator_agent import create_orchestrator_agent
 from google.genai import types
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext
@@ -27,13 +27,17 @@ from vertexai.preview import rag
 
 from dotenv import load_dotenv
 from .prompts.orchestrator import return_orchestrator_instructions
-from .sub_agents.research_agent import research_agent
+from .sub_agents.research_agent import create_research_agent
 from .tools.coordination_tools import update_alert_status, manage_investigation_state
 from .investigation.state_manager import AlertData, state_manager
 from .investigation.progress_tracker import progress_tracker, ProgressStatus
+from .investigation.tracing import get_distributed_tracer
 
 logger = logging.getLogger(__name__)
 date_today = date.today()
+
+# Get the global tracer
+tracer = get_distributed_tracer()
 
 
 def _create_artifact_service() -> InMemoryArtifactService:
@@ -100,7 +104,9 @@ def _create_investigation_runner(investigation_state):
             "alert_location": investigation_state.alert_data.location,
             "investigation_phase": investigation_state.phase.value,
             "iteration_count": investigation_state.iteration_count,
-            "current_investigation": investigation_state.investigation_id  # Fallback key
+            "current_investigation": investigation_state.investigation_id,  # Fallback key
+            # Use investigation_id as trace_id
+            "trace_id": investigation_state.investigation_id
         }
 
         # Store session state in the session service
@@ -137,6 +143,20 @@ async def investigate_alert(alert_data: AlertData) -> str:
         investigation_state = state_manager.create_investigation(alert_data)
         logger.info(
             f"Created investigation {investigation_state.investigation_id} for alert {alert_data.alert_id}")
+
+        # Initialize distributed tracing for this investigation
+        trace_id = investigation_state.investigation_id
+        tracer.start_trace(
+            trace_id=trace_id,
+            operation_name=f"investigate_alert:{alert_data.event_type}",
+            metadata={
+                "alert_id": alert_data.alert_id,
+                "event_type": alert_data.event_type,
+                "location": alert_data.location,
+                "severity": alert_data.severity,
+                "investigation_id": investigation_state.investigation_id
+            }
+        )
 
         # Start progress tracking
         progress_tracker.start_investigation(
