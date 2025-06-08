@@ -1,8 +1,22 @@
 import React, { useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { AlertCircle, Play, Loader2, CheckCircle, XCircle } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Card,
+  CardHeader,
+  CardContent,
+  Button,
+  Typography,
+  Alert,
+  CircularProgress,
+  Box,
+  Grid,
+  Paper
+} from '@mui/material';
+import {
+  PlayArrow,
+  CheckCircle,
+  Error as ErrorIcon,
+  Warning
+} from '@mui/icons-material';
 
 interface InvestigationResult {
   investigation_id: string;
@@ -47,14 +61,16 @@ const InvestigationTester: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        throw new globalThis.Error(errorMessage);
       }
 
       const data = await response.json();
       setResult(data);
       setInvestigationId(data.investigation_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      const errorMessage = err instanceof globalThis.Error ? err.message : 'Unknown error occurred';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -107,86 +123,114 @@ const InvestigationTester: React.FC = () => {
   };
 
   return (
-    <Card className="w-full max-w-4xl">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <AlertCircle className="h-5 w-5" />
-          Investigation System Tester
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <h3 className="font-medium mb-2">Test Payload:</h3>
-          <pre className="text-sm bg-white p-3 rounded border overflow-x-auto">
-            {JSON.stringify(testPayload, null, 2)}
-          </pre>
-        </div>
+    <Card sx={{ width: '100%', maxWidth: 1000, margin: 'auto' }}>
+      <CardHeader 
+        title={
+          <Box display="flex" alignItems="center" gap={1}>
+            <Warning color="primary" />
+            <Typography variant="h5">Investigation System Tester</Typography>
+          </Box>
+        }
+      />
+      <CardContent>
+        <Box display="flex" flexDirection="column" gap={3}>
+          {/* Test Payload Display */}
+          <Paper elevation={1} sx={{ p: 2, bgcolor: 'grey.50' }}>
+            <Typography variant="h6" gutterBottom>Test Payload:</Typography>
+            <Paper 
+              elevation={0} 
+              sx={{ 
+                p: 2, 
+                bgcolor: 'white', 
+                border: 1, 
+                borderColor: 'grey.300',
+                fontFamily: 'monospace',
+                fontSize: '0.875rem',
+                overflowX: 'auto'
+              }}
+            >
+              <pre>{JSON.stringify(testPayload, null, 2)}</pre>
+            </Paper>
+          </Paper>
 
-        <div className="flex gap-2">
-          <Button 
-            onClick={startInvestigation} 
-            disabled={isLoading}
-            className="flex items-center gap-2"
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
+          {/* Action Buttons */}
+          <Box display="flex" gap={2}>
+            <Button
+              variant="contained"
+              onClick={startInvestigation}
+              disabled={isLoading}
+              startIcon={isLoading ? <CircularProgress size={20} /> : <PlayArrow />}
+            >
+              {isLoading ? 'Running Investigation...' : 'Start Investigation'}
+            </Button>
+
+            {investigationId && (
+              <>
+                <Button variant="outlined" onClick={viewTraceData}>
+                  View Trace Data
+                </Button>
+                <Button variant="outlined" onClick={viewAgentFlow}>
+                  View Agent Flow
+                </Button>
+              </>
             )}
-            {isLoading ? 'Running Investigation...' : 'Start Investigation'}
-          </Button>
+          </Box>
 
-          {investigationId && (
-            <>
-              <Button variant="outline" onClick={viewTraceData}>
-                View Trace Data
-              </Button>
-              <Button variant="outline" onClick={viewAgentFlow}>
-                View Agent Flow
-              </Button>
-            </>
+          {/* Error Alert */}
+          {error && (
+            <Alert severity="error" icon={<ErrorIcon />}>
+              {error}
+            </Alert>
           )}
-        </div>
 
-        {error && (
-          <Alert variant="destructive">
-            <XCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {result && (
-          <Alert>
-            <CheckCircle className="h-4 w-4" />
-            <AlertDescription>
+          {/* Success Alert */}
+          {result && (
+            <Alert severity="success" icon={<CheckCircle />}>
               <strong>Investigation completed!</strong> ID: {result.investigation_id}
-            </AlertDescription>
-          </Alert>
-        )}
+            </Alert>
+          )}
 
-        {result && (
-          <div className="space-y-4">
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="font-medium mb-2">Investigation Results:</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <strong>Status:</strong> {result.status}
-                </div>
-                <div>
-                  <strong>Confidence:</strong> {(result.confidence_score * 100).toFixed(0)}%
-                </div>
-                <div className="col-span-2">
-                  <strong>Artifacts:</strong> {result.artifacts.join(', ')}
-                </div>
-              </div>
-            </div>
+          {/* Results Display */}
+          {result && (
+            <Box display="flex" flexDirection="column" gap={2}>
+              <Paper elevation={1} sx={{ p: 2, bgcolor: 'success.light', color: 'success.contrastText' }}>
+                <Typography variant="h6" gutterBottom>Investigation Results:</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <Typography variant="body2">
+                      <strong>Status:</strong> {result.status}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2">
+                      <strong>Confidence:</strong> {(result.confidence_score * 100).toFixed(0)}%
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography variant="body2">
+                      <strong>Artifacts:</strong> {result.artifacts.join(', ')}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
 
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-medium mb-2">Investigation Findings:</h3>
-              <pre className="text-sm whitespace-pre-wrap">{result.findings}</pre>
-            </div>
-          </div>
-        )}
+              <Paper elevation={1} sx={{ p: 2, bgcolor: 'info.light', color: 'info.contrastText' }}>
+                <Typography variant="h6" gutterBottom>Investigation Findings:</Typography>
+                <Typography 
+                  variant="body2" 
+                  component="pre" 
+                  sx={{ 
+                    whiteSpace: 'pre-wrap',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  {result.findings}
+                </Typography>
+              </Paper>
+            </Box>
+          )}
+        </Box>
       </CardContent>
     </Card>
   );
