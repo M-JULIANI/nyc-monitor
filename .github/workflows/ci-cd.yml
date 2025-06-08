@@ -116,7 +116,7 @@ jobs:
 
       - name: Deploy Backend API
         run: |
-          make deploy-backend-api
+          make deploy-api
         env:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}
@@ -125,9 +125,9 @@ jobs:
           VERSION: ${{ env.VERSION }}
           STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
 
-      - name: Deploy Backend
+      - name: Deploy Vertex AI Backend
         run: |
-          make deploy-backend
+          make deploy-vertex-ai
         env:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GOOGLE_CLOUD_LOCATION: ${{ secrets.GOOGLE_CLOUD_LOCATION }}

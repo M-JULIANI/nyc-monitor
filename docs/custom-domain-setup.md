@@ -263,7 +263,7 @@ After setting up your custom domain, you need to update authentication configura
 The backend CORS settings have been updated to include your custom domain. After domain setup, redeploy the backend:
 
 ```bash
-make deploy-backend-api
+make deploy-api
 ```
 
 ### 3. Frontend Configuration  
