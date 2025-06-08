@@ -74,10 +74,10 @@ check-gcloud:
 	@echo "Google Cloud setup verified"
 
 # Development environment
-install: check-deps install-backend install-frontend
+install: check-deps install-api install-web
 	@echo "All dependencies installed successfully"
 
-install-backend:
+install-api:
 	@echo "Installing backend dependencies..."
 	@echo "DOCKER_REGISTRY is: '$(DOCKER_REGISTRY)'"
 	@if [ -f "backend/pyproject.toml" ]; then \
@@ -86,7 +86,7 @@ install-backend:
 		echo "Warning: backend/pyproject.toml not found"; \
 	fi
 
-install-frontend:
+install-web:
 	@echo "Installing frontend dependencies..."
 	@if [ -f "frontend/package.json" ]; then \
 		cd frontend && \
@@ -97,7 +97,7 @@ install-frontend:
 		echo "Warning: frontend/package.json not found"; \
 	fi
 
-install-frontend-test:
+install-web-test:
 	@echo "Installing frontend test dependencies (Vitest, TypeScript)..."
 	cd frontend && \
 	npm install --save-dev vitest
@@ -133,25 +133,46 @@ dev:
 	echo "Starting frontend..." && \
 	cd frontend && npm run dev -- --host 0.0.0.0
 
-dev-backend:
+dev-api:
 	@echo "Starting backend development server..."
 	cd backend && poetry run uvicorn rag.main:app --host 0.0.0.0 --port 8000 --reload
 
-dev-frontend:
+dev-web:
 	@echo "Starting frontend development server..."
 	cd frontend && npm run dev -- --host 0.0.0.0
 
+# Test against deployed backend
+dev-web-deployed:
+	@echo "Starting frontend with deployed backend..."
+	@echo "Backend URL: https://atlas-backend-blz2r3yjgq-uc.a.run.app"
+	@cd frontend && REACT_APP_USE_DEPLOYED_BACKEND=true npm run dev -- --host 0.0.0.0
+
+# Get deployed backend URL
+get-api-url: check-gcloud
+	@echo "🔗 Deployed backend URL:"
+	@gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
+		--platform managed \
+		--region $(CLOUD_RUN_REGION) \
+		--format='value(status.url)'
+
+# Test deployed services
+test-deployed-api:
+	@echo "🧪 Testing deployed backend health..."
+	@BACKEND_URL=$$(gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) --platform managed --region $(CLOUD_RUN_REGION) --format='value(status.url)' 2>/dev/null || echo "https://atlas-backend-blz2r3yjgq-uc.a.run.app"); \
+	echo "Testing: $$BACKEND_URL/api/health"; \
+	curl -f "$$BACKEND_URL/api/health" || echo "❌ Backend health check failed"
+
 # Testing
-test: test-backend test-frontend
+test: test-api test-web
 	@echo "All tests completed"
 
-test-backend:
+test-api:
 	@echo "Running backend tests..."
 	@if [ -f "backend/pyproject.toml" ]; then \
 		cd backend && poetry run pytest; \
 	fi
 
-test-frontend:
+test-web:
 	@echo "Running frontend tests..."
 	@if [ -f "frontend/package.json" ]; then \
 		cd frontend && npm test; \
@@ -193,10 +214,10 @@ check-docker:
 	fi
 
 # Production Build (Frontend only - Backend uses Vertex AI)
-build: build-frontend build-backend
+build: build-web build-api
 	@echo "Production build completed"
 
-build-frontend: check-docker
+build-web: check-docker
 	@echo "Building frontend production image..."
 	@if [ -f "frontend/Dockerfile" ]; then \
 		docker build \
@@ -208,7 +229,7 @@ build-frontend: check-docker
 		exit 1; \
 	fi
 
-build-backend: check-docker
+build-api: check-docker
 	@echo "Building backend production image..."
 	@if [ -f "backend/Dockerfile" ]; then \
 		docker build \
@@ -239,10 +260,10 @@ CLOUD_RUN_REGION ?= $(GOOGLE_CLOUD_LOCATION)
 CLOUD_RUN_BACKEND_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-backend
 
 # Deployment
-deploy: deploy-backend deploy-backend-api deploy-frontend deploy-monitor
+deploy: deploy-api deploy-api-api deploy-web deploy-monitor
 	@echo "Deployment completed"
 
-deploy-backend: check-gcloud
+deploy-api: check-gcloud
 	@echo "Deploying backend to Vertex AI..."
 	@if [ -f "backend/deployment/deploy.py" ]; then \
 		cd backend && poetry run python deployment/deploy.py; \
@@ -251,7 +272,7 @@ deploy-backend: check-gcloud
 		exit 1; \
 	fi
 
-deploy-backend-api: check-docker check-gcloud
+deploy-api-api: check-docker check-gcloud
 	@env | grep GOOGLE
 	@echo "Deploying FastAPI backend to Cloud Run..."
 	@docker build \
@@ -273,7 +294,7 @@ deploy-backend-api: check-docker check-gcloud
 		--region $(CLOUD_RUN_REGION) \
 		--format='value(status.url)'
 
-deploy-frontend: check-docker check-gcloud
+deploy-web: check-docker check-gcloud
 	@echo "Building and deploying frontend..."
 	@if [ -z "$(DOCKER_REGISTRY)" ] || [ "$(DOCKER_REGISTRY)" = "localhost" ]; then \
 		echo "Error: DOCKER_REGISTRY must be set for frontend deployment"; \
@@ -533,14 +554,17 @@ clean:
 help:
 	@echo "Development Commands:"
 	@echo "  make install           - Install all dependencies"
-	@echo "  make install-backend   - Install backend dependencies"
-	@echo "  make install-frontend  - Install frontend dependencies"
+	@echo "  make install-api   - Install backend dependencies"
+	@echo "  make install-web  - Install frontend dependencies"
 	@echo "  make dev              - Start development environment (both services)"
-	@echo "  make dev-backend      - Start backend development server"
-	@echo "  make dev-frontend     - Start frontend development server"
+	@echo "  make dev-api      - Start backend development server"
+	@echo "  make dev-web     - Start frontend development server"
+	@echo "  make dev-web-deployed - Start frontend using deployed backend"
 	@echo "  make test             - Run all tests"
-	@echo "  make test-backend     - Run backend tests"
-	@echo "  make test-frontend    - Run frontend tests"
+	@echo "  make test-api     - Run backend tests"
+	@echo "  make test-web    - Run frontend tests"
+	@echo "  make test-deployed-api    - Test deployed backend health"
+	@echo "  make get-api-url  - Get deployed backend URL"
 	@echo "  make lint             - Run linters"
 	@echo "  make format           - Format code"
 	@echo "  make clean            - Clean up development environment"
@@ -551,12 +575,12 @@ help:
 	@echo ""
 	@echo "Production Commands:"
 	@echo "  make build            - Build all production images"
-	@echo "  make build-frontend   - Build frontend production image"
-	@echo "  make build-backend    - Build backend production image"
+	@echo "  make build-web   - Build frontend production image"
+	@echo "  make build-api    - Build backend production image"
 	@echo "  make build-monitor - Build monitor system image"
 	@echo "  make deploy           - Deploy all services (backend, frontend, monitor)"
-	@echo "  make deploy-backend   - Deploy backend agent to Vertex AI"
-	@echo "  make deploy-frontend  - Deploy frontend container"
+	@echo "  make deploy-api   - Deploy backend agent to Vertex AI"
+	@echo "  make deploy-web  - Deploy frontend container"
 	@echo ""
 	@echo "NYC Monitor System Commands:"
 	@echo "  make setup-monitor    - Set up monitor system infrastructure (ONE TIME ONLY)"
@@ -568,6 +592,11 @@ help:
 	@echo "  make debug-job-executions - Check job executions"
 	@echo "  make debug-job-logs   - Check job logs"
 	@echo "  make debug-monitor-full - Run all debug checks"
+	@echo ""
+	@echo "Testing Against Deployed Services:"
+	@echo "  make dev-web-deployed - Test frontend locally against deployed backend"
+	@echo "  make test-deployed-api    - Check if deployed backend is healthy"
+	@echo "  make get-api-url  - Get the deployed backend URL"
 	@echo ""
 	@echo "Troubleshooting:"
 	@echo "  If monitor not running automatically, use 'make debug-monitor-full'"

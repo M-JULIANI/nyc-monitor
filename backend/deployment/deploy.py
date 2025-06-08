@@ -1,21 +1,7 @@
-# Copyright 2025 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import vertexai
 from vertexai import agent_engines
 from vertexai.preview.reasoning_engines import AdkApp
-from rag.agent import root_agent
+from rag.root_agent import root_agent
 import logging
 import os
 from dotenv import set_key, load_dotenv
@@ -58,13 +44,13 @@ def update_env_file(agent_engine_id, env_file_path):
         print(f"Error updating .env file: {e}")
 
 
-logger.info("deploying app...")
+logger.info("Deploying Atlas Root Agent to Vertex AI ADK...")
 app = AdkApp(
-    agent=root_agent,
+    agent=root_agent.orchestrator,
     enable_tracing=True,
 )
 
-logging.debug("deploying agent to agent engine:")
+logging.debug("Deploying agent to agent engine:")
 
 remote_app = agent_engines.create(
     app,
@@ -79,12 +65,12 @@ remote_app = agent_engines.create(
     extra_packages=[
         "./rag",
     ],
-    display_name="Atlas RAG Agent"
+    display_name="Atlas Multi-Agent Investigation System"
 )
 
 # log remote_app
 logging.info(
-    f"Deployed agent to Vertex AI Agent Engine successfully, resource name: {remote_app.resource_name}")
+    f"Deployed Atlas Root Agent to Vertex AI successfully, resource name: {remote_app.resource_name}")
 
 # Update the .env file with the new Agent Engine ID
 update_env_file(remote_app.resource_name, ENV_FILE_PATH)
