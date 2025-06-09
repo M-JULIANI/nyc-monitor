@@ -50,9 +50,8 @@ class MonitorJob:
             # Reddit collector (only if credentials are available)
             try:
                 reddit_collector = RedditCollector()
-                self.collectors.append(hackernews_collector)
-                logger.info("✅ Reddit collector initialized successfully")
                 self.collectors.append(reddit_collector)
+                logger.info("✅ Reddit collector initialized successfully")
             except ValueError as e:
                 logger.warning(
                     f"⚠️  Reddit collector not initialized: {str(e)}")
