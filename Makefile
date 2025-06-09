@@ -34,6 +34,9 @@ GOOGLE_CLOUD_PROJECT_NUMBER ?= $(shell gcloud projects describe $(GOOGLE_CLOUD_P
 CLOUD_RUN_API_BASE := https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1
 CLOUD_RUN_JOB_URL := $(CLOUD_RUN_API_BASE)/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run
 
+# Alternative: Use gcloud execution URL for Cloud Run Jobs
+CLOUD_RUN_JOB_EXEC_URL := https://run.googleapis.com/v2/projects/$(GOOGLE_CLOUD_PROJECT)/locations/$(GOOGLE_CLOUD_LOCATION)/jobs/$(MONITOR_JOB_NAME):run
+
 # Reddit API credentials (for monitor system)
 REDDIT_CLIENT_ID ?= $(shell grep -E '^REDDIT_CLIENT_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 REDDIT_CLIENT_SECRET ?= $(shell grep -E '^REDDIT_CLIENT_SECRET=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
@@ -442,22 +445,20 @@ deploy-monitor: build-monitor check-gcloud
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
-			--uri="$(CLOUD_RUN_JOB_URL)" \
+			--schedule="*/15 * * * *" \
+			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
-			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
-			--oidc-token-audience="$(CLOUD_RUN_JOB_URL)" \
+			--oauth-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
 			--quiet; \
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
-			--uri="$(CLOUD_RUN_JOB_URL)" \
+			--schedule="*/15 * * * *" \
+			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
-			--oidc-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
-			--oidc-token-audience="$(CLOUD_RUN_JOB_URL)" \
+			--oauth-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
 			--quiet; \
 	fi
 	@echo ""
