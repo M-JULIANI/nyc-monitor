@@ -126,6 +126,8 @@ jobs:
           STAGING_BUCKET: ${{ secrets.STAGING_BUCKET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           RAG_CORPUS: ${{ secrets.RAG_CORPUS }}
+          ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+          JUDGE_EMAILS: ${{ secrets.JUDGE_EMAILS }}
 
       - name: Deploy Vertex AI Backend
         run: |

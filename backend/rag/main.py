@@ -1,5 +1,5 @@
 from .auth import verify_google_token
-from .endpoints import chat_router, investigation_router
+from .endpoints import chat_router, investigation_router, auth_router, admin_router
 from .config import initialize_config, get_config
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import RedirectResponse
@@ -83,6 +83,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 # Include routers
 app.include_router(chat_router)
 app.include_router(investigation_router)
+app.include_router(auth_router)
+app.include_router(admin_router)
 
 
 @app.get("/")

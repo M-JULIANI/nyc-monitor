@@ -21,6 +21,19 @@ else
     RAG_CORPUS := $(shell grep -E '^RAG_CORPUS=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 endif
 
+# Email whitelist variables
+ifeq ($(origin ADMIN_EMAILS), environment)
+    # Use environment variable as-is
+else
+    ADMIN_EMAILS := $(shell grep -E '^ADMIN_EMAILS=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
+
+ifeq ($(origin JUDGE_EMAILS), environment)
+    # Use environment variable as-is
+else
+    JUDGE_EMAILS := $(shell grep -E '^JUDGE_EMAILS=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
+
 # Monitor system variables
 MONITOR_SERVICE_ACCOUNT ?= atlas-monitor-service
 MONITOR_JOB_NAME ?= atlas-monitor
@@ -319,7 +332,9 @@ deploy-api: check-docker check-gcloud
 		--port 8000 \
 		--set-env-vars="ENV=production" \
 		--set-env-vars="GOOGLE_CLIENT_ID=$(GOOGLE_CLIENT_ID)" \
-		--set-env-vars="RAG_CORPUS=$(RAG_CORPUS)"
+		--set-env-vars="RAG_CORPUS=$(RAG_CORPUS)" \
+		--set-env-vars="ADMIN_EMAILS=$(ADMIN_EMAILS)" \
+		--set-env-vars="JUDGE_EMAILS=$(JUDGE_EMAILS)"
 	@echo "Backend API deployed. Service URL:"
 	@gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
 		--platform managed \
