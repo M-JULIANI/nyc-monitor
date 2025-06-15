@@ -13,7 +13,16 @@ const Navbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 w-full h-14 bg-zinc-950 text-zinc-100 flex items-center justify-between px-8 z-50 border-b border-zinc-800">
-      <div className="font-bold text-lg tracking-tight">nyc monitor</div>
+      <button
+        onClick={() => {
+          if (location.pathname !== '/') {
+            navigate('/');
+          }
+        }}
+        className="font-bold text-lg tracking-tight hover:text-zinc-300 transition-colors duration-200 cursor-pointer"
+      >
+        nyc monitor
+      </button>
       <div className="flex items-center gap-2">
         <button
           onClick={() => navigate('/home')}
