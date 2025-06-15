@@ -10,7 +10,7 @@ interface ReportCardProps {
   author: string;
   createdAt: string;
   driveLink?: string;
-  onViewDetails: () => void;
+ // onViewDetails: () => void;
 }
 
 const ReportCard: React.FC<ReportCardProps> = ({
@@ -23,7 +23,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
   author,
   createdAt,
   driveLink,
-  onViewDetails,
+ // onViewDetails,
 }) => {
   return (
     <div className="card bg-zinc-800 card-hover cursor-pointer flex flex-col h-full">

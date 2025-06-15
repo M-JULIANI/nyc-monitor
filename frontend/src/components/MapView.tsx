@@ -93,15 +93,15 @@ const MapView: React.FC = () => {
     zoom: 10
   };
 
-  const getPriorityColor = (priority: string): string => {
-    switch (priority) {
-      case 'critical': return '#dc2626'; // red
-      case 'high': return '#ea580c'; // orange
-      case 'medium': return '#d97706'; // amber
-      case 'low': return '#65a30d'; // green
-      default: return '#6b7280'; // gray
-    }
-  };
+  // const getPriorityColor = (priority: string): string => {
+  //   switch (priority) {
+  //     case 'critical': return '#dc2626'; // red
+  //     case 'high': return '#ea580c'; // orange
+  //     case 'medium': return '#d97706'; // amber
+  //     case 'low': return '#65a30d'; // green
+  //     default: return '#6b7280'; // gray
+  //   }
+  // };
 
   const getSourceIcon = (source: string): string => {
     switch (source) {

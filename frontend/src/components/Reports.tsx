@@ -95,7 +95,7 @@ const Reports: React.FC = () => {
               author={report.author}
               createdAt={report.createdAt}
               driveLink={report.driveLink}
-              onViewDetails={() => alert('View details functionality coming soon!')}
+            //  onViewDetails={() => alert('View details functionality coming soon!')}
             />
           ))}
         </div>
