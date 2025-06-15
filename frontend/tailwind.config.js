@@ -17,9 +17,9 @@ export default {
         background: '#f9fafb', // gray-50
         border: '#e5e7eb', // gray-200
         text: {
-          primary: '#111827', // gray-900
-          secondary: '#374151', // gray-700
-          muted: '#6b7280' // gray-500
+          primary: '#f4f4f5', // zinc-100
+          secondary: '#d4d4d8', // zinc-300
+          muted: '#a1a1aa' // zinc-400
         }
       },
       spacing: {
