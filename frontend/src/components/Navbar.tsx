@@ -3,65 +3,36 @@ import { useNavigate, useLocation } from 'react-router-dom';
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate('/login');
-  };
 
-  const navLinkStyle = (path: string) => ({
-    background: location.pathname === path ? '#555' : 'transparent',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    padding: '0.5rem 1rem',
-    cursor: 'pointer',
-    marginRight: '0.5rem',
-    transition: 'background-color 0.2s'
-  });
+  const navLinkClass = (path: string) =>
+    `px-4 py-2 rounded text-sm font-medium transition-colors duration-200 ${
+      location.pathname === path
+        ? 'bg-zinc-800 text-zinc-100'
+        : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'
+    }`;
 
   return (
-    <nav style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '60px',
-      background: '#222',
-      color: '#fff',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '0 2rem',
-      zIndex: 1000,
-      boxSizing: 'border-box'
-    }}>
-      <div style={{ fontWeight: 'bold', fontSize: '1.2rem' }}>nyc monitor</div>
-      
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <button 
-          onClick={() => navigate('/home')} 
-          style={navLinkStyle('/home')}
+    <nav className="fixed top-0 left-0 w-full h-14 bg-zinc-950 text-zinc-100 flex items-center justify-between px-8 z-50 border-b border-zinc-800">
+      <div className="font-bold text-lg tracking-tight">nyc monitor</div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => navigate('/home')}
+          className={navLinkClass('/home')}
         >
           Home
         </button>
-        <button 
-          onClick={() => navigate('/testing')} 
-          style={navLinkStyle('/testing')}
+        <button
+          onClick={() => navigate('/testing')}
+          className={navLinkClass('/testing')}
         >
           Testing
         </button>
-        <button 
-          onClick={handleLogout} 
-          style={{ 
-            background: '#d73a49', 
-            color: '#fff', 
-            border: 'none', 
-            borderRadius: '4px', 
-            padding: '0.5rem 1rem', 
-            cursor: 'pointer',
-            marginLeft: '1rem'
+        <button
+          onClick={() => {
+            localStorage.clear();
+            navigate('/login');
           }}
+          className="ml-4 px-4 py-2 rounded bg-red-600 text-white font-semibold text-sm hover:bg-red-700 transition-colors duration-200"
         >
           Log out
         </button>
