@@ -2,7 +2,7 @@ import React from 'react';
 
 const Dashboard: React.FC = () => {
   return (
-    <div className="w-full h-full p-4 md:p-8 bg-background text-text-primary">
+    <div className="w-full h-full p-4 md:p-8 bg-zinc-600 text-text-primary">
       <div className="max-w-7xl mx-auto">
         <h2 className="text-2xl md:text-3xl font-bold mb-8 text-text-primary">
           NYC Alert Dashboard

@@ -41,27 +41,8 @@ const Reports: React.FC = () => {
     }
   ];
 
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case 'completed': return '#10b981';
-      case 'in_progress': return '#f59e0b';
-      case 'draft': return '#6b7280';
-      default: return '#6b7280';
-    }
-  };
-
-  const getPriorityColor = (priority: string): string => {
-    switch (priority) {
-      case 'critical': return '#dc2626';
-      case 'high': return '#ea580c';
-      case 'medium': return '#d97706';
-      case 'low': return '#65a30d';
-      default: return '#6b7280';
-    }
-  };
-
   return (
-    <div className="w-full h-full p-4 md:p-8 bg-background text-text-primary overflow-y-auto">
+    <div className="w-full h-full p-4 md:p-8 bg-zinc-600 text-text-primary overflow-y-auto">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-text-primary m-0">
@@ -73,8 +54,8 @@ const Reports: React.FC = () => {
         </div>
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <div className="card text-center">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 ">
+          <div className="card text-center bg-zinc-800">
             <p className="text-2xl font-bold text-accent m-0">
               {sampleReports.filter(r => r.status === 'completed').length}
             </p>
@@ -82,7 +63,7 @@ const Reports: React.FC = () => {
               Completed Reports
             </p>
           </div>
-          <div className="card text-center">
+          <div className="card text-center bg-zinc-800">
             <p className="text-2xl font-bold text-high m-0">
               {sampleReports.filter(r => r.status === 'in_progress').length}
             </p>
@@ -90,7 +71,7 @@ const Reports: React.FC = () => {
               In Progress
             </p>
           </div>
-          <div className="card text-center">
+          <div className="card text-center bg-zinc-800">
             <p className="text-2xl font-bold text-primary m-0">
               {sampleReports.length}
             </p>
@@ -120,7 +101,7 @@ const Reports: React.FC = () => {
         </div>
 
         {/* Coming Soon Section */}
-        <div className="card text-center mt-8">
+        <div className="card text-center mt-8 bg-zinc-800">
           <h3 className="text-xl md:text-2xl font-semibold mb-4 text-text-primary">
             Enhanced Reporting Features Coming Soon
           </h3>

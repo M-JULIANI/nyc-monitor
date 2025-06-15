@@ -154,7 +154,7 @@ const MapView: React.FC = () => {
   return (
     <div className="relative w-full h-full">
       {/* Filter Controls */}
-      <div className="absolute top-4 left-4 z-10 bg-surface/95 p-4 rounded-lg text-text-primary min-w-[200px] shadow-card">
+      <div className="absolute top-4 left-4 z-10 bg-zinc-800 border-zinc-500 border p-4 rounded-lg text-text-primary min-w-[200px] shadow-card">
         <h3 className="text-sm font-semibold mb-4">
           Filters
         </h3>
@@ -166,7 +166,7 @@ const MapView: React.FC = () => {
           <select 
             value={filter.priority}
             onChange={(e) => setFilter(prev => ({ ...prev, priority: e.target.value }))}
-            className="w-full p-1 bg-secondary text-text-primary border border-border rounded text-sm"
+            className="w-full p-1 bg-zinc-600 text-text-primary order border-border rounded text-sm"
           >
             <option value="all">All</option>
             <option value="critical">Critical</option>
@@ -183,7 +183,7 @@ const MapView: React.FC = () => {
           <select 
             value={filter.source}
             onChange={(e) => setFilter(prev => ({ ...prev, source: e.target.value }))}
-            className="w-full p-1 bg-secondary text-text-primary border border-border rounded text-sm"
+            className="w-full p-1 bg-zinc-600 text-text-primary border border-border rounded text-sm"
           >
             <option value="all">All Sources</option>
             <option value="reddit">Reddit</option>
@@ -199,7 +199,7 @@ const MapView: React.FC = () => {
           <select 
             value={filter.status}
             onChange={(e) => setFilter(prev => ({ ...prev, status: e.target.value }))}
-            className="w-full p-1 bg-secondary text-text-primary border border-border rounded text-sm"
+            className="w-full p-1 bg-zinc-600 text-text-primary border border-border rounded text-sm"
           >
             <option value="all">All Status</option>
             <option value="new">New</option>
@@ -258,30 +258,29 @@ const MapView: React.FC = () => {
             onClose={() => setSelectedAlert(null)}
             closeButton={true}
             closeOnClick={false}
-            className="max-w-[300px]"
+            className="max-w-[320px]"
           >
-            <div className="p-2">
-              <h4 className={`text-base font-semibold mb-2 text-${selectedAlert.priority}`}>
-                {getSourceIcon(selectedAlert.source)} {selectedAlert.title}
+            <div className="p-4 bg-zinc-800 border border-zinc-400 rounded-xl text-zinc-100 shadow-xl">
+              <h4 className={`text-base font-semibold mb-2 flex items-center gap-2`}>
+                <span>{getSourceIcon(selectedAlert.source)}</span>
+                <span>{selectedAlert.title}</span>
               </h4>
-              <p className="text-sm text-text-secondary mb-2">
+              <p className="text-sm text-zinc-400 mb-2">
                 {selectedAlert.description}
               </p>
-              <div className="flex justify-between items-center text-xs text-text-muted">
+              <div className="flex justify-between items-center text-xs text-zinc-400 mb-1">
                 <span>
                   📍 {selectedAlert.neighborhood}, {selectedAlert.borough}
                 </span>
-                <span className={`priority-badge priority-${selectedAlert.priority}`}>
-                  {selectedAlert.priority}
-                </span>
+                <span className={`priority-badge priority-${selectedAlert.priority}`}>{selectedAlert.priority}</span>
               </div>
-              <div className="mt-2 pt-2 border-t border-border text-xs text-text-muted">
-                Status: <strong>{selectedAlert.status}</strong> | 
-                Source: <strong>{selectedAlert.source}</strong> | 
+              <div className="mt-2 pt-2 border-t border-zinc-600 text-xs text-zinc-400">
+                Status: <strong className="text-zinc-100">{selectedAlert.status}</strong> | 
+                Source: <strong className="text-zinc-100">{selectedAlert.source}</strong> | 
                 {new Date(selectedAlert.timestamp).toLocaleString()}
               </div>
               <button
-                className="btn btn-primary w-full mt-2 text-xs"
+                className="btn btn-primary w-full mt-3 text-xs"
                 onClick={() => {
                   alert('Generate Report feature coming soon!');
                 }}

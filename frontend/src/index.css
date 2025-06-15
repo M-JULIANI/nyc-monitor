@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-background text-text-primary;
+    @apply bg-zinc-900 text-zinc-100;
   }
 }
 
@@ -18,11 +18,11 @@
   }
   
   .btn-secondary {
-    @apply bg-secondary text-white hover:bg-secondary/90;
+    @apply bg-zinc-700 text-white hover:bg-zinc-600;
   }
   
   .card {
-    @apply bg-surface border border-border rounded-xl p-6 shadow-card transition-all duration-200;
+    @apply bg-zinc-800 border border-zinc-700 rounded-xl p-6 shadow-card transition-all duration-200;
   }
   
   .card-hover {
@@ -62,6 +62,31 @@
   }
   
   .status-draft {
-    @apply bg-text-muted text-white;
+    @apply bg-zinc-500 text-white;
   }
+}
+
+/* Remove default Mapbox popup white background and border */
+.mapboxgl-popup-content {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.mapboxgl-popup-close-button {
+  color: #f4f4f5 !important;      /* Light gray for visibility */
+  background: transparent !important;
+  font-size: 1.5rem !important;   /* Make it larger */
+  top: 8px !important;
+  right: 12px !important;
+  opacity: 0.8 !important;
+  transition: opacity 0.2s;
+}
+
+.mapboxgl-popup-close-button:hover {
+  opacity: 1 !important;
+  color: #fff !important;
+  background: #27272a !important; /* subtle hover bg */
+  border-radius: 9999px !important;
 }

@@ -26,7 +26,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
   onViewDetails,
 }) => {
   return (
-    <div className="card card-hover cursor-pointer flex flex-col h-full">
+    <div className="card bg-zinc-800 card-hover cursor-pointer flex flex-col h-full">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-start gap-4 mb-4">
         <div>
           <h3 className="text-lg font-semibold text-text-primary mb-2">
