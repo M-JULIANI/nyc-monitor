@@ -2,8 +2,8 @@ import { useState, useRef } from 'react';
 import Map, { Layer, Source, Popup } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
-
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA';
+
 // Sample NYC alert data structure
 interface Alert {
   id: string;
@@ -93,15 +93,15 @@ const MapView: React.FC = () => {
     zoom: 10
   };
 
-  const getPriorityColor = (priority: string): string => {
-    switch (priority) {
-      case 'critical': return '#dc2626'; // red
-      case 'high': return '#ea580c'; // orange
-      case 'medium': return '#d97706'; // amber
-      case 'low': return '#65a30d'; // green
-      default: return '#6b7280'; // gray
-    }
-  };
+  // const getPriorityColor = (priority: string): string => {
+  //   switch (priority) {
+  //     case 'critical': return '#dc2626'; // red
+  //     case 'high': return '#ea580c'; // orange
+  //     case 'medium': return '#d97706'; // amber
+  //     case 'low': return '#65a30d'; // green
+  //     default: return '#6b7280'; // gray
+  //   }
+  // };
 
   const getSourceIcon = (source: string): string => {
     switch (source) {
@@ -135,7 +135,7 @@ const MapView: React.FC = () => {
         title: alert.title,
         priority: alert.priority,
         source: alert.source,
-        color: getPriorityColor(alert.priority)
+        color: `priority-${alert.priority}`
       }
     }))
   };
@@ -152,39 +152,21 @@ const MapView: React.FC = () => {
   };
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div className="relative w-full h-full">
       {/* Filter Controls */}
-      <div style={{
-        position: 'absolute',
-        top: '1rem',
-        left: '1rem',
-        zIndex: 10,
-        background: 'rgba(31, 41, 55, 0.95)',
-        padding: '1rem',
-        borderRadius: '0.5rem',
-        color: '#fff',
-        minWidth: '200px',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-      }}>
-        <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.875rem', fontWeight: '600' }}>
+      <div className="absolute top-4 left-4 z-10 bg-zinc-800 border-zinc-500 border p-4 rounded-lg text-text-primary min-w-[200px] shadow-card">
+        <h3 className="text-sm font-semibold mb-4">
           Filters
         </h3>
         
-        <div style={{ marginBottom: '0.5rem' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+        <div className="mb-2">
+          <label className="block text-xs mb-1">
             Priority:
           </label>
           <select 
             value={filter.priority}
             onChange={(e) => setFilter(prev => ({ ...prev, priority: e.target.value }))}
-            style={{
-              width: '100%',
-              padding: '0.25rem',
-              background: '#374151',
-              color: '#fff',
-              border: '1px solid #4b5563',
-              borderRadius: '0.25rem'
-            }}
+            className="w-full p-1 bg-zinc-600 text-text-primary order border-border rounded text-sm"
           >
             <option value="all">All</option>
             <option value="critical">Critical</option>
@@ -194,21 +176,14 @@ const MapView: React.FC = () => {
           </select>
         </div>
 
-        <div style={{ marginBottom: '0.5rem' }}>
-          <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+        <div className="mb-2">
+          <label className="block text-xs mb-1">
             Source:
           </label>
           <select 
             value={filter.source}
             onChange={(e) => setFilter(prev => ({ ...prev, source: e.target.value }))}
-            style={{
-              width: '100%',
-              padding: '0.25rem',
-              background: '#374151',
-              color: '#fff',
-              border: '1px solid #4b5563',
-              borderRadius: '0.25rem'
-            }}
+            className="w-full p-1 bg-zinc-600 text-text-primary border border-border rounded text-sm"
           >
             <option value="all">All Sources</option>
             <option value="reddit">Reddit</option>
@@ -218,20 +193,13 @@ const MapView: React.FC = () => {
         </div>
 
         <div>
-          <label style={{ display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+          <label className="block text-xs mb-1">
             Status:
           </label>
           <select 
             value={filter.status}
             onChange={(e) => setFilter(prev => ({ ...prev, status: e.target.value }))}
-            style={{
-              width: '100%',
-              padding: '0.25rem',
-              background: '#374151',
-              color: '#fff',
-              border: '1px solid #4b5563',
-              borderRadius: '0.25rem'
-            }}
+            className="w-full p-1 bg-zinc-600 text-text-primary border border-border rounded text-sm"
           >
             <option value="all">All Status</option>
             <option value="new">New</option>
@@ -242,17 +210,7 @@ const MapView: React.FC = () => {
       </div>
 
       {/* Alert Count */}
-      <div style={{
-        position: 'absolute',
-        top: '1rem',
-        right: '1rem',
-        zIndex: 10,
-        background: 'rgba(31, 41, 55, 0.95)',
-        padding: '0.5rem 1rem',
-        borderRadius: '0.5rem',
-        color: '#fff',
-        fontSize: '0.875rem'
-      }}>
+      <div className="absolute top-4 right-4 z-10 bg-surface/95 px-4 py-2 rounded-lg text-text-primary text-sm">
         {filteredAlerts.length} alerts visible
       </div>
 
@@ -266,7 +224,6 @@ const MapView: React.FC = () => {
         onClick={handleMapClick}
       >
         <Source type="geojson" data={alertsGeoJSON}>
-          {/* Alert points */}
           <Layer
             id="alert-points"
             type="circle"
@@ -278,7 +235,13 @@ const MapView: React.FC = () => {
                 ['==', ['get', 'priority'], 'medium'], 8,
                 6
               ],
-              'circle-color': ['get', 'color'],
+              'circle-color': [
+                'case',
+                ['==', ['get', 'priority'], 'critical'], '#dc2626',
+                ['==', ['get', 'priority'], 'high'], '#ea580c',
+                ['==', ['get', 'priority'], 'medium'], '#d97706',
+                '#65a30d'
+              ],
               'circle-opacity': 0.8,
               'circle-stroke-width': 2,
               'circle-stroke-color': '#ffffff'
@@ -295,68 +258,30 @@ const MapView: React.FC = () => {
             onClose={() => setSelectedAlert(null)}
             closeButton={true}
             closeOnClick={false}
-            style={{ maxWidth: '300px' }}
+            className="max-w-[320px]"
           >
-            <div style={{ padding: '0.5rem' }}>
-              <h4 style={{ 
-                margin: '0 0 0.5rem 0', 
-                color: getPriorityColor(selectedAlert.priority),
-                fontSize: '1rem',
-                fontWeight: '600'
-              }}>
-                {getSourceIcon(selectedAlert.source)} {selectedAlert.title}
+            <div className="p-4 bg-zinc-800 border border-zinc-400 rounded-xl text-zinc-100 shadow-xl">
+              <h4 className={`text-base font-semibold mb-2 flex items-center gap-2`}>
+                <span>{getSourceIcon(selectedAlert.source)}</span>
+                <span>{selectedAlert.title}</span>
               </h4>
-              <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.875rem', color: '#374151' }}>
+              <p className="text-sm text-zinc-400 mb-2">
                 {selectedAlert.description}
               </p>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                fontSize: '0.75rem',
-                color: '#6b7280'
-              }}>
+              <div className="flex justify-between items-center text-xs text-zinc-400 mb-1">
                 <span>
                   📍 {selectedAlert.neighborhood}, {selectedAlert.borough}
                 </span>
-                <span 
-                  style={{ 
-                    background: getPriorityColor(selectedAlert.priority),
-                    color: '#fff',
-                    padding: '0.25rem 0.5rem',
-                    borderRadius: '0.25rem',
-                    textTransform: 'uppercase',
-                    fontWeight: '600'
-                  }}
-                >
-                  {selectedAlert.priority}
-                </span>
+                <span className={`priority-badge priority-${selectedAlert.priority}`}>{selectedAlert.priority}</span>
               </div>
-              <div style={{ 
-                marginTop: '0.5rem',
-                paddingTop: '0.5rem',
-                borderTop: '1px solid #e5e7eb',
-                fontSize: '0.75rem',
-                color: '#6b7280'
-              }}>
-                Status: <strong>{selectedAlert.status}</strong> | 
-                Source: <strong>{selectedAlert.source}</strong> | 
+              <div className="mt-2 pt-2 border-t border-zinc-600 text-xs text-zinc-400">
+                Status: <strong className="text-zinc-100">{selectedAlert.status}</strong> | 
+                Source: <strong className="text-zinc-100">{selectedAlert.source}</strong> | 
                 {new Date(selectedAlert.timestamp).toLocaleString()}
               </div>
               <button
-                style={{
-                  marginTop: '0.5rem',
-                  padding: '0.5rem 1rem',
-                  background: '#3b82f6',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '0.25rem',
-                  cursor: 'pointer',
-                  fontSize: '0.75rem',
-                  width: '100%'
-                }}
+                className="btn btn-primary w-full mt-3 text-xs"
                 onClick={() => {
-                  // TODO: Implement report generation
                   alert('Generate Report feature coming soon!');
                 }}
               >

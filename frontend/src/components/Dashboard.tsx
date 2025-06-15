@@ -2,129 +2,92 @@ import React from 'react';
 
 const Dashboard: React.FC = () => {
   return (
-    <div style={{
-      width: '100%',
-      height: '100%',
-      padding: '2rem',
-      color: '#fff',
-      background: '#111827'
-    }}>
-      <div style={{
-        maxWidth: '1200px',
-        margin: '0 auto'
-      }}>
-        <h2 style={{ 
-          fontSize: '2rem', 
-          fontWeight: '700', 
-          marginBottom: '2rem',
-          color: '#f9fafb'
-        }}>
+    <div className="w-full h-full p-4 md:p-8 bg-zinc-600 text-text-primary">
+      <div className="max-w-7xl mx-auto">
+        <h2 className="text-2xl md:text-3xl font-bold mb-8 text-text-primary">
           NYC Alert Dashboard
         </h2>
         
         {/* Stats Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '1.5rem',
-          marginBottom: '2rem'
-        }}>
-          <div style={{
-            background: '#1f2937',
-            padding: '1.5rem',
-            borderRadius: '0.5rem',
-            border: '1px solid #374151'
-          }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem', color: '#f9fafb' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-2 text-text-primary">
               Active Alerts
             </h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: '700', color: '#ef4444' }}>
+            <p className="text-4xl font-bold text-critical">
               23
             </p>
-            <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>
+            <p className="text-sm text-text-muted">
               +4 from last hour
             </p>
           </div>
           
-          <div style={{
-            background: '#1f2937',
-            padding: '1.5rem',
-            borderRadius: '0.5rem',
-            border: '1px solid #374151'
-          }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem', color: '#f9fafb' }}>
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-2 text-text-primary">
               Critical Priority
             </h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: '700', color: '#dc2626' }}>
+            <p className="text-4xl font-bold text-critical">
               3
             </p>
-            <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>
+            <p className="text-sm text-text-muted">
               Requires immediate attention
             </p>
           </div>
           
-          <div style={{
-            background: '#1f2937',
-            padding: '1.5rem',
-            borderRadius: '0.5rem',
-            border: '1px solid #374151'
-          }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem', color: '#f9fafb' }}>
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-2 text-text-primary">
               Reports Generated
             </h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: '700', color: '#10b981' }}>
+            <p className="text-4xl font-bold text-accent">
               7
             </p>
-            <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>
+            <p className="text-sm text-text-muted">
               Today
             </p>
           </div>
           
-          <div style={{
-            background: '#1f2937',
-            padding: '1.5rem',
-            borderRadius: '0.5rem',
-            border: '1px solid #374151'
-          }}>
-            <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '0.5rem', color: '#f9fafb' }}>
+          <div className="card">
+            <h3 className="text-lg font-semibold mb-2 text-text-primary">
               Data Sources
             </h3>
-            <p style={{ fontSize: '2.5rem', fontWeight: '700', color: '#3b82f6' }}>
+            <p className="text-4xl font-bold text-primary">
               3
             </p>
-            <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>
+            <p className="text-sm text-text-muted">
               Reddit, 311, Twitter
             </p>
           </div>
         </div>
 
         {/* Content area for future dashboard widgets */}
-        <div style={{
-          background: '#1f2937',
-          padding: '2rem',
-          borderRadius: '0.5rem',
-          border: '1px solid #374151',
-          textAlign: 'center'
-        }}>
-          <h3 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1rem', color: '#f9fafb' }}>
+        <div className="card text-center">
+          <h3 className="text-xl md:text-2xl font-semibold mb-4 text-text-primary">
             Dashboard Coming Soon
           </h3>
-          <p style={{ color: '#9ca3af', marginBottom: '1rem' }}>
+          <p className="text-text-muted mb-4">
             This dashboard will include:
           </p>
-          <ul style={{ 
-            listStyle: 'none', 
-            padding: 0, 
-            color: '#d1d5db',
-            textAlign: 'left',
-            maxWidth: '600px',
-            margin: '0 auto'
-          }}>
-            <li style={{ padding: '0.5rem 0' }}>📊 Real-time alert analytics</li>
-            <li style={{ padding: '0.5rem 0' }}>📈 Trend analysis and patterns</li>
-            <li style={{ padding: '0.5rem 0' }}>🗺️ Geographic distribution insights</li>
-            <li style={{ padding: '0.5rem 0' }}>⏱️ Response time metrics</li>
-            <li style={{ padding: '0.5rem 0' }}>🔍 Predictive hotspot analysis</li>
+          <ul className="list-none p-0 text-text-secondary text-left max-w-2xl mx-auto space-y-2">
+            <li className="flex items-center gap-2">
+              <span className="text-xl">📊</span>
+              <span>Real-time alert analytics</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-xl">📈</span>
+              <span>Trend analysis and patterns</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-xl">🗺️</span>
+              <span>Geographic distribution insights</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-xl">⏱️</span>
+              <span>Response time metrics</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="text-xl">🔍</span>
+              <span>Predictive hotspot analysis</span>
+            </li>
           </ul>
         </div>
       </div>
