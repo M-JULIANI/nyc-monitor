@@ -16,6 +16,12 @@ export default {
         card: '#f3f4f6', // gray-100
         background: '#f9fafb', // gray-50
         border: '#e5e7eb', // gray-200
+        status: {
+          connecting: '#ea580c', // orange-600 - matches primary
+          connected: '#65a30d', // green-600 - matches low priority
+          error: '#dc2626', // red-600 - matches critical
+          warning: '#f59e42', // orange-400 - matches medium priority
+        },
         text: {
           primary: '#f4f4f5', // zinc-100
           secondary: '#d4d4d8', // zinc-300

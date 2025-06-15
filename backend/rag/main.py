@@ -1,5 +1,5 @@
 from .auth import verify_google_token
-from .endpoints import chat_router, investigation_router, auth_router, admin_router
+from .endpoints import chat_router, investigation_router, auth_router, admin_router, alerts_router
 from .config import initialize_config, get_config
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import RedirectResponse
@@ -85,6 +85,7 @@ app.include_router(chat_router)
 app.include_router(investigation_router)
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(alerts_router)
 
 
 @app.get("/")

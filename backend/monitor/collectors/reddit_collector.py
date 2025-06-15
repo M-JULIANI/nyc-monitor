@@ -323,12 +323,22 @@ class RedditCollector(BaseCollector):
             # Analyze keywords for basic emergency detection (pre-filtering)
             keyword_analysis = self._analyze_keywords(title, content)
 
-            # Extract location information using the dedicated extractor
-            location_info = self.location_extractor.extract_location_info(
+            # Extract location information using the dedicated extractor with geocoding
+            location_info = await self.location_extractor.extract_location_info_with_geocoding(
                 title, content)
 
-            # NEW: Get real coordinates using geocoding service
-            geocoding_result = await self._geocode_location_info(location_info, title, content)
+            # NEW: Get real coordinates using geocoding service (now handled in location extractor)
+            # geocoding_result = await self._geocode_location_info(location_info, title, content)
+
+            # Extract coordinates from the geocoding-enhanced location info
+            geocoding_result = {
+                'lat': location_info.get('center_latitude'),
+                'lng': location_info.get('center_longitude'),
+                'formatted_address': location_info['locations_found'][0].get('name') if location_info['locations_found'] else None,
+                'confidence': location_info['locations_found'][0].get('confidence', 0.0) if location_info['locations_found'] else 0.0,
+                'source': location_info.get('geocoding_source', 'hardcoded'),
+                'success': location_info.get('has_coordinates', False)
+            }
 
             # NEW: Check location specificity - only pass signals with actionable location data
             location_specificity = self._assess_location_specificity(
@@ -370,14 +380,14 @@ class RedditCollector(BaseCollector):
                     'nyc_relevant': True,  # All returned signals are NYC-relevant
                     # Enhanced location data with real geocoding
                     'locations': location_info['locations_found'],
-                    'latitude': geocoding_result.get('lat'),
-                    'longitude': geocoding_result.get('lng'),
-                    'formatted_address': geocoding_result.get('formatted_address'),
-                    'geocoding_confidence': geocoding_result.get('confidence', 0.0),
-                    'geocoding_source': geocoding_result.get('source', 'none'),
+                    'latitude': geocoding_result['lat'],
+                    'longitude': geocoding_result['lng'],
+                    'formatted_address': geocoding_result['formatted_address'],
+                    'geocoding_confidence': geocoding_result['confidence'],
+                    'geocoding_source': geocoding_result['source'],
                     'location_count': location_info['location_count'],
                     'primary_borough': location_info['primary_borough'],
-                    'has_coordinates': geocoding_result.get('success', False),
+                    'has_coordinates': geocoding_result['success'],
                     # NEW: Location specificity assessment
                     'location_specificity': location_specificity['specificity_score'],
                     'specific_streets': location_specificity['specific_streets'],
