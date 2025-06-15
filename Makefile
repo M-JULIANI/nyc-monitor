@@ -471,7 +471,7 @@ deploy-monitor: build-monitor check-gcloud
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
+			--schedule="*/15 * * * *" \
 			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
@@ -480,7 +480,7 @@ deploy-monitor: build-monitor check-gcloud
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
+			--schedule="*/15 * * * *" \
 			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \

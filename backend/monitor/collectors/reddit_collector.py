@@ -64,6 +64,16 @@ class RedditCollector(BaseCollector):
             # Housing & Development (verified)
             'gentrification', 'urbanplanning',  # removed nychousing, nycrenting
 
+            # Additional broader communities that often have NYC content
+            'news', 'breakingnews', 'publicfreakout', 'whatisthisthing',
+            'mildlyinteresting', 'pics', 'videos', 'todayilearned',
+
+            # Emergency and safety related
+            '911dispatchers', 'ems', 'firefighting', 'protectandserve',
+
+            # Weather and environment
+            'weather', 'earthporn', 'cityporn'
+
             # Remove non-existent: nypd, fdny, emergency, ems, firstresponders
             # Remove non-existent: mta, nyctraffic, bikenyc
             # Remove non-existent: nychealth, airquality, environmentnyc, publichealth
@@ -106,7 +116,8 @@ class RedditCollector(BaseCollector):
                 try:
                     logger.info(
                         f"📡 Collecting from r/{subreddit} ({i}/{len(self.nyc_subreddits)})")
-                    signals = await self._fetch_subreddit_signals(subreddit, limit=10)
+                    # Increase limit per subreddit to get more potential signals
+                    signals = await self._fetch_subreddit_signals(subreddit, limit=20)
 
                     # Categorize signals by priority content (for logging)
                     for signal in signals:
@@ -196,7 +207,7 @@ class RedditCollector(BaseCollector):
             logger.error(f"   Exception type: {type(e).__name__}")
             return []
 
-    async def _fetch_subreddit_signals(self, subreddit: str, limit: int = 10) -> List[Dict]:
+    async def _fetch_subreddit_signals(self, subreddit: str, limit: int = 20) -> List[Dict]:
         """Fetch recent signals from a specific subreddit"""
         logger.debug(f"🎯 Fetching signals from r/{subreddit} (limit: {limit})")
         signals = []
@@ -206,12 +217,12 @@ class RedditCollector(BaseCollector):
             hot_posts = []
             new_posts = []
 
-            # Fetch hot posts (limit using counter instead of parameter)
+            # Fetch hot posts (increase the portion for hot posts)
             logger.debug(f"🔥 Fetching hot posts from r/{subreddit}")
             hot_count = 0
             try:
                 async for submission in self.client.p.subreddit.pull.hot(subreddit):
-                    if hot_count >= limit//2:
+                    if hot_count >= limit * 2 // 3:  # Use 2/3 of limit for hot posts
                         break
                     # Debug: log submission attributes for the first few posts
                     if hot_count < 2:
@@ -231,14 +242,14 @@ class RedditCollector(BaseCollector):
                     f"❌ Error fetching hot posts from r/{subreddit}: {str(e)}")
                 logger.error(f"   Exception type: {type(e).__name__}")
 
-            # Fetch recent posts (last 4 hours)
+            # Fetch recent posts (extend time window to 12 hours for more coverage)
             logger.debug(f"🆕 Fetching new posts from r/{subreddit}")
             cutoff_time = datetime.utcnow().replace(
-                tzinfo=timezone.utc) - timedelta(hours=4)
+                tzinfo=timezone.utc) - timedelta(hours=12)  # Extended from 4 to 12 hours
             new_count = 0
             try:
                 async for submission in self.client.p.subreddit.pull.new(subreddit):
-                    if new_count >= limit:
+                    if new_count >= limit:  # Use full limit for new posts
                         break
                     # Debug: log submission attributes for the first few posts
                     if new_count < 2:
@@ -314,10 +325,16 @@ class RedditCollector(BaseCollector):
             content = self._get_content(submission)
 
             # For broader subreddits, check NYC relevance
-            broader_subreddits = ['urbanplanning', 'gentrification', 'cycling']
+            broader_subreddits = ['urbanplanning', 'gentrification', 'cycling',
+                                  'news', 'breakingnews', 'publicfreakout', 'whatisthisthing',
+                                  'mildlyinteresting', 'pics', 'videos', 'todayilearned',
+                                  '911dispatchers', 'ems', 'firefighting', 'protectandserve',
+                                  'weather', 'earthporn', 'cityporn']
             if subreddit in broader_subreddits:
                 if not self._is_nyc_relevant(title, content):
                     # Skip non-NYC relevant posts from broader subreddits
+                    logger.debug(
+                        f"🚫 Filtered out non-NYC relevant post from r/{subreddit}: {title[:60]}...")
                     return None
 
             # Analyze keywords for basic emergency detection (pre-filtering)
@@ -340,18 +357,29 @@ class RedditCollector(BaseCollector):
                 'success': location_info.get('has_coordinates', False)
             }
 
-            # NEW: Check location specificity - only pass signals with actionable location data
+            # NEW: Check location specificity - but be less aggressive about filtering
             location_specificity = self._assess_location_specificity(
                 title, content, location_info)
 
-            # Filter out signals without sufficient location specificity
-            # Only pass signals that have either:
-            # 1. Specific street addresses/intersections, OR
-            # 2. Named venues/landmarks, OR
-            # 3. Priority emergency content (regardless of location specificity)
-            if not location_specificity['is_specific'] and not keyword_analysis['has_priority_content']:
+            # Be more lenient with filtering - only filter out if ALL conditions are met:
+            # 1. No location specificity AND
+            # 2. No priority content AND
+            # 3. No indication that location is needed AND
+            # 4. No NYC-specific keywords AND
+            # 5. Score is very low (less than 2)
+            needs_location = 'location_needed' in title.lower()
+            has_nyc_keywords = any(keyword.lower() in title.lower() or keyword.lower() in content.lower()
+                                   for keyword in ['nyc', 'new york', 'manhattan', 'brooklyn', 'queens', 'bronx', 'staten island'])
+
+            should_filter = (not location_specificity['is_specific'] and
+                             not keyword_analysis['has_priority_content'] and
+                             not needs_location and
+                             not has_nyc_keywords and
+                             score < 2)
+
+            if should_filter:
                 logger.debug(
-                    f"🚫 Filtered out due to insufficient location specificity: {title[:60]}...")
+                    f"🚫 Filtered out due to insufficient relevance: {title[:60]}... (score: {score})")
                 return None
 
             raw_signal = {

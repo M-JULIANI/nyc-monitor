@@ -320,23 +320,26 @@ class TwitterCollector(BaseCollector):
         has_location = bool(signal['metadata'].get('locations'))
         has_coordinates = signal['metadata'].get('has_coordinates', False)
 
+        # Check if location is explicitly needed (like alerts ending with 'location_needed')
+        needs_location = 'location_needed' in signal.get('title', '').lower()
+
         # Must have some engagement (retweets, likes, or replies)
         has_engagement = signal.get('score', 0) > 0
 
         # Log relevance details for debugging
-        if is_nyc_relevant or has_priority or has_location or has_coordinates:
+        if is_nyc_relevant or has_priority or has_location or has_coordinates or needs_location:
             logger.debug(
                 f"Signal relevance check: NYC={is_nyc_relevant}, "
                 f"Priority={has_priority}, Location={has_location}, "
-                f"Coords={has_coordinates}, Engagement={has_engagement}"
+                f"Coords={has_coordinates}, NeedsLocation={needs_location}, Engagement={has_engagement}"
             )
 
         # Signal is relevant if:
         # 1. It's NYC relevant AND
-        # 2. Has either priority keywords, location info, or coordinates AND
+        # 2. Has either priority keywords, location info, coordinates, OR needs location AND
         # 3. Has some engagement
         return (is_nyc_relevant and
-                (has_priority or has_location or has_coordinates) and
+                (has_priority or has_location or has_coordinates or needs_location) and
                 has_engagement)
 
     async def _tweet_to_signal(self, tweet, search_query: str) -> Optional[Dict]:
