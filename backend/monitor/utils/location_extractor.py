@@ -22,112 +22,121 @@ class NYCLocationExtractor:
         # Format: location_name: (latitude, longitude, borough, type)
         self.nyc_locations = {
             # Manhattan landmarks & neighborhoods
-            'times square': (40.7580, -73.9855, 'manhattan', 'landmark'),
-            'central park': (40.7829, -73.9654, 'manhattan', 'park'),
-            'union square': (40.7359, -73.9911, 'manhattan', 'landmark'),
-            'washington square': (40.7308, -73.9973, 'manhattan', 'park'),
-            'battery park': (40.7033, -74.0170, 'manhattan', 'park'),
-            'world trade center': (40.7115, -74.0134, 'manhattan', 'landmark'),
-            'empire state building': (40.7484, -73.9857, 'manhattan', 'landmark'),
-            'grand central': (40.7527, -73.9772, 'manhattan', 'transit'),
-            'penn station': (40.7505, -73.9934, 'manhattan', 'transit'),
-            'port authority': (40.7589, -73.9896, 'manhattan', 'transit'),
+            'times square': (40.7580, -73.9855, 'Manhattan', 'landmark'),
+            'central park': (40.7829, -73.9654, 'Manhattan', 'park'),
+            'union square': (40.7359, -73.9911, 'Manhattan', 'landmark'),
+            'washington square': (40.7308, -73.9973, 'Manhattan', 'park'),
+            'battery park': (40.7033, -74.0170, 'Manhattan', 'park'),
+            'world trade center': (40.7115, -74.0134, 'Manhattan', 'landmark'),
+            'empire state building': (40.7484, -73.9857, 'Manhattan', 'landmark'),
+            'grand central': (40.7527, -73.9772, 'Manhattan', 'transit'),
+            'penn station': (40.7505, -73.9934, 'Manhattan', 'transit'),
+            'port authority': (40.7589, -73.9896, 'Manhattan', 'transit'),
 
             # Manhattan neighborhoods
-            'soho': (40.7233, -74.0030, 'manhattan', 'neighborhood'),
-            'tribeca': (40.7195, -74.0089, 'manhattan', 'neighborhood'),
-            'chinatown': (40.7158, -73.9970, 'manhattan', 'neighborhood'),
-            'little italy': (40.7196, -73.9977, 'manhattan', 'neighborhood'),
-            'east village': (40.7264, -73.9818, 'manhattan', 'neighborhood'),
-            'west village': (40.7358, -74.0036, 'manhattan', 'neighborhood'),
-            'greenwich village': (40.7336, -74.0027, 'manhattan', 'neighborhood'),
-            'lower east side': (40.7180, -73.9858, 'manhattan', 'neighborhood'),
-            'upper east side': (40.7736, -73.9566, 'manhattan', 'neighborhood'),
-            'upper west side': (40.7870, -73.9754, 'manhattan', 'neighborhood'),
-            'harlem': (40.8176, -73.9482, 'manhattan', 'neighborhood'),
-            'washington heights': (40.8518, -73.9351, 'manhattan', 'neighborhood'),
-            'inwood': (40.8676, -73.9212, 'manhattan', 'neighborhood'),
-            'chelsea': (40.7465, -73.9973, 'manhattan', 'neighborhood'),
-            'gramercy': (40.7368, -73.9830, 'manhattan', 'neighborhood'),
-            'murray hill': (40.7505, -73.9733, 'manhattan', 'neighborhood'),
-            'midtown': (40.7549, -73.9840, 'manhattan', 'neighborhood'),
-            'downtown': (40.7074, -74.0113, 'manhattan', 'neighborhood'),
-            'uptown': (40.7829, -73.9654, 'manhattan', 'neighborhood'),
-            'financial district': (40.7074, -74.0113, 'manhattan', 'neighborhood'),
-            "hell's kitchen": (40.7648, -73.9896, 'manhattan', 'neighborhood'),
-            'morningside heights': (40.8076, -73.9626, 'manhattan', 'neighborhood'),
+            'soho': (40.7233, -74.0030, 'Manhattan', 'neighborhood'),
+            'tribeca': (40.7195, -74.0089, 'Manhattan', 'neighborhood'),
+            'chinatown': (40.7158, -73.9970, 'Manhattan', 'neighborhood'),
+            'little italy': (40.7196, -73.9977, 'Manhattan', 'neighborhood'),
+            'east village': (40.7264, -73.9818, 'Manhattan', 'neighborhood'),
+            'west village': (40.7358, -74.0036, 'Manhattan', 'neighborhood'),
+            'greenwich village': (40.7336, -74.0027, 'Manhattan', 'neighborhood'),
+            'lower east side': (40.7180, -73.9858, 'Manhattan', 'neighborhood'),
+            'upper east side': (40.7736, -73.9566, 'Manhattan', 'neighborhood'),
+            'upper west side': (40.7870, -73.9754, 'Manhattan', 'neighborhood'),
+            'harlem': (40.8176, -73.9482, 'Manhattan', 'neighborhood'),
+            'washington heights': (40.8518, -73.9351, 'Manhattan', 'neighborhood'),
+            'inwood': (40.8676, -73.9212, 'Manhattan', 'neighborhood'),
+            'chelsea': (40.7465, -73.9973, 'Manhattan', 'neighborhood'),
+            'gramercy': (40.7368, -73.9830, 'Manhattan', 'neighborhood'),
+            'murray hill': (40.7505, -73.9733, 'Manhattan', 'neighborhood'),
+            'midtown': (40.7549, -73.9840, 'Manhattan', 'neighborhood'),
+            'downtown': (40.7074, -74.0113, 'Manhattan', 'neighborhood'),
+            'uptown': (40.7829, -73.9654, 'Manhattan', 'neighborhood'),
+            'financial district': (40.7074, -74.0113, 'Manhattan', 'neighborhood'),
+            "hell's kitchen": (40.7648, -73.9896, 'Manhattan', 'neighborhood'),
+            'morningside heights': (40.8076, -73.9626, 'Manhattan', 'neighborhood'),
 
             # Brooklyn landmarks & neighborhoods
-            'brooklyn bridge': (40.7061, -73.9969, 'brooklyn', 'landmark'),
-            'prospect park': (40.6602, -73.9690, 'brooklyn', 'park'),
-            'coney island': (40.5755, -73.9707, 'brooklyn', 'neighborhood'),
-            'williamsburg': (40.7081, -73.9571, 'brooklyn', 'neighborhood'),
-            'park slope': (40.6782, -73.9776, 'brooklyn', 'neighborhood'),
-            'bushwick': (40.6942, -73.9222, 'brooklyn', 'neighborhood'),
-            'bed-stuy': (40.6895, -73.9308, 'brooklyn', 'neighborhood'),
-            'bedford-stuyvesant': (40.6895, -73.9308, 'brooklyn', 'neighborhood'),
-            'crown heights': (40.6782, -73.9442, 'brooklyn', 'neighborhood'),
-            'sunset park': (40.6527, -74.0134, 'brooklyn', 'neighborhood'),
-            'red hook': (40.6751, -74.0088, 'brooklyn', 'neighborhood'),
-            'dumbo': (40.7033, -73.9899, 'brooklyn', 'neighborhood'),
-            'brooklyn heights': (40.6962, -73.9926, 'brooklyn', 'neighborhood'),
-            'bay ridge': (40.6233, -74.0273, 'brooklyn', 'neighborhood'),
-            'bensonhurst': (40.6018, -73.9962, 'brooklyn', 'neighborhood'),
-            'sheepshead bay': (40.5941, -73.9442, 'brooklyn', 'neighborhood'),
+            'brooklyn': (40.6782, -73.9442, 'Brooklyn', 'borough'),
+            'brooklyn bridge': (40.7061, -73.9969, 'Brooklyn', 'landmark'),
+            'prospect park': (40.6602, -73.9690, 'Brooklyn', 'park'),
+            'coney island': (40.5755, -73.9707, 'Brooklyn', 'neighborhood'),
+            'williamsburg': (40.7081, -73.9571, 'Brooklyn', 'neighborhood'),
+            'park slope': (40.6782, -73.9776, 'Brooklyn', 'neighborhood'),
+            'bushwick': (40.6942, -73.9222, 'Brooklyn', 'neighborhood'),
+            'bed-stuy': (40.6895, -73.9308, 'Brooklyn', 'neighborhood'),
+            'bedford-stuyvesant': (40.6895, -73.9308, 'Brooklyn', 'neighborhood'),
+            'crown heights': (40.6782, -73.9442, 'Brooklyn', 'neighborhood'),
+            'sunset park': (40.6527, -74.0134, 'Brooklyn', 'neighborhood'),
+            'red hook': (40.6751, -74.0088, 'Brooklyn', 'neighborhood'),
+            'dumbo': (40.7033, -73.9899, 'Brooklyn', 'neighborhood'),
+            'brooklyn heights': (40.6962, -73.9926, 'Brooklyn', 'neighborhood'),
+            'bay ridge': (40.6233, -74.0273, 'Brooklyn', 'neighborhood'),
+            'bensonhurst': (40.6018, -73.9962, 'Brooklyn', 'neighborhood'),
+            'sheepshead bay': (40.5941, -73.9442, 'Brooklyn', 'neighborhood'),
 
             # Queens landmarks & neighborhoods
-            'long island city': (40.7505, -73.9350, 'queens', 'neighborhood'),
-            'lic': (40.7505, -73.9350, 'queens', 'neighborhood'),
-            'astoria': (40.7614, -73.9246, 'queens', 'neighborhood'),
-            'flushing': (40.7674, -73.8330, 'queens', 'neighborhood'),
-            'forest hills': (40.7209, -73.8448, 'queens', 'neighborhood'),
-            'jackson heights': (40.7505, -73.8803, 'queens', 'neighborhood'),
-            'elmhurst': (40.7362, -73.8827, 'queens', 'neighborhood'),
-            'woodside': (40.7456, -73.9062, 'queens', 'neighborhood'),
-            'sunnyside': (40.7434, -73.9249, 'queens', 'neighborhood'),
-            'corona': (40.7498, -73.8621, 'queens', 'neighborhood'),
+            'queens': (40.7282, -73.7949, 'Queens', 'borough'),
+            'long island city': (40.7505, -73.9350, 'Queens', 'neighborhood'),
+            'lic': (40.7505, -73.9350, 'Queens', 'neighborhood'),
+            'astoria': (40.7614, -73.9246, 'Queens', 'neighborhood'),
+            'flushing': (40.7674, -73.8330, 'Queens', 'neighborhood'),
+            'forest hills': (40.7209, -73.8448, 'Queens', 'neighborhood'),
+            'jackson heights': (40.7505, -73.8803, 'Queens', 'neighborhood'),
+            'elmhurst': (40.7362, -73.8827, 'Queens', 'neighborhood'),
+            'woodside': (40.7456, -73.9062, 'Queens', 'neighborhood'),
+            'sunnyside': (40.7434, -73.9249, 'Queens', 'neighborhood'),
+            'corona': (40.7498, -73.8621, 'Queens', 'neighborhood'),
 
             # Bronx
-            'yankee stadium': (40.8296, -73.9262, 'bronx', 'landmark'),
-            'south bronx': (40.8176, -73.9209, 'bronx', 'neighborhood'),
-            'riverdale': (40.8990, -73.9057, 'bronx', 'neighborhood'),
-            'fordham': (40.8615, -73.9019, 'bronx', 'neighborhood'),
-            'mott haven': (40.8084, -73.9264, 'bronx', 'neighborhood'),
+            'bronx': (40.8448, -73.8648, 'Bronx', 'borough'),
+            'south bronx': (40.8176, -73.9209, 'Bronx', 'neighborhood'),
+            'riverdale': (40.8990, -73.9057, 'Bronx', 'neighborhood'),
+            'fordham': (40.8615, -73.9019, 'Bronx', 'neighborhood'),
+            'mott haven': (40.8084, -73.9264, 'Bronx', 'neighborhood'),
 
             # Staten Island
-            'st. george': (40.6431, -74.0776, 'staten_island', 'neighborhood'),
-            'stapleton': (40.6276, -74.0807, 'staten_island', 'neighborhood'),
-            'new brighton': (40.6434, -74.0776, 'staten_island', 'neighborhood'),
-            'tottenville': (40.5062, -74.2446, 'staten_island', 'neighborhood'),
+            'staten island': (40.5795, -74.1502, 'Staten Island', 'borough'),
+            'st. george': (40.6431, -74.0776, 'Staten Island', 'neighborhood'),
+            'stapleton': (40.6276, -74.0807, 'Staten Island', 'neighborhood'),
+            'new brighton': (40.6434, -74.0776, 'Staten Island', 'neighborhood'),
+            'tottenville': (40.5062, -74.2446, 'Staten Island', 'neighborhood'),
 
             # Major streets & avenues (approximate central coordinates)
-            '5th avenue': (40.7549, -73.9840, 'manhattan', 'street'),
-            'broadway': (40.7549, -73.9840, 'manhattan', 'street'),
-            'madison avenue': (40.7505, -73.9733, 'manhattan', 'street'),
-            'park avenue': (40.7505, -73.9733, 'manhattan', 'street'),
-            'lexington avenue': (40.7505, -73.9733, 'manhattan', 'street'),
-            '42nd street': (40.7549, -73.9840, 'manhattan', 'street'),
-            '34th street': (40.7505, -73.9934, 'manhattan', 'street'),
-            '14th street': (40.7359, -73.9911, 'manhattan', 'street'),
-            'houston street': (40.7214, -73.9967, 'manhattan', 'street'),
-            'canal street': (40.7190, -74.0023, 'manhattan', 'street'),
-            '23rd street': (40.7433, -73.9893, 'manhattan', 'street'),
-            '57th street': (40.7648, -73.9808, 'manhattan', 'street'),
-            '125th street': (40.8076, -73.9482, 'manhattan', 'street'),
+            '5th avenue': (40.7549, -73.9840, 'Manhattan', 'street'),
+            'broadway': (40.7549, -73.9840, 'Manhattan', 'street'),
+            'madison avenue': (40.7505, -73.9733, 'Manhattan', 'street'),
+            'park avenue': (40.7505, -73.9733, 'Manhattan', 'street'),
+            'lexington avenue': (40.7505, -73.9733, 'Manhattan', 'street'),
+            '42nd street': (40.7549, -73.9840, 'Manhattan', 'street'),
+            '34th street': (40.7505, -73.9934, 'Manhattan', 'street'),
+            '14th street': (40.7359, -73.9911, 'Manhattan', 'street'),
+            'houston street': (40.7214, -73.9967, 'Manhattan', 'street'),
+            'canal street': (40.7190, -74.0023, 'Manhattan', 'street'),
+            '23rd street': (40.7433, -73.9893, 'Manhattan', 'street'),
+            '57th street': (40.7648, -73.9808, 'Manhattan', 'street'),
+            '125th street': (40.8076, -73.9482, 'Manhattan', 'street'),
 
             # Transit infrastructure
-            'bqe': (40.6892, -73.9442, 'brooklyn', 'highway'),
-            'brooklyn-queens expressway': (40.6892, -73.9442, 'brooklyn', 'highway'),
-            'fdr drive': (40.7074, -73.9776, 'manhattan', 'highway'),
-            'west side highway': (40.7359, -74.0089, 'manhattan', 'highway'),
-            'manhattan bridge': (40.7072, -73.9904, 'manhattan', 'bridge'),
-            'queensboro bridge': (40.7505, -73.9350, 'queens', 'bridge'),
-            'williamsburg bridge': (40.7081, -73.9637, 'brooklyn', 'bridge'),
-            'verrazano bridge': (40.6066, -74.0447, 'staten_island', 'bridge'),
-            'george washington bridge': (40.8517, -73.9527, 'manhattan', 'bridge'),
-            'holland tunnel': (40.7280, -74.0134, 'manhattan', 'tunnel'),
-            'lincoln tunnel': (40.7614, -73.9776, 'manhattan', 'tunnel'),
-            'queens-midtown tunnel': (40.7433, -73.9626, 'manhattan', 'tunnel'),
+            'bqe': (40.6892, -73.9442, 'Brooklyn', 'highway'),
+            'brooklyn-queens expressway': (40.6892, -73.9442, 'Brooklyn', 'highway'),
+            'fdr drive': (40.7074, -73.9776, 'Manhattan', 'highway'),
+            'west side highway': (40.7359, -74.0089, 'Manhattan', 'highway'),
+            'manhattan bridge': (40.7072, -73.9904, 'Manhattan', 'bridge'),
+            'queensboro bridge': (40.7505, -73.9350, 'Queens', 'bridge'),
+            'williamsburg bridge': (40.7081, -73.9637, 'Brooklyn', 'bridge'),
+            'verrazano bridge': (40.6066, -74.0447, 'Staten Island', 'bridge'),
+            'george washington bridge': (40.8517, -73.9527, 'Manhattan', 'bridge'),
+            'holland tunnel': (40.7280, -74.0134, 'Manhattan', 'tunnel'),
+            'lincoln tunnel': (40.7614, -73.9776, 'Manhattan', 'tunnel'),
+            'queens-midtown tunnel': (40.7433, -73.9626, 'Manhattan', 'tunnel'),
+
+            # Manhattan parks and landmarks (missing ones)
+            'bryant park': (40.7536, -73.9832, 'Manhattan', 'park'),
+            'madison square garden': (40.7505, -73.9934, 'Manhattan', 'venue'),
+            'msg': (40.7505, -73.9934, 'Manhattan', 'venue'),
+            'lincoln center': (40.7737, -73.9826, 'Manhattan', 'venue'),
         }
 
     def extract_location_info(self, title: str, content: str) -> Dict:
@@ -277,3 +286,115 @@ class NYCLocationExtractor:
             name for name, (lat, lon, borough, loc_type) in self.nyc_locations.items()
             if loc_type.lower() == location_type.lower()
         ]
+
+    async def extract_location_info_with_geocoding(self, title: str, content: str) -> Dict:
+        """
+        Extract location information using geocoding service as primary method
+
+        Args:
+            title: Post title text
+            content: Post content text
+
+        Returns:
+            Dictionary containing found locations and coordinate data with geocoding
+        """
+        try:
+            from .geocode import geocode_nyc_location
+
+            full_text = f"{title} {content}"
+
+            # Try geocoding the title first (most likely to contain location)
+            title_geocoding = await geocode_nyc_location(title.strip())
+
+            if title_geocoding.get('success'):
+                logger.info(
+                    f"Successfully geocoded title: '{title}' -> {title_geocoding.get('formatted_address')}")
+                return {
+                    'locations_found': [{
+                        'name': title_geocoding.get('formatted_address', title),
+                        'latitude': title_geocoding['lat'],
+                        'longitude': title_geocoding['lng'],
+                        'borough': self._extract_borough_from_address(title_geocoding.get('formatted_address', '')),
+                        'type': 'geocoded',
+                        'confidence': title_geocoding.get('confidence', 0.8)
+                    }],
+                    'center_latitude': title_geocoding['lat'],
+                    'center_longitude': title_geocoding['lng'],
+                    'location_count': 1,
+                    'primary_borough': self._extract_borough_from_address(title_geocoding.get('formatted_address', '')),
+                    'has_coordinates': True,
+                    'geocoding_source': 'title'
+                }
+
+            # If title geocoding fails, try geocoding the full content
+            if content and len(content.strip()) > 0:
+                content_geocoding = await geocode_nyc_location(content.strip())
+
+                if content_geocoding.get('success'):
+                    logger.info(
+                        f"Successfully geocoded content -> {content_geocoding.get('formatted_address')}")
+                    return {
+                        'locations_found': [{
+                            'name': content_geocoding.get('formatted_address', 'Content Location'),
+                            'latitude': content_geocoding['lat'],
+                            'longitude': content_geocoding['lng'],
+                            'borough': self._extract_borough_from_address(content_geocoding.get('formatted_address', '')),
+                            'type': 'geocoded',
+                            'confidence': content_geocoding.get('confidence', 0.7)
+                        }],
+                        'center_latitude': content_geocoding['lat'],
+                        'center_longitude': content_geocoding['lng'],
+                        'location_count': 1,
+                        'primary_borough': self._extract_borough_from_address(content_geocoding.get('formatted_address', '')),
+                        'has_coordinates': True,
+                        'geocoding_source': 'content'
+                    }
+
+            # Fallback to hardcoded location extraction
+            logger.debug(
+                "Geocoding failed, falling back to hardcoded location extraction")
+            return self.extract_location_info(title, content)
+
+        except Exception as e:
+            logger.warning(
+                f"Error in geocoding-based location extraction: {e}")
+            # Fallback to original method
+            return self.extract_location_info(title, content)
+
+    def _extract_borough_from_address(self, formatted_address: str) -> str:
+        """Extract borough name from geocoded address"""
+        if not formatted_address:
+            return 'Unknown'
+
+        address_lower = formatted_address.lower()
+
+        # Check for borough names in the formatted address
+        borough_mapping = {
+            'manhattan': 'Manhattan',
+            'brooklyn': 'Brooklyn',
+            'queens': 'Queens',
+            'bronx': 'Bronx',
+            'staten island': 'Staten Island'
+        }
+
+        for borough_key, borough_name in borough_mapping.items():
+            if borough_key in address_lower:
+                return borough_name
+
+        # Check for neighborhood-to-borough mapping for common areas
+        neighborhood_to_borough = {
+            'times square': 'Manhattan',
+            'williamsburg': 'Brooklyn',
+            'astoria': 'Queens',
+            'harlem': 'Manhattan',
+            'park slope': 'Brooklyn',
+            'long island city': 'Queens',
+            'financial district': 'Manhattan',
+            'coney island': 'Brooklyn'
+        }
+
+        for neighborhood, borough in neighborhood_to_borough.items():
+            if neighborhood in address_lower:
+                return borough
+
+        return 'Unknown'

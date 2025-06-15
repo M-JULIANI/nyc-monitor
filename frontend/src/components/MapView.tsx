@@ -1,83 +1,14 @@
 import { useState, useRef } from 'react';
 import Map, { Layer, Source, Popup } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { Alert } from '../types';
+import { useAlerts } from '@/hooks/useAlerts';
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA';
 
-// Sample NYC alert data structure
-interface Alert {
-  id: string;
-  title: string;
-  description: string;
-  latitude: number;
-  longitude: number;
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  source: 'reddit' | '311' | 'twitter';
-  timestamp: string;
-  status: 'new' | 'investigating' | 'resolved';
-  neighborhood?: string;
-  borough?: string;
-}
-
-// Sample data for demonstration
-const sampleAlerts: Alert[] = [
-  {
-    id: '1',
-    title: 'Water Main Break',
-    description: 'Major water main break causing street flooding on Broadway',
-    latitude: 40.7589,
-    longitude: -73.9851,
-    priority: 'high',
-    source: '311',
-    timestamp: '2024-01-15T10:30:00Z',
-    status: 'investigating',
-    neighborhood: 'Times Square',
-    borough: 'Manhattan'
-  },
-  {
-    id: '2',
-    title: 'Traffic Accident',
-    description: 'Multi-car accident blocking traffic on FDR Drive',
-    latitude: 40.7505,
-    longitude: -73.9934,
-    priority: 'medium',
-    source: 'twitter',
-    timestamp: '2024-01-15T11:15:00Z',
-    status: 'new',
-    neighborhood: 'Lower East Side',
-    borough: 'Manhattan'
-  },
-  {
-    id: '3',
-    title: 'Power Outage',
-    description: 'Widespread power outage affecting multiple blocks',
-    latitude: 40.6892,
-    longitude: -74.0445,
-    priority: 'critical',
-    source: 'reddit',
-    timestamp: '2024-01-15T09:45:00Z',
-    status: 'investigating',
-    neighborhood: 'Brooklyn Heights',
-    borough: 'Brooklyn'
-  },
-  {
-    id: '4',
-    title: 'Construction Issue',
-    description: 'Unauthorized construction causing noise complaints',
-    latitude: 40.7831,
-    longitude: -73.9712,
-    priority: 'low',
-    source: '311',
-    timestamp: '2024-01-15T08:20:00Z',
-    status: 'resolved',
-    neighborhood: 'Upper West Side',
-    borough: 'Manhattan'
-  }
-];
-
 const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
-  const [alerts] = useState<Alert[]>(sampleAlerts);
+  const { alerts, error, isConnected } = useAlerts();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [filter, setFilter] = useState({
     priority: 'all',
@@ -92,16 +23,6 @@ const MapView: React.FC = () => {
     latitude: 40.7,
     zoom: 10
   };
-
-  // const getPriorityColor = (priority: string): string => {
-  //   switch (priority) {
-  //     case 'critical': return '#dc2626'; // red
-  //     case 'high': return '#ea580c'; // orange
-  //     case 'medium': return '#d97706'; // amber
-  //     case 'low': return '#65a30d'; // green
-  //     default: return '#6b7280'; // gray
-  //   }
-  // };
 
   const getSourceIcon = (source: string): string => {
     switch (source) {
@@ -153,20 +74,33 @@ const MapView: React.FC = () => {
 
   return (
     <div className="relative w-full h-full">
+      {/* Connection Status */}
+      {error && (
+        <div className="absolute top-4 right-4 z-20 bg-status-error/95 px-4 py-2 rounded-lg text-white text-sm">
+          Error: {error}
+        </div>
+      )}
+      
+      {!isConnected && !error && (
+        <div className="absolute top-4 right-4 z-20 bg-status-connecting/95 px-4 py-2 rounded-lg text-white text-sm">
+          Connecting to alert stream...
+        </div>
+      )}
+
       {/* Filter Controls */}
-      <div className="absolute top-4 left-4 z-10 bg-zinc-800 border-zinc-500 border p-4 rounded-lg text-text-primary min-w-[200px] shadow-card">
-        <h3 className="text-sm font-semibold mb-4">
+      <div className="absolute top-4 left-4 z-10 bg-zinc-800 p-4 rounded-lg text-white min-w-[200px]">
+        <h3 className="text-sm font-semibold mb-4 text-white">
           Filters
         </h3>
         
         <div className="mb-2">
-          <label className="block text-xs mb-1">
-            Priority:
+          <label className="block text-xs mb-1 text-zinc-300">
+            Priority
           </label>
           <select 
             value={filter.priority}
             onChange={(e) => setFilter(prev => ({ ...prev, priority: e.target.value }))}
-            className="w-full p-1 bg-zinc-600 text-text-primary order border-border rounded text-sm"
+            className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-sm"
           >
             <option value="all">All</option>
             <option value="critical">Critical</option>
@@ -177,13 +111,13 @@ const MapView: React.FC = () => {
         </div>
 
         <div className="mb-2">
-          <label className="block text-xs mb-1">
-            Source:
+          <label className="block text-xs mb-1 text-zinc-300">
+            Source
           </label>
           <select 
             value={filter.source}
             onChange={(e) => setFilter(prev => ({ ...prev, source: e.target.value }))}
-            className="w-full p-1 bg-zinc-600 text-text-primary border border-border rounded text-sm"
+            className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-sm"
           >
             <option value="all">All Sources</option>
             <option value="reddit">Reddit</option>
@@ -193,13 +127,13 @@ const MapView: React.FC = () => {
         </div>
 
         <div>
-          <label className="block text-xs mb-1">
-            Status:
+          <label className="block text-xs mb-1 text-zinc-300">
+            Status
           </label>
           <select 
             value={filter.status}
             onChange={(e) => setFilter(prev => ({ ...prev, status: e.target.value }))}
-            className="w-full p-1 bg-zinc-600 text-text-primary border border-border rounded text-sm"
+            className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-sm"
           >
             <option value="all">All Status</option>
             <option value="new">New</option>
@@ -210,8 +144,11 @@ const MapView: React.FC = () => {
       </div>
 
       {/* Alert Count */}
-      <div className="absolute top-4 right-4 z-10 bg-surface/95 px-4 py-2 rounded-lg text-text-primary text-sm">
+      <div className="absolute top-4 right-4 z-10 bg-zinc-800/95 px-4 py-2 rounded-lg text-white text-sm">
         {filteredAlerts.length} alerts visible
+        {isConnected && (
+          <span className="ml-2 text-status-connected">●</span>
+        )}
       </div>
 
       <Map
@@ -260,23 +197,23 @@ const MapView: React.FC = () => {
             closeOnClick={false}
             className="max-w-[320px]"
           >
-            <div className="p-4 bg-zinc-800 border border-zinc-400 rounded-xl text-zinc-100 shadow-xl">
-              <h4 className={`text-base font-semibold mb-2 flex items-center gap-2`}>
+            <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white shadow-xl">
+              <h4 className={`text-base font-semibold mb-2 flex items-center gap-2 text-white`}>
                 <span>{getSourceIcon(selectedAlert.source)}</span>
                 <span>{selectedAlert.title}</span>
               </h4>
-              <p className="text-sm text-zinc-400 mb-2">
+              <p className="text-sm text-zinc-300 mb-2">
                 {selectedAlert.description}
               </p>
-              <div className="flex justify-between items-center text-xs text-zinc-400 mb-1">
+              <div className="flex justify-between items-center text-xs text-zinc-300 mb-1">
                 <span>
                   📍 {selectedAlert.neighborhood}, {selectedAlert.borough}
                 </span>
                 <span className={`priority-badge priority-${selectedAlert.priority}`}>{selectedAlert.priority}</span>
               </div>
-              <div className="mt-2 pt-2 border-t border-zinc-600 text-xs text-zinc-400">
-                Status: <strong className="text-zinc-100">{selectedAlert.status}</strong> | 
-                Source: <strong className="text-zinc-100">{selectedAlert.source}</strong> | 
+              <div className="mt-2 pt-2 border-t border-zinc-700 text-xs text-zinc-300">
+                Status: <strong className="text-white">{selectedAlert.status}</strong> | 
+                Source: <strong className="text-white">{selectedAlert.source}</strong> | 
                 {new Date(selectedAlert.timestamp).toLocaleString()}
               </div>
               <button

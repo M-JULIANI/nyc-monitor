@@ -387,15 +387,28 @@ class MonitorJob:
                 # Extract event date from alert title or use current date as fallback
                 event_date = self._extract_event_date_from_alert(alert)
 
-                # Enhance alert with additional metadata
+                # Enhance alert with additional metadata and frontend-compatible format
                 enhanced_alert = {
-                    **alert,
+                    # Frontend-expected fields (no transformation needed)
+                    'id': alert_id,  # Use our generated ID
+                    'title': alert.get('title', 'Untitled Alert'),
+                    'description': alert.get('description', ''),
+                    'latitude': float(alert.get('coordinates', {}).get('lat', 40.7128)),
+                    'longitude': float(alert.get('coordinates', {}).get('lng', -74.0060)),
+                    'priority': self._map_severity_to_priority(alert.get('severity', 'medium')),
+                    'source': self._map_source(alert.get('source', 'reddit')),
+                    'status': self._map_status(alert.get('status', 'pending')),
+                    'timestamp': datetime.utcnow().isoformat(),
+                    'neighborhood': self._extract_neighborhood(alert),
+                    'borough': self._extract_borough(alert),
+
+                    # Additional metadata for backend use
                     'created_at': datetime.utcnow(),
-                    'status': 'pending',
                     'monitor_cycle': datetime.utcnow().strftime('%Y%m%d_%H%M'),
                     'expires_at': None,  # Will be set based on severity
                     'document_id': alert_id,  # Store the document ID for reference
                     'event_date': event_date,  # Extracted or inferred event date
+
                     # Enhanced queryability fields
                     'date_created': datetime.utcnow().strftime('%Y-%m-%d'),
                     'time_created': datetime.utcnow().strftime('%H:%M'),
@@ -403,16 +416,21 @@ class MonitorJob:
                     'month': datetime.utcnow().month,
                     'day': datetime.utcnow().day,
                     'hour': datetime.utcnow().hour,
+
                     # Event date queryability
                     'event_year': event_date.year if event_date else None,
                     'event_month': event_date.month if event_date else None,
                     'event_day': event_date.day if event_date else None,
                     'event_date_str': event_date.strftime('%Y-%m-%d') if event_date else None,
+
                     # Location queryability
                     'has_specific_location': bool(alert.get('specific_streets') or alert.get('venue_address')),
                     'street_count': len(alert.get('specific_streets', [])),
                     'has_coordinates': bool(alert.get('coordinates', {}).get('lat')),
-                    'borough_primary': alert.get('area', '').split(' - ')[0] if ' - ' in alert.get('area', '') else alert.get('area', ''),
+                    'borough_primary': self._extract_borough(alert),
+
+                    # Original alert data for reference
+                    'original_alert_data': alert
                 }
 
                 # Use the custom alert_id as the document ID
@@ -531,6 +549,92 @@ class MonitorJob:
 
         except Exception:
             return datetime.utcnow()
+
+    def _map_severity_to_priority(self, severity: str) -> str:
+        """Map alert severity to frontend priority"""
+        severity = severity.lower() if severity else 'medium'
+        priority_mapping = {
+            'critical': 'critical',
+            'high': 'high',
+            'medium': 'medium',
+            'low': 'low',
+            'urgent': 'critical',
+            'moderate': 'medium',
+            'minor': 'low'
+        }
+        return priority_mapping.get(severity, 'medium')
+
+    def _map_source(self, source: str) -> str:
+        """Map alert source to frontend source"""
+        source = source.lower() if source else 'reddit'
+        source_mapping = {
+            'reddit': 'reddit',
+            '311': '311',
+            'twitter': 'twitter',
+            'nyc311': '311',
+            'social': 'twitter'
+        }
+        return source_mapping.get(source, 'reddit')
+
+    def _map_status(self, status: str) -> str:
+        """Map alert status to frontend status"""
+        status = status.lower() if status else 'new'
+        status_mapping = {
+            'new': 'new',
+            'investigating': 'investigating',
+            'resolved': 'resolved',
+            'active': 'new',
+            'closed': 'resolved',
+            'open': 'new',
+            'pending': 'new'
+        }
+        return status_mapping.get(status, 'new')
+
+    def _extract_neighborhood(self, alert: Dict) -> str:
+        """Extract neighborhood from alert data"""
+        # Try multiple sources for neighborhood info
+        if alert.get('area'):
+            area = alert['area']
+            if ',' in area:
+                return area.split(',')[0].strip()
+            elif ' - ' in area:
+                return area.split(' - ')[0].strip()
+            else:
+                return area
+        elif alert.get('venue_address'):
+            return alert['venue_address']
+        elif alert.get('specific_streets') and len(alert['specific_streets']) > 0:
+            return alert['specific_streets'][0]
+        else:
+            return 'Unknown'
+
+    def _extract_borough(self, alert: Dict) -> str:
+        """Extract borough from alert data"""
+        # Try multiple sources for borough info
+        if alert.get('area'):
+            area = alert['area']
+            if ',' in area and len(area.split(',')) > 1:
+                return area.split(',')[1].strip()
+            elif ' - ' in area and len(area.split(' - ')) > 1:
+                borough_part = area.split(' - ')[1]
+                # Extract just the borough name if it contains additional info
+                for borough in ['Manhattan', 'Brooklyn', 'Queens', 'Bronx', 'Staten Island']:
+                    if borough in borough_part:
+                        return borough
+                return borough_part.strip()
+
+        # Check for direct borough field or primary_borough
+        if alert.get('borough'):
+            return alert['borough']
+        elif alert.get('primary_borough'):
+            return alert['primary_borough']
+
+        # Try to extract from coordinates or location data
+        coordinates = alert.get('coordinates', {})
+        if coordinates.get('borough'):
+            return coordinates['borough']
+
+        return 'Unknown'
 
     def _generate_stats_report(self) -> Dict:
         """Generate comprehensive execution statistics report for monitor_runs collection"""

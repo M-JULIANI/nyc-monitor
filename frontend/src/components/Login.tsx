@@ -1,66 +1,54 @@
+import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
-import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { useAuth } from '@/contexts/AuthContext';
 
-const Login = () => {
+const Login: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
+
+  // Get the redirect path from location state or default to home
+  const from = (location.state as any)?.from?.pathname || '/home';
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      width: '100%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px'
-    }}>
-      <div style={{
-        background: '#fff',
-        borderRadius: '12px',
-        padding: '3rem 2.5rem',
-        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        maxWidth: '400px',
-        width: '100%',
-        textAlign: 'center'
-      }}>
-        <h2 style={{ 
-          color: '#1f2937', 
-          marginBottom: '0.5rem',
-          fontSize: '1.875rem',
-          fontWeight: '700'
-        }}>
-          Welcome to nyc-monitor
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-800 p-4">
+      <div className="bg-zinc-800 rounded-xl p-8 md:p-12 max-w-md w-full shadow-xl border border-zinc-700">
+        <h2 className="text-2xl font-bold text-white mb-2 text-center">
+          Welcome to NYC Monitor
         </h2>
-        <p style={{
-          color: '#6b7280',
-          marginBottom: '2rem',
-          fontSize: '1rem'
-        }}>
-          Sign in to continue to your dashboard
+        <p className="text-zinc-300 mb-8 text-center">
+          Sign in to access the dashboard
         </p>
-        <GoogleLogin
-          onSuccess={credentialResponse => {
-            const idToken = credentialResponse.credential;
-            localStorage.setItem('idToken', idToken || '');
-            
-            // Navigate immediately on successful login
-            navigate('/home');
-            
-            // Optional: Test API connection in background (non-blocking)
-            axios.post(
-              '/api/chat',
-              { text: 'What is Vertex AI?' },
-              { headers: { Authorization: `Bearer ${idToken}` } }
-            ).catch(error => {
-              console.warn('API connection test failed:', error);
-              // Don't block the user experience
-            });
-          }}
-          onError={() => {
-            alert('Login Failed');
-          }}
-        />
+        
+        <div className="flex justify-center">
+          <GoogleLogin
+            onSuccess={async (credentialResponse) => {
+              const token = credentialResponse.credential;
+              if (token) {
+                try {
+                  await login(token);
+                  navigate(from, { replace: true });
+                } catch (error) {
+                  console.error('Login failed:', error);
+                  // You might want to show an error message to the user here
+                }
+              }
+            }}
+            onError={() => {
+              console.error('Login failed');
+              // You might want to show an error message to the user here
+            }}
+            useOneTap
+            theme="filled_black"
+            text="signin_with"
+            shape="rectangular"
+          />
+        </div>
+
+        <p className="mt-6 text-sm text-zinc-400 text-center">
+          By signing in, you agree to our Terms of Service and Privacy Policy
+        </p>
       </div>
     </div>
   );

@@ -320,23 +320,26 @@ class TwitterCollector(BaseCollector):
         has_location = bool(signal['metadata'].get('locations'))
         has_coordinates = signal['metadata'].get('has_coordinates', False)
 
+        # Check if location is explicitly needed (like alerts ending with 'location_needed')
+        needs_location = 'location_needed' in signal.get('title', '').lower()
+
         # Must have some engagement (retweets, likes, or replies)
         has_engagement = signal.get('score', 0) > 0
 
         # Log relevance details for debugging
-        if is_nyc_relevant or has_priority or has_location or has_coordinates:
+        if is_nyc_relevant or has_priority or has_location or has_coordinates or needs_location:
             logger.debug(
                 f"Signal relevance check: NYC={is_nyc_relevant}, "
                 f"Priority={has_priority}, Location={has_location}, "
-                f"Coords={has_coordinates}, Engagement={has_engagement}"
+                f"Coords={has_coordinates}, NeedsLocation={needs_location}, Engagement={has_engagement}"
             )
 
         # Signal is relevant if:
         # 1. It's NYC relevant AND
-        # 2. Has either priority keywords, location info, or coordinates AND
+        # 2. Has either priority keywords, location info, coordinates, OR needs location AND
         # 3. Has some engagement
         return (is_nyc_relevant and
-                (has_priority or has_location or has_coordinates) and
+                (has_priority or has_location or has_coordinates or needs_location) and
                 has_engagement)
 
     async def _tweet_to_signal(self, tweet, search_query: str) -> Optional[Dict]:
@@ -363,12 +366,19 @@ class TwitterCollector(BaseCollector):
             # Build tweet URL
             tweet_url = f"https://twitter.com/user/status/{tweet_id}"
 
-            # Extract location information
-            location_info = self.location_extractor.extract_location_info(
+            # Extract location information using the dedicated extractor with geocoding
+            location_info = await self.location_extractor.extract_location_info_with_geocoding(
                 tweet_text, '')
 
-            # Get geocoding information
-            geocoding_result = await self._geocode_location_info(location_info, tweet_text, '')
+            # Extract coordinates from the geocoding-enhanced location info (matching Reddit)
+            geocoding_result = {
+                'lat': location_info.get('center_latitude'),
+                'lng': location_info.get('center_longitude'),
+                'formatted_address': location_info['locations_found'][0].get('name') if location_info['locations_found'] else None,
+                'confidence': location_info['locations_found'][0].get('confidence', 0.0) if location_info['locations_found'] else 0.0,
+                'source': location_info.get('geocoding_source', 'hardcoded'),
+                'success': location_info.get('has_coordinates', False)
+            }
 
             # Analyze keywords for priority content
             keyword_analysis = self._analyze_keywords(tweet_text, '')
@@ -411,14 +421,14 @@ class TwitterCollector(BaseCollector):
 
                     # Location information (matching Reddit)
                     'locations': location_info['locations_found'],
-                    'latitude': geocoding_result.get('lat'),
-                    'longitude': geocoding_result.get('lng'),
-                    'formatted_address': geocoding_result.get('formatted_address'),
-                    'geocoding_confidence': geocoding_result.get('confidence', 0.0),
-                    'geocoding_source': geocoding_result.get('source', 'none'),
+                    'latitude': geocoding_result['lat'],
+                    'longitude': geocoding_result['lng'],
+                    'formatted_address': geocoding_result['formatted_address'],
+                    'geocoding_confidence': geocoding_result['confidence'],
+                    'geocoding_source': geocoding_result['source'],
                     'location_count': location_info['location_count'],
                     'primary_borough': borough or location_info['primary_borough'],
-                    'has_coordinates': geocoding_result.get('success', False),
+                    'has_coordinates': geocoding_result['success'],
 
                     # Location specificity (matching Reddit)
                     'location_specificity': location_specificity['specificity_score'],
@@ -444,45 +454,4 @@ class TwitterCollector(BaseCollector):
             logger.error(f"   Tweet ID: {getattr(tweet, 'id', 'unknown')}")
             return None
 
-    async def _geocode_location_info(self, location_info: Dict, title: str, content: str) -> Dict:
-        """Geocode location information to get real coordinates (matching Reddit's implementation)"""
-        try:
-            # Extract relevant location information
-            locations = location_info['locations_found']
-            borough = location_info.get('primary_borough')
-
-            # Try to geocode the most specific location available
-            if locations:
-                # Extract the location name string from the first location dict
-                first_location = locations[0]
-                if isinstance(first_location, dict):
-                    location_text = first_location.get('name', '')
-                else:
-                    location_text = str(first_location)
-
-                logger.debug(
-                    f"Geocoding location: '{location_text}' with borough: '{borough}'")
-                geocoding_result = await geocode_nyc_location(location_text, borough)
-            elif borough:
-                # Fall back to borough-level geocoding
-                logger.debug(f"Geocoding borough: '{borough}'")
-                geocoding_result = await geocode_nyc_location(borough)
-            else:
-                # No specific location information available
-                return self._empty_geocoding_result()
-
-            return geocoding_result
-        except Exception as e:
-            logger.warning(f"Warning: Failed to geocode location: {e}")
-            return self._empty_geocoding_result()
-
-    def _empty_geocoding_result(self) -> Dict:
-        """Return empty geocoding result (matching Reddit's implementation)"""
-        return {
-            'lat': None,
-            'lng': None,
-            'formatted_address': None,
-            'confidence': 0.0,
-            'source': 'none',
-            'success': False
-        }
+    # Old geocoding methods removed - now using location_extractor.extract_location_info_with_geocoding()
