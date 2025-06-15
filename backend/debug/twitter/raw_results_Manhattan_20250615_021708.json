@@ -1,0 +1,625 @@
+{
+  "context": "Manhattan",
+  "query": "Manhattan -is:retweet -is:reply lang:en",
+  "timestamp": "2025-06-15T02:17:08.371689",
+  "tweets": [
+    {
+      "author_id": "1541512474033127424",
+      "entities": {
+        "annotations": [
+          {
+            "start": 25,
+            "end": 44,
+            "probability": 0.9696,
+            "type": "Organization",
+            "normalized_text": "Manhattan University"
+          }
+        ],
+        "mentions": [
+          {
+            "start": 132,
+            "end": 147,
+            "username": "SFCBL_Official",
+            "id": "3307462343"
+          },
+          {
+            "start": 239,
+            "end": 253,
+            "username": "FlatgroundApp",
+            "id": "1072633093637500928"
+          },
+          {
+            "start": 254,
+            "end": 264,
+            "username": "CresseySP",
+            "id": "243711376"
+          }
+        ],
+        "urls": [
+          {
+            "start": 265,
+            "end": 288,
+            "url": "https://t.co/u6K8II3n1e",
+            "expanded_url": "https://x.com/andrew__alberts/status/1934071836720976198/video/1",
+            "display_url": "pic.x.com/u6K8II3n1e",
+            "media_key": "13_1934060121992179712"
+          },
+          {
+            "start": 265,
+            "end": 288,
+            "url": "https://t.co/u6K8II3n1e",
+            "expanded_url": "https://x.com/andrew__alberts/status/1934071836720976198/video/1",
+            "display_url": "pic.x.com/u6K8II3n1e",
+            "media_key": "13_1934060122201837568"
+          }
+        ]
+      },
+      "edit_history_tweet_ids": [
+        "1934060544941564398",
+        "1934071836720976198"
+      ],
+      "id": "1934071836720976198",
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 0,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 13
+      },
+      "created_at": "2025-06-15T02:13:53.000Z",
+      "text": "Transfer Portal LHP from Manhattan University (D1) \n3 Years Eligibility \nOpen to All 4-Year Opportunities\n\nFirst Two Outings in the @SFCBL_Official \n\n2-0, 10IP, 4H, 1R, 8K\nERA: 0.90\nBAA: .125\nVelo (Stalker): 84-88 \nContact: (602) 320-2605\n@FlatgroundApp @CresseySP https://t.co/u6K8II3n1e"
+    },
+    {
+      "author_id": "62917965",
+      "entities": {
+        "annotations": [
+          {
+            "start": 30,
+            "end": 38,
+            "probability": 0.982,
+            "type": "Place",
+            "normalized_text": "Manhattan"
+          }
+        ]
+      },
+      "edit_history_tweet_ids": [
+        "1934071826348413193"
+      ],
+      "id": "1934071826348413193",
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 0,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 7
+      },
+      "created_at": "2025-06-15T02:13:51.000Z",
+      "text": "Change of plans. I\u2019m going to Manhattan for my bday ."
+    },
+    {
+      "author_id": "1666939494",
+      "entities": {
+        "annotations": [
+          {
+            "start": 28,
+            "end": 46,
+            "probability": 0.944,
+            "type": "Place",
+            "normalized_text": "Madison Square Park"
+          },
+          {
+            "start": 51,
+            "end": 59,
+            "probability": 0.8907,
+            "type": "Place",
+            "normalized_text": "Manhattan"
+          }
+        ],
+        "urls": [
+          {
+            "start": 62,
+            "end": 85,
+            "url": "https://t.co/nOqXliyIUX",
+            "expanded_url": "https://x.com/benryanwriter/status/1934071200369504539/video/1",
+            "display_url": "pic.x.com/nOqXliyIUX",
+            "media_key": "13_1934070958181998592"
+          }
+        ]
+      },
+      "edit_history_tweet_ids": [
+        "1934071200369504539"
+      ],
+      "id": "1934071200369504539",
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 3,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 203
+      },
+      "created_at": "2025-06-15T02:11:22.000Z",
+      "text": "Discarded No Kings signs at Madison Square Park in Manhattan. https://t.co/nOqXliyIUX"
+    },
+    {
+      "author_id": "1354606765",
+      "entities": {
+        "annotations": [
+          {
+            "start": 55,
+            "end": 57,
+            "probability": 0.9622,
+            "type": "Place",
+            "normalized_text": "NYC"
+          },
+          {
+            "start": 60,
+            "end": 67,
+            "probability": 0.9702,
+            "type": "Place",
+            "normalized_text": "Brooklyn"
+          },
+          {
+            "start": 70,
+            "end": 80,
+            "probability": 0.9191,
+            "type": "Place",
+            "normalized_text": "CentralPark"
+          },
+          {
+            "start": 83,
+            "end": 91,
+            "probability": 0.9726,
+            "type": "Place",
+            "normalized_text": "Manhattan"
+          },
+          {
+            "start": 94,
+            "end": 99,
+            "probability": 0.866,
+            "type": "Place",
+            "normalized_text": "Queens"
+          },
+          {
+            "start": 102,
+            "end": 110,
+            "probability": 0.5108,
+            "type": "Place",
+            "normalized_text": "UpStateNY"
+          },
+          {
+            "start": 172,
+            "end": 177,
+            "probability": 0.6545,
+            "type": "Place",
+            "normalized_text": "Foster"
+          }
+        ],
+        "urls": [
+          {
+            "start": 223,
+            "end": 246,
+            "url": "https://t.co/RHWasy208h",
+            "expanded_url": "https://twitter.com/MoishesMom/status/1934068639197540541",
+            "display_url": "x.com/MoishesMom/sta\u2026"
+          }
+        ],
+        "hashtags": [
+          {
+            "start": 54,
+            "end": 58,
+            "tag": "NYC"
+          },
+          {
+            "start": 59,
+            "end": 68,
+            "tag": "Brooklyn"
+          },
+          {
+            "start": 69,
+            "end": 81,
+            "tag": "CentralPark"
+          },
+          {
+            "start": 82,
+            "end": 92,
+            "tag": "Manhattan"
+          },
+          {
+            "start": 93,
+            "end": 100,
+            "tag": "Queens"
+          },
+          {
+            "start": 101,
+            "end": 111,
+            "tag": "UpStateNY"
+          },
+          {
+            "start": 156,
+            "end": 170,
+            "tag": "Pledge4Rescue"
+          },
+          {
+            "start": 171,
+            "end": 178,
+            "tag": "Foster"
+          },
+          {
+            "start": 182,
+            "end": 188,
+            "tag": "Adopt"
+          }
+        ]
+      },
+      "edit_history_tweet_ids": [
+        "1934071104487719260"
+      ],
+      "id": "1934071104487719260",
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 0,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 6
+      },
+      "created_at": "2025-06-15T02:10:59.000Z",
+      "text": "\ud83c\udd98\ufe0f\ud83c\udd98\ufe0f\ud83c\udd98\ufe0f\ud83c\udd98\ufe0f THESE POOR PUPS ARE ON KILL COMMAND!! \u2620\ufe0f\ud83d\ude2d\ud83d\ude2d\ud83d\ude2d\ud83d\udc94 #NYC #Brooklyn #CentralPark #Manhattan #Queens #UpStateNY PLEASE PLEASE BE THESE PUPS' HEROES NOW VIA #Pledge4Rescue #Foster OR #Adopt to loving homes ASAP!! \ud83c\udd98\ufe0f\ud83c\udd98\ufe0f\ud83c\udd98\ufe0f\ud83e\udd7a\ud83d\udc36\ud83d\udc3e\ud83d\ude4f https://t.co/RHWasy208h"
+    },
+    {
+      "author_id": "1233486314584100864",
+      "entities": {
+        "annotations": [
+          {
+            "start": 43,
+            "end": 51,
+            "probability": 0.6282,
+            "type": "Place",
+            "normalized_text": "manhattan"
+          }
+        ]
+      },
+      "edit_history_tweet_ids": [
+        "1934071031477760337"
+      ],
+      "id": "1934071031477760337",
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 0,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 0
+      },
+      "created_at": "2025-06-15T02:10:41.000Z",
+      "text": "strangers treat you better than friends in manhattan.."
+    },
+    {
+      "author_id": "1593829255460577282",
+      "entities": {
+        "annotations": [
+          {
+            "start": 11,
+            "end": 14,
+            "probability": 0.6024,
+            "type": "Other",
+            "normalized_text": "B-29"
+          },
+          {
+            "start": 40,
+            "end": 46,
+            "probability": 0.6448,
+            "type": "Other",
+            "normalized_text": "Project"
+          },
+          {
+            "start": 52,
+            "end": 54,
+            "probability": 0.901,
+            "type": "Other",
+            "normalized_text": "WW2"
+          },
+          {
+            "start": 72,
+            "end": 88,
+            "probability": 0.8043,
+            "type": "Other",
+            "normalized_text": "Manhattan Project"
+          },
+          {
+            "start": 109,
+            "end": 115,
+            "probability": 0.7907,
+            "type": "Other",
+            "normalized_text": "Jet Age"
+          }
+        ],
+        "urls": [
+          {
+            "start": 151,
+            "end": 174,
+            "url": "https://t.co/ki31s3KYVH",
+            "expanded_url": "https://twitter.com/airandspace/status/1933693436613304492",
+            "display_url": "x.com/airandspace/st\u2026"
+          }
+        ]
+      },
+      "edit_history_tweet_ids": [
+        "1934070634470047931"
+      ],
+      "id": "1934070634470047931",
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 2,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 16
+      },
+      "created_at": "2025-06-15T02:09:07.000Z",
+      "text": "WOW!!\n\nThe B-29 was the most expensive \"Project\" of WW2\n\nIt cost 2X the Manhattan Project but ushered in the Jet Age (even though it was a Prop plane) https://t.co/ki31s3KYVH"
+    },
+    {
+      "author_id": "1604731202560471040",
+      "entities": {
+        "annotations": [
+          {
+            "start": 18,
+            "end": 25,
+            "probability": 0.948,
+            "type": "Place",
+            "normalized_text": "Millburn"
+          },
+          {
+            "start": 42,
+            "end": 56,
+            "probability": 0.9209,
+            "type": "Place",
+            "normalized_text": "New Ark airport"
+          },
+          {
+            "start": 86,
+            "end": 94,
+            "probability": 0.971,
+            "type": "Place",
+            "normalized_text": "Manhattan"
+          },
+          {
+            "start": 193,
+            "end": 195,
+            "probability": 0.967,
+            "type": "Place",
+            "normalized_text": "USA"
+          }
+        ]
+      },
+      "edit_history_tweet_ids": [
+        "1934070057413562759"
+      ],
+      "id": "1934070057413562759",
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 0,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 9
+      },
+      "created_at": "2025-06-15T02:06:49.000Z",
+      "text": "\ud83d\ude06\n\nMy house is in Millburn\n\nI will fly to New Ark airport!\n\nI heard many buildings in Manhattan are purchased and redesigned as accommodations.\n\nHousewives are so many.\n\nThey will get Visa for USA... \ud83e\udd79"
+    },
+    {
+      "author_id": "16032461",
+      "entities": {
+        "annotations": [
+          {
+            "start": 0,
+            "end": 7,
+            "probability": 0.8441,
+            "type": "Place",
+            "normalized_text": "Brooklyn"
+          },
+          {
+            "start": 15,
+            "end": 23,
+            "probability": 0.9389,
+            "type": "Place",
+            "normalized_text": "Manhattan"
+          },
+          {
+            "start": 46,
+            "end": 48,
+            "probability": 0.8866,
+            "type": "Place",
+            "normalized_text": "NYC"
+          },
+          {
+            "start": 136,
+            "end": 149,
+            "probability": 0.6236,
+            "type": "Person",
+            "normalized_text": "Zohran Mamdani"
+          },
+          {
+            "start": 184,
+            "end": 195,
+            "probability": 0.864,
+            "type": "Person",
+            "normalized_text": "Andrew Cuomo"
+          }
+        ],
+        "urls": [
+          {
+            "start": 198,
+            "end": 221,
+            "url": "https://t.co/l9qB0EWiil",
+            "expanded_url": "https://twitter.com/JCColtin/status/1934004467130568826",
+            "display_url": "x.com/JCColtin/statu\u2026"
+          }
+        ]
+      },
+      "edit_history_tweet_ids": [
+        "1934069141574435064",
+        "1934069795105685775"
+      ],
+      "id": "1934069795105685775",
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 0,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 16
+      },
+      "created_at": "2025-06-15T02:05:47.000Z",
+      "text": "Brooklyn &amp; Manhattan coming out on top in NYC Early Voting on Day 1. DOUBLE compared to the same time in 2021:\n\nBoth boroughs where Zohran Mamdani is polling the strongest against Andrew Cuomo. https://t.co/l9qB0EWiil"
+    },
+    {
+      "author_id": "1594436804937191432",
+      "edit_history_tweet_ids": [
+        "1934069781314879904"
+      ],
+      "id": "1934069781314879904",
+      "entities": {
+        "urls": [
+          {
+            "start": 178,
+            "end": 201,
+            "url": "https://t.co/UUPWhMS5zN",
+            "expanded_url": "https://x.com/pretty_maddiie/status/1934069781314879904/photo/1",
+            "display_url": "pic.x.com/UUPWhMS5zN",
+            "media_key": "3_1934069768950067200"
+          }
+        ],
+        "hashtags": [
+          {
+            "start": 59,
+            "end": 67,
+            "tag": "meetups"
+          },
+          {
+            "start": 68,
+            "end": 79,
+            "tag": "sloppyhead"
+          },
+          {
+            "start": 80,
+            "end": 90,
+            "tag": "backshots"
+          },
+          {
+            "start": 91,
+            "end": 100,
+            "tag": "creampie"
+          },
+          {
+            "start": 101,
+            "end": 109,
+            "tag": "fontana"
+          },
+          {
+            "start": 110,
+            "end": 113,
+            "tag": "ny"
+          },
+          {
+            "start": 114,
+            "end": 124,
+            "tag": "manhattan"
+          },
+          {
+            "start": 125,
+            "end": 132,
+            "tag": "philly"
+          },
+          {
+            "start": 133,
+            "end": 137,
+            "tag": "atl"
+          },
+          {
+            "start": 138,
+            "end": 144,
+            "tag": "horny"
+          },
+          {
+            "start": 145,
+            "end": 154,
+            "tag": "facetime"
+          },
+          {
+            "start": 155,
+            "end": 163,
+            "tag": "nsfwtwt"
+          },
+          {
+            "start": 164,
+            "end": 177,
+            "tag": "adultcontent"
+          }
+        ]
+      },
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 1,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 8
+      },
+      "created_at": "2025-06-15T02:05:43.000Z",
+      "text": "Wyd tn papi?\ud83d\udc40 hmu for some backshots\ud83c\udf51 session, I\u2019m mobile\n\n#meetups #sloppyhead #backshots #creampie #fontana #ny #manhattan #philly #atl #horny #facetime #nsfwtwt #adultcontent https://t.co/UUPWhMS5zN"
+    },
+    {
+      "author_id": "1677305695",
+      "entities": {
+        "annotations": [
+          {
+            "start": 68,
+            "end": 76,
+            "probability": 0.6072,
+            "type": "Place",
+            "normalized_text": "Manhattan"
+          }
+        ]
+      },
+      "edit_history_tweet_ids": [
+        "1934069767226404929"
+      ],
+      "id": "1934069767226404929",
+      "public_metrics": {
+        "retweet_count": 0,
+        "reply_count": 0,
+        "like_count": 0,
+        "quote_count": 0,
+        "bookmark_count": 0,
+        "impression_count": 17
+      },
+      "created_at": "2025-06-15T02:05:40.000Z",
+      "text": "Emergency teams responding to a person struck by a train near 9 Av: Manhattan bound D, N and R trains are experiencing delays. Please allow additional travel time."
+    }
+  ],
+  "includes": {
+    "users": [
+      "andrew__alberts",
+      "blaqdahlia85",
+      "benryanwriter",
+      "CMFairy24",
+      "_he4rtlesss",
+      "CyranoYvr",
+      "AdamPhoenixPark",
+      "ToffeeFever",
+      "pretty_maddiie",
+      "Derrick_NYC"
+    ]
+  },
+  "meta": {
+    "newest_id": "1934071836720976198",
+    "oldest_id": "1934069767226404929",
+    "result_count": 10,
+    "next_token": "b26v89c19zqg8o3fsc57k2um4uwkacqhowx4fl4736459"
+  }
+}

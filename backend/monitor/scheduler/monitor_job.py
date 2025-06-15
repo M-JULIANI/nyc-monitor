@@ -5,6 +5,7 @@ Designed to run every 15 minutes as a Cloud Run Job.
 """
 from monitor.collectors.reddit_collector import RedditCollector
 from monitor.collectors.hackernews_collector import HackerNewsCollector
+from monitor.collectors.twitter_collector import TwitterCollector
 from monitor.agents.triage_agent import TriageAgent
 from monitor.storage.firestore_manager import FirestoreManager
 import os
@@ -64,6 +65,15 @@ class MonitorJob:
             except Exception as e:
                 logger.warning(
                     f"⚠️  HackerNews collector not initialized: {str(e)}")
+
+            # Twitter collector (only if credentials are available)
+            try:
+                twitter_collector = TwitterCollector()
+                self.collectors.append(twitter_collector)
+                logger.info("✅ Twitter collector initialized successfully")
+            except ValueError as e:
+                logger.warning(
+                    f"⚠️  Twitter collector not initialized: {str(e)}")
 
             # TODO: Add more collectors here (traffic, crime, 311, etc.)
 

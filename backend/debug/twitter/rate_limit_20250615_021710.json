@@ -1,0 +1,7 @@
+{
+  "timestamp": "2025-06-15T02:17:10.496828",
+  "context": "Brooklyn",
+  "query": "Brooklyn -is:retweet -is:reply lang:en",
+  "error": "429 Too Many Requests\nToo Many Requests",
+  "reset_time": "2025-06-15T02:32:10.495942"
+}

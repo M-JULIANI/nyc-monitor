@@ -42,6 +42,11 @@ REDDIT_CLIENT_ID ?= $(shell grep -E '^REDDIT_CLIENT_ID=' .env 2>/dev/null | cut 
 REDDIT_CLIENT_SECRET ?= $(shell grep -E '^REDDIT_CLIENT_SECRET=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 REDDIT_REFRESH_TOKEN ?= $(shell grep -E '^REDDIT_REFRESH_TOKEN=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 
+# Twitter API credentials (for monitor system)
+TWITTER_API_KEY ?= $(shell grep -E '^TWITTER_API_KEY=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+TWITTER_API_KEY_SECRET ?= $(shell grep -E '^TWITTER_API_KEY_SECRET=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+TWITTER_BEARER_TOKEN ?= $(shell grep -E '^TWITTER_BEARER_TOKEN=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+
 # Ensure PATH includes user's local bin
 SHELL := /bin/bash
 export PATH := /home/vscode/.local/bin:$(PATH)
@@ -410,6 +415,9 @@ deploy-monitor: build-monitor check-gcloud
 			--set-env-vars="REDDIT_CLIENT_ID=$(REDDIT_CLIENT_ID)" \
 			--set-env-vars="REDDIT_CLIENT_SECRET=$(REDDIT_CLIENT_SECRET)" \
 			--set-env-vars="REDDIT_REFRESH_TOKEN=$(REDDIT_REFRESH_TOKEN)" \
+			--set-env-vars="TWITTER_API_KEY=$(TWITTER_API_KEY)" \
+			--set-env-vars="TWITTER_API_KEY_SECRET=$(TWITTER_API_KEY_SECRET)" \
+			--set-env-vars="TWITTER_BEARER_TOKEN=$(TWITTER_BEARER_TOKEN)" \
 			--quiet; \
 	else \
 		echo "Creating new Cloud Run Job..."; \
@@ -426,6 +434,9 @@ deploy-monitor: build-monitor check-gcloud
 			--set-env-vars="REDDIT_CLIENT_ID=$(REDDIT_CLIENT_ID)" \
 			--set-env-vars="REDDIT_CLIENT_SECRET=$(REDDIT_CLIENT_SECRET)" \
 			--set-env-vars="REDDIT_REFRESH_TOKEN=$(REDDIT_REFRESH_TOKEN)" \
+			--set-env-vars="TWITTER_API_KEY=$(TWITTER_API_KEY)" \
+			--set-env-vars="TWITTER_API_KEY_SECRET=$(TWITTER_API_KEY_SECRET)" \
+			--set-env-vars="TWITTER_BEARER_TOKEN=$(TWITTER_BEARER_TOKEN)" \
 			--max-retries=3 --quiet; \
 	fi
 	@echo ""

@@ -199,11 +199,17 @@ You are a NYC monitoring triage agent. Analyze these data signals and assign sev
 4. **Update vs. New Alert**: If it's the same event with minor updates, mark it as "duplicate_of" and include the original alert's document_id
 
 **CONTENT AND SENTIMENT ANALYSIS**:
-1. **Analyze Actual Content**: Examine the full text, sentiment, and tone of Reddit posts
-2. **Community Reaction**: Note if posts show concern, excitement, avoidance, or participation
-3. **Information Quality**: Prioritize first-hand accounts and detailed reports over vague references
-4. **Urgency Markers**: Look for "happening now", "urgent", "breaking", "just saw" etc.
-5. **Tone Analysis**: Consider whether posts are informational, questioning, concerned, or angry
+1. **Analyze Actual Content**: Examine the full text, sentiment, and tone across all sources (Reddit posts, Tweets, HackerNews stories, 311 reports, etc.)
+2. **Community Reaction**: Note if content shows concern, excitement, avoidance, or participation across different platforms
+3. **Information Quality**: Prioritize first-hand accounts and detailed reports over vague references, regardless of source
+4. **Urgency Markers**: Look for "happening now", "urgent", "breaking", "just saw", "live from", "currently at" etc.
+5. **Tone Analysis**: Consider whether content is informational, questioning, concerned, or angry
+6. **Source-Specific Context**:
+   - **Reddit**: Community discussions, local neighborhood insights, eyewitness accounts
+   - **Twitter**: Real-time updates, breaking news, immediate reactions, official announcements
+   - **HackerNews**: Tech community perspective, startup events, infrastructure discussions
+   - **311**: Official reports, service requests, infrastructure issues, planned maintenance
+   - **Other sources**: Government feeds, emergency services, traffic systems, etc.
 
 **CRITICAL REQUIREMENT - LOCATION SPECIFICITY**: 
 Only create alerts if you can identify SPECIFIC locations with actionable geographic detail:
@@ -220,7 +226,7 @@ Only create alerts if you can identify SPECIFIC locations with actionable geogra
 - Broad descriptions like "downtown" or "uptown" without street references
 
 **Your Task**: 
-1. Identify potential alerts, incidents, emergencies, OR major public events affecting NYC residents
+1. Identify potential alerts, incidents, emergencies, OR major public events affecting NYC residents from ANY SOURCE
 2. Assign severity scores (1-10) where:
    - 9-10: Critical emergencies (major incidents, safety threats, city-wide disruptions)
    - 7-8: High priority (significant events, widespread crowd gatherings, infrastructure issues)
@@ -232,14 +238,18 @@ Only create alerts if you can identify SPECIFIC locations with actionable geogra
    - **Emergency situations**: Accidents, fires, public safety threats, infrastructure failures
    - **Major public events**: Parades, festivals, concerts, protests, large gatherings
    - **Crowd management scenarios**: Events that draw significant crowds affecting city operations
-   - **Cross-source correlations**: Same event/area mentioned across platforms
+   - **Cross-source correlations**: Same event/area mentioned across multiple platforms (Reddit + Twitter + 311, etc.)
    - **Infrastructure impacts**: Events affecting traffic, transit, utilities, city services
    - **Seasonal/planned events**: Major NYC events (Pride, marathons, street fairs, holiday events)
+   - **Tech/Business events**: From HackerNews - conferences, meetups, startup events in NYC
+   - **Official reports**: From 311 - service disruptions, planned maintenance, public notices
 
 4. Event Examples to Capture (WITH SPECIFIC LOCATIONS):
    - **Emergency (High severity)**: "Fire at 123 Main St, Manhattan", "Subway shutdown at Union Square-14th St", "Water main break on Broadway between 42nd-45th St"
    - **Major Events (Medium-High)**: "Pride Parade on 5th Ave from 36th to 8th St", "Marathon closures on Verrazzano Bridge and 4th Ave Brooklyn", "Concert at Central Park Great Lawn"
    - **Local Events (Medium)**: "Street fair on Smith St between Atlantic-Pacific", "Block party on 85th St between 2nd-3rd Ave", "Festival in Prospect Park Bandshell area"
+   - **Tech Events (Medium)**: "Tech conference at Javits Center", "Startup demo day at Brooklyn Navy Yard", "Hackathon at Cornell Tech Roosevelt Island"
+   - **311 Reports (Variable)**: "Street closure for filming on Park Ave 42nd-45th", "Water service interruption E 14th St between 1st-2nd Ave"
 
 5. For alert titles, use descriptive event names WITHOUT date prefixes:
    - Example: "Pride Parade - 5th Ave (36th to 8th St)"
@@ -256,7 +266,7 @@ Only create alerts if you can identify SPECIFIC locations with actionable geogra
 
 **Response Format** (JSON only):
 {{
-  "summary": "Brief overview of current NYC situation including events and emergencies",
+  "summary": "Brief overview of current NYC situation including events and emergencies from all monitored sources",
   "alerts": [
     {{
       "id": "example_event_id",
@@ -266,8 +276,8 @@ Only create alerts if you can identify SPECIFIC locations with actionable geogra
       "severity": 8,
       "category": "event",
       "event_type": "parade",
-      "signals": ["reddit"],
-      "description": "Detailed description with specific streets, times, and transportation impacts.",
+      "signals": ["reddit", "twitter", "311"],
+      "description": "Detailed description with specific streets, times, and transportation impacts. Cross-referenced across multiple sources.",
       "keywords": ["example", "keywords"],
       "confidence": 0.85,
       "crowd_impact": "high",
@@ -284,14 +294,20 @@ Only create alerts if you can identify SPECIFIC locations with actionable geogra
       "community_sentiment": "concerned",
       "information_quality": "first-hand",
       "urgency_markers": ["happening now", "urgent"],
-      "tone_analysis": "informational"
+      "tone_analysis": "informational",
+      "source_breakdown": {{
+        "reddit": "Community discussion and eyewitness accounts",
+        "twitter": "Real-time updates and official announcements", 
+        "311": "Official street closure notifications",
+        "hackernews": "Tech community event details"
+      }}
     }}
   ],
   "duplicates_detected": [
     {{
       "original_alert_id": "2025-06-01_1234_parade_5th_ave",
-      "reason": "Same parade route and timing",
-      "new_information": "Updated crowd size estimate",
+      "reason": "Same parade route and timing across multiple sources",
+      "new_information": "Updated crowd size estimate from Twitter",
       "action": "no_new_alert_needed"
     }}
   ],
@@ -299,12 +315,21 @@ Only create alerts if you can identify SPECIFIC locations with actionable geogra
     {{
       "source": "reddit",
       "note": "Normal discussions without significant events"
+    }},
+    {{
+      "source": "twitter", 
+      "note": "Regular NYC chatter and routine updates"
+    }},
+    {{
+      "source": "hackernews",
+      "note": "Standard tech discussions not NYC-specific"
     }}
   ],
   "rejected_signals": [
     {{
       "reason": "Insufficient location specificity",
-      "example": "Event mentioned without specific streets or venues"
+      "example": "Event mentioned without specific streets or venues",
+      "sources": ["reddit", "twitter"]
     }}
   ]
 }}
@@ -347,22 +372,29 @@ IMPORTANT:
     def _create_fallback_response(self, raw_signals: Dict) -> Dict:
         """Create a fallback response when AI analysis fails - no fake alerts"""
         logger.error("❌ Triage analysis failed - returning empty results")
-        logger.error("📊 Raw signals will not be processed into alerts")
+        logger.error(
+            "📊 Raw signals from all sources will not be processed into alerts")
         logger.error(f"   Sources affected: {list(raw_signals.keys())}")
+
+        # Get source names for logging (excluding metadata)
+        sources = [k for k in raw_signals.keys() if k not in [
+            'recent_alerts', 'timestamp', 'collection_window']]
+        logger.error(f"   Data sources with unprocessed signals: {sources}")
 
         # Return empty results - no fake entries
         return {
-            'summary': 'Triage analysis failed - no alerts generated',
+            'summary': 'Triage analysis failed - no alerts generated from any source',
             'alerts': [],  # Empty - no fake entries
             'normal_activity': [],
             'timestamp': datetime.utcnow().isoformat(),
-            'sources_analyzed': list(raw_signals.keys()),
+            'sources_analyzed': sources,
             'action_required': {
                 'urgent_investigation': [],
                 'user_investigation': [],
                 'monitor_only': [],
                 'normal_activity': []
             },
-            'error': 'AI analysis failed',
-            'raw_signals_available': True  # Data is available for manual review
+            'error': 'AI analysis failed - check logs for details',
+            'raw_signals_available': True,  # Data is available for manual review
+            'affected_sources': sources
         }
