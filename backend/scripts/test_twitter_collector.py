@@ -10,6 +10,10 @@ import sys
 import os
 import logging
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add the backend directory to Python path
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -50,14 +54,9 @@ async def test_twitter_collector():
             # Analyze signal types and priorities
             priority_count = sum(1 for s in signals if s['metadata'].get(
                 'has_priority_content', False))
-            # Use emergency keywords directly from BaseCollector.PRIORITY_KEYWORDS
-            emergency_keywords = [
-                keyword for keyword in BaseCollector.PRIORITY_KEYWORDS
-                if keyword in ['911', 'emergency', 'fire', 'shooting', 'explosion', 'ambulance', 'police']
-            ]
             emergency_count = sum(1 for s in signals
                                   if any(keyword in s['metadata'].get('priority_flags', [])
-                                         for keyword in emergency_keywords))
+                                         for keyword in ['911', 'emergency', 'fire', 'shooting', 'explosion', 'ambulance', 'police']))
 
             logger.info(f"   🚨 Priority signals: {priority_count}")
             logger.info(f"   🆘 Emergency signals: {emergency_count}")
@@ -66,11 +65,12 @@ async def test_twitter_collector():
             logger.info("📰 Top signals:")
             for i, signal in enumerate(signals[:3], 1):
                 title = signal.get('title', 'No title')[:80]
-                score = signal.get('score', 0)
+                score = signal.get('engagement', {}).get('score', 0)
                 keywords = signal['metadata'].get('priority_keywords', [])
                 locations = signal['metadata'].get('locations', [])
+                context = signal['metadata'].get('context', 'Unknown')
 
-                logger.info(f"   {i}. {title}...")
+                logger.info(f"   {i}. [{context}] {title}...")
                 logger.info(
                     f"      Score: {score} | Keywords: {keywords[:3]} | Locations: {len(locations)}")
                 logger.info(f"      URL: {signal.get('url', 'No URL')}")
@@ -95,9 +95,9 @@ async def test_twitter_collector():
                 f"   Signals with coordinates: {len(signals_with_coords)}")
 
             # Test engagement metrics
-            avg_engagement = sum(s.get('score', 0)
+            avg_engagement = sum(s.get('engagement', {}).get('score', 0)
                                  for s in signals) / len(signals) if signals else 0
-            max_engagement = max(s.get('score', 0)
+            max_engagement = max(s.get('engagement', {}).get('score', 0)
                                  for s in signals) if signals else 0
 
             logger.info(f"📈 Engagement Analysis:")
@@ -117,14 +117,19 @@ async def test_twitter_collector():
         logger.info(
             f"   Bearer Token: {'✅ SET' if collector.bearer_token else '❌ MISSING'}")
 
-        # Test search queries
-        logger.info(f"🔍 Search Queries ({len(collector.search_queries)}):")
-        for i, query in enumerate(collector.search_queries[:5], 1):
-            logger.info(f"   {i}. {query}")
+        # Test monitoring contexts
+        logger.info(f"🔍 Monitoring Contexts ({len(collector.nyc_contexts)}):")
+        for i, context in enumerate(collector.nyc_contexts, 1):
+            logger.info(f"   {i}. {context['name']}: {context['query']}")
 
-        if len(collector.search_queries) > 5:
+        # Show priority keywords
+        logger.info(
+            f"🔑 Priority Keywords ({len(collector.priority_keywords)}):")
+        for i, keyword in enumerate(collector.priority_keywords[:5], 1):
+            logger.info(f"   {i}. {keyword}")
+        if len(collector.priority_keywords) > 5:
             logger.info(
-                f"   ... and {len(collector.search_queries) - 5} more queries")
+                f"   ... and {len(collector.priority_keywords) - 5} more keywords")
 
         logger.info("✅ Twitter collector test completed successfully")
         return True
