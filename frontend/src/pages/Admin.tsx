@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { ApiClient } from '@/lib/api';
-import { User } from '@/types';
+import { useAuth } from '../contexts/AuthContext';
+import { ApiClient } from '../lib/api';
+import { User } from '../types';
 
 const Admin: React.FC = () => {
   const { user } = useAuth();

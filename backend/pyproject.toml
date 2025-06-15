@@ -48,4 +48,7 @@ build-backend = "poetry.core.masonry.api"
 name = "nyc-monitor-backend"
 version = "0.1.0"
 description = ""
-authors = ["marcotjuliani@gmail.com", "martin.stacey.r@gmail.com"]
+authors = [
+    "Marco Juliani <marcotjuliani@gmail.com>",
+    "Martin Stacey <martin.stacey.r@gmail.com>"
+]

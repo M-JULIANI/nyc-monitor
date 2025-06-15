@@ -1,6 +1,6 @@
 // frontend/src/hooks/useAlerts.ts
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Alert } from '@/types';
+import { Alert } from '../types';
 
 interface AlertsData {
   alerts: Alert[];
@@ -79,6 +79,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       setIsConnected(false);
       // EventSource will automatically try to reconnect
       console.warn('SSE connection error, will retry automatically');
+      console.error('SSE connection error:', event);
     };
 
     return () => {
