@@ -1,23 +1,10 @@
 import { useState, useRef } from 'react';
 import Map, { Layer, Source, Popup } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import { Alert } from '@/types';
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA';
 
-// Sample NYC alert data structure
-interface Alert {
-  id: string;
-  title: string;
-  description: string;
-  latitude: number;
-  longitude: number;
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  source: 'reddit' | '311' | 'twitter';
-  timestamp: string;
-  status: 'new' | 'investigating' | 'resolved';
-  neighborhood?: string;
-  borough?: string;
-}
 
 // Sample data for demonstration
 const sampleAlerts: Alert[] = [
