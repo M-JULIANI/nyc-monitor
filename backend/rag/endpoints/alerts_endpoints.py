@@ -79,12 +79,12 @@ async def stream_alerts():
 
 
 @alerts_router.get('/recent')
-async def get_recent_alerts(limit: int = 75):
+async def get_recent_alerts(limit: int = 100):
     """Get recent alerts (non-streaming)"""
     try:
         db = get_db()
         alerts_ref = db.collection('nyc_monitor_alerts')
-        cutoff_time = datetime.utcnow() - timedelta(hours=24)
+        cutoff_time = datetime.utcnow() - timedelta(hours=48)
 
         query = (alerts_ref
                  .where('created_at', '>=', cutoff_time)
