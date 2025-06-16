@@ -46,7 +46,7 @@ class AtlasRootAgent:
         self.agent = Agent(
             model='gemini-2.0-flash-001',
             name=self.agent_name,
-            instructions=self._get_root_instructions(),
+            instruction=self._get_root_instructions(),
             tools=[
                 update_alert_status,
                 manage_investigation_state,

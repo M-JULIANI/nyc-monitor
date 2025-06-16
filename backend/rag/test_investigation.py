@@ -34,13 +34,7 @@ async def test_investigation_system():
         severity=7,
         summary="Large gathering reported in Washington Square Park with residents expressing concerns about recent development projects. Social media indicates growing community organization around housing issues.",
         sources=["Reddit", "Twitter", "311 Complaints", "Community Board"],
-        timestamp=datetime.utcnow(),
-        metadata={
-            "estimated_crowd": "200-300 people",
-            "police_presence": "moderate",
-            "media_coverage": "local news",
-            "community_groups": ["Village Preservation", "Housing Justice Coalition"]
-        }
+        timestamp=datetime.utcnow()
     )
 
     print(f"📋 Test Alert Details:")
@@ -73,7 +67,7 @@ async def test_investigation_system():
         investigation_state = state_manager.get_investigation(investigation_id)
         if investigation_state:
             print(f"   Phase: {investigation_state.phase}")
-            print(f"   Confidence: {investigation_state.confidence}")
+            print(f"   Confidence: {investigation_state.confidence_score}")
             print(f"   Artifacts: {len(investigation_state.artifacts)}")
             print(f"   Iteration: {investigation_state.iteration_count}")
 
@@ -100,10 +94,10 @@ async def test_individual_agents():
 
     try:
         # Test imports
-        from agents.research_agent import create_research_agent
-        from agents.data_agent import create_data_agent
-        from agents.analysis_agent import create_analysis_agent
-        from agents.report_agent import create_report_agent
+        from rag.agents.research_agent import create_research_agent
+        from rag.agents.data_agent import create_data_agent
+        from rag.agents.analysis_agent import create_analysis_agent
+        from rag.agents.report_agent import create_report_agent
 
         print("✅ All agent imports successful")
 
@@ -136,7 +130,7 @@ async def test_tools_individually():
 
     try:
         # Test research tools
-        from tools.research_tools import web_search_func, search_social_media_func, query_live_apis_func
+        from rag.tools.research_tools import web_search_func, search_social_media_func, query_live_apis_func
 
         print("Testing Research Tools:")
         web_result = web_search_func(
@@ -152,7 +146,7 @@ async def test_tools_individually():
         print(f"   ✅ Live API: {api_result['status']}")
 
         # Test data tools
-        from tools.data_tools import (
+        from rag.tools.data_tools import (
             search_knowledge_base, query_census_demographics,
             get_crime_statistics, find_similar_incidents
         )
@@ -173,7 +167,7 @@ async def test_tools_individually():
         print(f"   ✅ Similar incidents: {len(similar_result)} found")
 
         # Test analysis tools
-        from tools.analysis_tools import (
+        from rag.tools.analysis_tools import (
             analyze_temporal_patterns, correlate_data_sources,
             identify_risk_factors, generate_hypotheses
         )
@@ -197,7 +191,7 @@ async def test_tools_individually():
         print(f"   ✅ Hypotheses: {len(hypothesis_result)} generated")
 
         # Test report tools
-        from tools.report_tools import (
+        from rag.tools.report_tools import (
             fact_check_claims_func, assess_source_reliability_func,
             generate_confidence_scores_func
         )

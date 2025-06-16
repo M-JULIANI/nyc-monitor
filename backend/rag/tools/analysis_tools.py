@@ -18,13 +18,12 @@ import json
 from typing import List, Dict
 from datetime import datetime
 from google.genai import types
-from google.adk.tools import tool, FunctionTool, ToolContext
+from google.adk.tools import FunctionTool, ToolContext
 from ..investigation.state_manager import state_manager
 
 # TODO: Implement analysis tools
 
 
-@tool
 def analyze_temporal_patterns(
     events: List[Dict],
     time_window: str
@@ -86,7 +85,6 @@ def analyze_temporal_patterns(
     }
 
 
-@tool
 def correlate_data_sources(
     research_data: Dict,
     static_data: Dict
@@ -161,7 +159,6 @@ def correlate_data_sources(
     }
 
 
-@tool
 def identify_risk_factors(
     incident_data: Dict,
     area_context: Dict
@@ -253,7 +250,6 @@ def identify_risk_factors(
     }
 
 
-@tool
 def generate_hypotheses(
     collected_data: Dict
 ) -> List[Dict]:
@@ -407,8 +403,4 @@ async def save_analysis_results_func(
 
 
 # Create the tool using FunctionTool
-save_analysis_results = FunctionTool(
-    name="save_analysis_results",
-    description="Save analysis results as artifacts for reference and reporting",
-    func=save_analysis_results_func
-)
+save_analysis_results = FunctionTool(save_analysis_results_func)

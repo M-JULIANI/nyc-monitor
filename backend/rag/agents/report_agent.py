@@ -36,38 +36,18 @@ def create_report_agent(
 
     # Report generation tools
     tools = [
-        FunctionTool(
-            name="fact_check_claims",
-            description="Validate claims against multiple evidence sources",
-            func=fact_check_claims_func
-        ),
-        FunctionTool(
-            name="assess_source_reliability",
-            description="Evaluate the reliability and bias of information sources",
-            func=assess_source_reliability_func
-        ),
-        FunctionTool(
-            name="generate_confidence_scores",
-            description="Calculate confidence levels for different findings",
-            func=generate_confidence_scores_func
-        ),
-        FunctionTool(
-            name="create_investigation_report",
-            description="Generate comprehensive investigation report as artifacts",
-            func=create_investigation_report_func
-        ),
-        FunctionTool(
-            name="create_slides_presentation",
-            description="Create Google Slides presentation from investigation data",
-            func=create_slides_presentation_func
-        )
+        FunctionTool(fact_check_claims_func),
+        FunctionTool(assess_source_reliability_func),
+        FunctionTool(generate_confidence_scores_func),
+        FunctionTool(create_investigation_report_func),
+        FunctionTool(create_slides_presentation_func)
     ]
 
     # Create the agent
     agent = Agent(
         model=model,
         name=name,
-        instructions=return_report_instructions(),
+        instruction=return_report_instructions(),
         tools=tools
     )
 

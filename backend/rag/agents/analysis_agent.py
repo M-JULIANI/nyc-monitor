@@ -45,7 +45,7 @@ def create_analysis_agent(
     agent = Agent(
         model=model,
         name=name,
-        instructions=return_analysis_instructions(),
+        instruction=return_analysis_instructions(),
         tools=tools
     )
 

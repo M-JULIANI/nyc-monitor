@@ -27,7 +27,8 @@ from vertexai.preview import rag
 
 from dotenv import load_dotenv
 from .prompts.orchestrator import return_orchestrator_instructions
-from .sub_agents.research_agent import create_research_agent
+# Note: This is not used since we switched to root_agent, but keeping import for potential reference
+# from .agents.research_agent import create_research_agent
 from .tools.coordination_tools import update_alert_status, manage_investigation_state
 from .investigation.state_manager import AlertData, state_manager, InvestigationPhase
 from .investigation.progress_tracker import progress_tracker, ProgressStatus

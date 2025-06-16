@@ -15,12 +15,11 @@
 """Data tools for internal knowledge and static data analysis."""
 
 from typing import List, Dict, Optional
-from google.adk.tools import tool
+from google.adk.tools import FunctionTool
 
 # TODO: Implement data tools
 
 
-@tool
 def search_knowledge_base(
     query: str,
     filters: Optional[Dict] = None
@@ -59,7 +58,6 @@ def search_knowledge_base(
     ]
 
 
-@tool
 def query_census_demographics(
     location: str,
     metrics: List[str]
@@ -114,7 +112,6 @@ def query_census_demographics(
     }
 
 
-@tool
 def get_crime_statistics(
     area: str,
     time_period: str,
@@ -165,7 +162,6 @@ def get_crime_statistics(
     }
 
 
-@tool
 def find_similar_incidents(
     incident_description: str,
     location: Optional[str] = None
@@ -220,7 +216,6 @@ def find_similar_incidents(
     ]
 
 
-@tool
 def get_construction_permits(
     area: str,
     date_range: str
@@ -283,7 +278,6 @@ def get_construction_permits(
     ]
 
 
-@tool
 def analyze_housing_market(
     area: str,
     time_period: str

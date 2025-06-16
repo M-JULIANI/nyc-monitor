@@ -56,7 +56,7 @@ def create_data_agent(
     agent = Agent(
         model=model,
         name=name,
-        instructions=return_data_instructions(),
+        instruction=return_data_instructions(),
         tools=tools
     )
 
