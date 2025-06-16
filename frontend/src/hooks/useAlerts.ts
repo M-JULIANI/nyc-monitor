@@ -100,6 +100,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       setAlerts(normalizedAlerts);
       setError(null);
       setIsLoading(false);
+      if(!isConnected)setIsConnected(true);
     } catch (err) {
       setError('Failed to load recent alerts');
       setIsLoading(false);
@@ -151,7 +152,6 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     // return () => {
     //   eventSource.close();
     // };
-        setIsConnected(true);
   }, [mergeAlerts, useStream, pollInterval, fetchRecentAlerts]);
 
   // Memoized stats to prevent recalculation on every render
