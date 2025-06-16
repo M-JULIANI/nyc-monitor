@@ -17,7 +17,7 @@ import logging
 from typing import Optional, List
 from datetime import datetime, date
 
-from .agents.orchestrator_agent import create_orchestrator_agent
+from .root_agent import root_agent_instance
 from google.genai import types
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext
@@ -29,7 +29,7 @@ from dotenv import load_dotenv
 from .prompts.orchestrator import return_orchestrator_instructions
 from .sub_agents.research_agent import create_research_agent
 from .tools.coordination_tools import update_alert_status, manage_investigation_state
-from .investigation.state_manager import AlertData, state_manager
+from .investigation.state_manager import AlertData, state_manager, InvestigationPhase
 from .investigation.progress_tracker import progress_tracker, ProgressStatus
 from .investigation.tracing import get_distributed_tracer
 
@@ -75,15 +75,15 @@ def _create_investigation_runner(investigation_state):
     # Get RAG corpus from environment
     rag_corpus = os.getenv("RAG_CORPUS")
 
-    # Create orchestrator agent with RAG corpus access and progress callbacks
-    orchestrator = create_orchestrator_agent(rag_corpus=rag_corpus)
+    # Use the root agent instance (already configured)
+    root_agent = root_agent_instance.agent
 
     # Create session service for investigation tracking
     session_service = InMemorySessionService()
 
     # Create runner with artifact service
     runner = Runner(
-        agent=orchestrator,
+        agent=root_agent,
         app_name="atlas_investigation",
         session_service=session_service,
         artifact_service=artifact_service
