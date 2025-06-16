@@ -79,7 +79,7 @@ async def stream_alerts():
 
 
 @alerts_router.get('/recent')
-async def get_recent_alerts(limit: int = 50):
+async def get_recent_alerts(limit: int = 75):
     """Get recent alerts (non-streaming)"""
     try:
         db = get_db()

@@ -2,14 +2,38 @@ export interface Alert {
   id: string;
   title: string;
   description: string;
-  latitude: number;
-  longitude: number;
   priority: 'critical' | 'high' | 'medium' | 'low';
-  source: 'reddit' | '311' | 'twitter';
+  source: 'reddit' | '311' | 'twitter' | 'unknown';
   timestamp: string;
-  status: 'new' | 'investigating' | 'resolved';
+  status: 'new' | 'investigating' | 'resolved' | 'active';
   neighborhood: string;
   borough: string;
+  
+  // Additional date/time fields
+  event_date: string;
+  created_at: string;
+  updated_at: string;
+  
+  // Location data
+  coordinates: {
+    lat: number;
+    lng: number;
+  };
+  area?: string;
+  venue_address?: string;
+  specific_streets?: string[];
+  cross_streets?: string[];
+  
+  // Impact data
+  crowd_impact?: string;
+  transportation_impact?: string;
+  estimated_attendance?: string;
+  severity?: number;
+  
+  // Additional metadata
+  keywords?: string[];
+  signals?: string[];
+  url?: string;
 }
 
 export interface User {

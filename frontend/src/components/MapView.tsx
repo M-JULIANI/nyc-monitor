@@ -8,7 +8,7 @@ const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9
 
 const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
-  const { alerts, error, isConnected } = useAlerts();
+  const { alerts, error, isConnected } = useAlerts();;
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [filter, setFilter] = useState({
     priority: 'all',
@@ -49,7 +49,7 @@ const MapView: React.FC = () => {
       type: 'Feature' as const,
       geometry: {
         type: 'Point' as const,
-        coordinates: [alert.longitude, alert.latitude]
+        coordinates: [alert.coordinates.lng, alert.coordinates.lat]
       },
       properties: {
         id: alert.id,
@@ -189,8 +189,8 @@ const MapView: React.FC = () => {
         {/* Popup for selected alert */}
         {selectedAlert && (
           <Popup
-            longitude={selectedAlert.longitude}
-            latitude={selectedAlert.latitude}
+            longitude={selectedAlert.coordinates.lng}
+            latitude={selectedAlert.coordinates.lat}
             anchor="bottom"
             onClose={() => setSelectedAlert(null)}
             closeButton={true}
