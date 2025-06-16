@@ -1,55 +1,180 @@
 """
 Root Agent for NYC Atlas Investigation System.
 This is the deployable entry point for Vertex AI ADK that coordinates 
-the full multi-agent investigation system.
+the 5-agent investigation system directly.
 """
 
 import os
 import logging
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, date
 
+from google.genai import types
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext
-from google.adk.tools.retrieval.vertex_ai_rag_retrieval import VertexAiRagRetrieval
 
-from .agents.orchestrator_agent import (
-    create_orchestrator_agent,
-    before_agent_callback,
-    after_agent_callback,
-    before_tool_callback,
-    after_tool_callback,
-    on_error_callback
-)
-from .investigation.state_manager import AlertData, state_manager
+# Import the 5 specialized agents
+from .agents.research_agent import create_research_agent
+from .agents.data_agent import create_data_agent
+from .agents.analysis_agent import create_analysis_agent
+from .agents.report_agent import create_report_agent
+
+# Import existing infrastructure
+from .investigation.state_manager import AlertData, state_manager, InvestigationPhase
 from .investigation.progress_tracker import progress_tracker, ProgressStatus
 from .investigation.tracing import get_distributed_tracer
-from .prompts.orchestrator import return_orchestrator_instructions
+from .investigation.workflow import WorkflowManager
+from .tools.coordination_tools import update_alert_status, manage_investigation_state
 
 logger = logging.getLogger(__name__)
 tracer = get_distributed_tracer()
+workflow_manager = WorkflowManager()
+date_today = date.today()
 
 
 class AtlasRootAgent:
     """
     Root agent for the Atlas investigation system.
-    This agent serves as the main entry point for Vertex AI ADK deployment.
+    This agent serves as the main entry point and coordinates 5 specialized sub-agents directly.
     """
 
     def __init__(self):
         self.agent_name = "atlas_root_investigation_agent"
-        self.instructions = return_orchestrator_instructions()
-
-        # Initialize core orchestrator agent
         rag_corpus = os.getenv("RAG_CORPUS")
-        self.orchestrator = create_orchestrator_agent(
+
+        # Create the root agent with 5 direct sub-agents (ADK idiomatic)
+        self.agent = Agent(
             model='gemini-2.0-flash-001',
             name=self.agent_name,
-            rag_corpus=rag_corpus
+            instruction=self._get_root_instructions(),
+            tools=[
+                update_alert_status,
+                manage_investigation_state,
+            ],
+            sub_agents=[
+                # All 5 agents as direct sub-agents (ADK idiomatic)
+                create_research_agent(rag_corpus=rag_corpus),
+                create_data_agent(rag_corpus=rag_corpus),
+                create_analysis_agent(),
+                create_report_agent(),
+            ],
+            # Use the existing callback system
+            before_agent_callback=self._before_agent_callback,
+            after_agent_callback=self._after_agent_callback,
+            before_tool_callback=self._before_tool_callback,
+            after_tool_callback=self._after_tool_callback,
+            generate_content_config=types.GenerateContentConfig(
+                temperature=0.01),
         )
 
         logger.info(
             f"Initialized Atlas Root Agent with RAG corpus: {rag_corpus}")
+
+    def _get_root_instructions(self) -> str:
+        """Root agent instructions for coordinating 5-agent investigation workflow."""
+        return f"""
+You are the Root Agent for the NYC Atlas investigation system.
+Today's date: {date_today}
+
+Your role is to coordinate a 5-agent investigation workflow for NYC alerts and incidents.
+
+**YOUR DIRECT SUB-AGENTS:**
+- **Research Agent**: External data collection (web search, social media, APIs, screenshots)  
+- **Data Agent**: Internal knowledge & BigQuery datasets (census, crime, permits, housing)
+- **Analysis Agent**: Pattern recognition & cross-domain synthesis
+- **Report Agent**: Validation & professional report generation (including Google Slides)
+
+**INVESTIGATION PHASES** (managed by WorkflowManager):
+1. **RECONNAISSANCE**: Deploy Research + Data agents in parallel for initial data collection
+2. **ANALYSIS**: Analysis agent synthesizes findings and identifies patterns 
+3. **DEEP_DIVE**: Additional focused investigation if confidence < 70%
+4. **REPORTING**: Report agent validates findings and creates deliverables
+5. **COMPLETE**: Investigation finished with actionable insights
+
+**COORDINATION STRATEGY:**
+- Use existing state management system for investigation tracking
+- Leverage progress tracking for real-time frontend updates
+- Deploy agents based on current investigation phase from WorkflowManager
+- Coordinate parallel execution when beneficial (reconnaissance phase)
+- Make decisions based on confidence scores and investigation state
+
+**WORKFLOW LOGIC:**
+- Start with reconnaissance: assign tasks to Research + Data agents simultaneously
+- Monitor confidence scores and findings quality
+- Advance to analysis phase when initial data collection complete
+- Use Analysis agent to synthesize findings and identify patterns
+- Add deep-dive investigation if patterns unclear (confidence < 70%)
+- Deploy Report agent for validation and deliverable creation
+- Maintain investigation state without duplicating existing systems
+
+**QUALITY GATES:**
+- Reconnaissance complete: Both Research and Data agents have findings
+- Analysis complete: Confidence score calculated, patterns identified
+- Deep-dive triggered: Confidence < 70% or contradictory findings
+- Reporting ready: Analysis complete with actionable insights
+- Investigation complete: Professional deliverables created
+
+Focus on efficient coordination of the 5-agent workflow while leveraging existing infrastructure.
+"""
+
+    # Callback methods (simplified from orchestrator)
+    def _before_agent_callback(self, callback_context: CallbackContext):
+        """Called before agent execution - track agent activation."""
+        agent_name = callback_context._invocation_context.agent.name
+        investigation_id = self._get_investigation_id(callback_context)
+
+        progress_tracker.add_progress(
+            investigation_id=investigation_id,
+            status=ProgressStatus.AGENT_ACTIVE,
+            active_agent=agent_name,
+            message=f"Agent {agent_name} is now active"
+        )
+
+        logger.info(f"🤖 Agent {agent_name} starting execution")
+
+    def _after_agent_callback(self, callback_context: CallbackContext):
+        """Called after agent execution - track completion."""
+        agent_name = callback_context._invocation_context.agent.name
+        investigation_id = self._get_investigation_id(callback_context)
+
+        progress_tracker.add_progress(
+            investigation_id=investigation_id,
+            status=ProgressStatus.THINKING,
+            active_agent=agent_name,
+            message=f"Agent {agent_name} completed execution"
+        )
+
+        logger.info(f"✅ Agent {agent_name} completed execution")
+
+    def _before_tool_callback(self, callback_context: CallbackContext):
+        """Called before tool execution - track tool usage."""
+        tool_name = getattr(callback_context._tool_call, 'name', 'unknown_tool') if hasattr(
+            callback_context, '_tool_call') else 'unknown_tool'
+        agent_name = callback_context._invocation_context.agent.name
+        investigation_id = self._get_investigation_id(callback_context)
+
+        progress_tracker.add_progress(
+            investigation_id=investigation_id,
+            status=ProgressStatus.TOOL_EXECUTING,
+            active_agent=agent_name,
+            current_task=f"Executing {tool_name}",
+            message=f"Agent {agent_name} executing tool: {tool_name}"
+        )
+
+        logger.info(f"🔧 Agent {agent_name} executing tool {tool_name}")
+
+    def _after_tool_callback(self, callback_context: CallbackContext):
+        """Called after tool execution - track tool completion."""
+        tool_name = getattr(callback_context._tool_call, 'name', 'unknown_tool') if hasattr(
+            callback_context, '_tool_call') else 'unknown_tool'
+        agent_name = callback_context._invocation_context.agent.name
+
+        logger.info(
+            f"✅ Tool {tool_name} completed execution for agent {agent_name}")
+
+    def _get_investigation_id(self, callback_context: CallbackContext) -> str:
+        """Extract investigation ID from callback context."""
+        return callback_context.state.get("investigation_id", "unknown")
 
     async def investigate(self, investigation_prompt: str, context: Dict[str, Any] = None) -> str:
         """
@@ -76,7 +201,7 @@ class AtlasRootAgent:
                     operation_name="adk_root_agent_investigate",
                     metadata={
                         **investigation_context,
-                        "approach": "adk_multi_agent",
+                        "approach": "adk_5_agent_direct",
                         "root_agent": self.agent_name
                     }
                 )
@@ -90,17 +215,11 @@ class AtlasRootAgent:
                 }
             )
 
-            # Execute the orchestrator agent with full ADK capabilities
-            logger.info(f"Starting ADK investigation via root agent")
+            # Execute the root agent with direct sub-agent coordination
+            logger.info(
+                f"Starting ADK investigation via root agent (5-agent direct)")
 
-            # The orchestrator will handle:
-            # - Multi-agent coordination
-            # - Tool execution
-            # - State management
-            # - Progress tracking
-            # - Distributed tracing
-
-            result = await self.orchestrator.execute(
+            result = await self.agent.execute(
                 prompt=investigation_prompt,
                 context=callback_context
             )
@@ -111,7 +230,6 @@ class AtlasRootAgent:
         except Exception as e:
             logger.error(f"Root agent investigation failed: {e}")
 
-            # Create fallback response that shows ADK structure is working
             return f"""ADK Root Agent Investigation Report:
 
 Agent: {self.agent_name}
@@ -120,13 +238,12 @@ Error: {str(e)}
 
 Investigation Infrastructure:
 - Root Agent: ✅ Initialized and callable
-- Orchestrator Agent: ✅ Created with ADK framework
+- 5 Direct Sub-Agents: ✅ Created with ADK framework
 - RAG Corpus: {'✅ Connected' if os.getenv('RAG_CORPUS') else '❌ Not configured'}
-- Distributed Tracing: ✅ Available
-- Multi-Agent Coordination: ✅ Framework ready
+- State Management: ✅ Available (progress_tracker, state_manager, tracing, workflow)
+- ADK Integration: ✅ Direct sub-agent coordination (idiomatic)
 
 ADK Deployment Status: ✅ Ready for deployment
-Note: Error occurred during execution, but ADK infrastructure is properly configured.
 
 Error Details: {str(e)}
 """
@@ -175,9 +292,8 @@ Error Details: {str(e)}
 # Create the root agent instance for ADK deployment
 root_agent_instance = AtlasRootAgent()
 
-# Export the orchestrator agent for ADK deployment
-# This is what should be deployed to Vertex AI
-root_agent = root_agent_instance.orchestrator
+# Export the root agent for ADK deployment (now properly structured)
+root_agent = root_agent_instance.agent
 
 # ADK expects a callable agent - create the interface
 

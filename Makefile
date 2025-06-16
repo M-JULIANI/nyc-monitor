@@ -330,11 +330,11 @@ deploy-api: check-docker check-gcloud
 		--region $(CLOUD_RUN_REGION) \
 		--allow-unauthenticated \
 		--port 8000 \
-		--set-env-vars="ENV=production" \
-		--set-env-vars="GOOGLE_CLIENT_ID=$(GOOGLE_CLIENT_ID)" \
-		--set-env-vars="RAG_CORPUS=$(RAG_CORPUS)" \
-		--set-env-vars="ADMIN_EMAILS=$(ADMIN_EMAILS)" \
-		--set-env-vars="JUDGE_EMAILS=$(JUDGE_EMAILS)"
+		--set-env-vars ENV=production \
+		--set-env-vars GOOGLE_CLIENT_ID="$(GOOGLE_CLIENT_ID)" \
+		--set-env-vars RAG_CORPUS="$(RAG_CORPUS)" \
+		--set-env-vars ADMIN_EMAILS="$(ADMIN_EMAILS)" \
+		--set-env-vars JUDGE_EMAILS="$(JUDGE_EMAILS)"
 	@echo "Backend API deployed. Service URL:"
 	@gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
 		--platform managed \
