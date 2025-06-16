@@ -472,9 +472,9 @@ class MonitorJob:
             date_prefix = event_date.strftime('%Y-%m-%d')
             time_prefix = datetime.utcnow().strftime('%H%M')
 
-            # Event type (cleaned)
-            event_type = alert.get(
-                'event_type', 'event').lower().replace(' ', '_')
+            # Event type (cleaned) - ensure it's a string
+            event_type_raw = alert.get('event_type', 'event')
+            event_type = str(event_type_raw).lower().replace(' ', '_')
 
             # Location key - extract from venue_address, specific_streets, or area
             location_key = self._extract_location_key(alert)
@@ -487,7 +487,8 @@ class MonitorJob:
         except Exception as e:
             # Fallback to timestamp-based ID
             logger.warning(f"Error generating alert ID: {e}")
-            return f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{alert.get('event_type', 'alert').lower()}"
+            event_type_fallback = str(alert.get('event_type', 'alert')).lower()
+            return f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{event_type_fallback}"
 
     def _extract_location_key(self, alert: Dict) -> str:
         """Extract a short location key for the document ID"""
@@ -495,6 +496,7 @@ class MonitorJob:
             # Try venue_address first
             venue = alert.get('venue_address', '')
             if venue:
+                venue = str(venue)  # Ensure it's a string
                 # Extract street name from address
                 # "5th Avenue from 36th Street to 8th Street" -> "5th_ave"
                 if 'avenue' in venue.lower():
@@ -508,14 +510,15 @@ class MonitorJob:
 
             # Try specific_streets
             streets = alert.get('specific_streets', [])
-            if streets:
-                street = streets[0].lower().replace(' ', '_').replace(
+            if streets and len(streets) > 0:
+                street = str(streets[0]).lower().replace(' ', '_').replace(
                     'avenue', 'ave').replace('street', 'st')
                 return street[:20]
 
             # Try area
             area = alert.get('area', '')
             if area:
+                area = str(area)  # Ensure it's a string
                 # "Midtown Manhattan - 5th Avenue corridor" -> "midtown_manhattan"
                 area_clean = area.lower().split(' - ')[0].replace(' ', '_')
                 return area_clean[:20]
@@ -552,7 +555,7 @@ class MonitorJob:
 
     def _map_severity_to_priority(self, severity: str) -> str:
         """Map alert severity to frontend priority"""
-        severity = severity.lower() if severity else 'medium'
+        severity = str(severity).lower() if severity else 'medium'
         priority_mapping = {
             'critical': 'critical',
             'high': 'high',
@@ -566,7 +569,7 @@ class MonitorJob:
 
     def _map_source(self, source: str) -> str:
         """Map alert source to frontend source"""
-        source = source.lower() if source else 'reddit'
+        source = str(source).lower() if source else 'reddit'
         source_mapping = {
             'reddit': 'reddit',
             '311': '311',
@@ -578,7 +581,7 @@ class MonitorJob:
 
     def _map_status(self, status: str) -> str:
         """Map alert status to frontend status"""
-        status = status.lower() if status else 'new'
+        status = str(status).lower() if status else 'new'
         status_mapping = {
             'new': 'new',
             'investigating': 'investigating',
