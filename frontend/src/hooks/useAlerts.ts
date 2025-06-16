@@ -2,11 +2,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert } from '../types';
 
-interface AlertsData {
-  alerts: Alert[];
-  timestamp: string;
-}
-
 interface UseAlertsOptions {
   useStream?: boolean; // Default true - set false to only use REST endpoint
   pollInterval?: number; // For REST-only mode, default 15 minutes
