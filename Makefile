@@ -324,22 +324,27 @@ deploy-api: check-docker check-gcloud
 		-f backend/Dockerfile . 
 	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)"
 	@docker push "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:latest"
-	@DEPLOY_CMD="gcloud run deploy $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
-		--image $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION) \
+	@echo "Creating YAML env vars file..."
+	@echo "ENV: production" > /tmp/deploy-env-vars.yaml
+	@echo "GOOGLE_CLIENT_ID: \"$(GOOGLE_CLIENT_ID)\"" >> /tmp/deploy-env-vars.yaml
+	@echo "RAG_CORPUS: \"$(RAG_CORPUS)\"" >> /tmp/deploy-env-vars.yaml
+	@if [ -n "$(ADMIN_EMAILS)" ]; then \
+		echo "ADMIN_EMAILS: \"$(ADMIN_EMAILS)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
+	@if [ -n "$(JUDGE_EMAILS)" ]; then \
+		echo "JUDGE_EMAILS: \"$(JUDGE_EMAILS)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
+	@echo "📋 Environment variables being set:"
+	@cat /tmp/deploy-env-vars.yaml
+	@echo "Deploying to Cloud Run..."
+	@gcloud run deploy $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
+		--image "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)" \
 		--platform managed \
 		--region $(CLOUD_RUN_REGION) \
 		--allow-unauthenticated \
 		--port 8000 \
-		--set-env-vars ENV=production \
-		--set-env-vars GOOGLE_CLIENT_ID=\"$(GOOGLE_CLIENT_ID)\" \
-		--set-env-vars RAG_CORPUS=\"$(RAG_CORPUS)\""; \
-	if [ -n "$(ADMIN_EMAILS)" ]; then \
-		DEPLOY_CMD="$$DEPLOY_CMD --set-env-vars ADMIN_EMAILS=\"$(ADMIN_EMAILS)\""; \
-	fi; \
-	if [ -n "$(JUDGE_EMAILS)" ]; then \
-		DEPLOY_CMD="$$DEPLOY_CMD --set-env-vars JUDGE_EMAILS=\"$(JUDGE_EMAILS)\""; \
-	fi; \
-	eval $$DEPLOY_CMD
+		--env-vars-file /tmp/deploy-env-vars.yaml
+	@rm -f /tmp/deploy-env-vars.yaml
 	@echo "Backend API deployed. Service URL:"
 	@gcloud run services describe $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
 		--platform managed \
