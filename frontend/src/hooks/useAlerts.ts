@@ -117,7 +117,6 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       return () => clearInterval(interval);
     }
 
-    setIsConnected(true);
     // Stream mode: set up SSE after initial load
     // const eventSource = new EventSource('/api/alerts/stream');
 
@@ -152,6 +151,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     // return () => {
     //   eventSource.close();
     // };
+        setIsConnected(true);
   }, [mergeAlerts, useStream, pollInterval, fetchRecentAlerts]);
 
   // Memoized stats to prevent recalculation on every render

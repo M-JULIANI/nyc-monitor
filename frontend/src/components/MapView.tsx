@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Map, { Layer, Source, Popup } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Alert } from '../types';
@@ -17,20 +17,38 @@ const MapView: React.FC = () => {
     timeRange: '24h'
   });
 
-  // NYC bounding box for initial viewport
+  // NYC bounding box for initial viewport (fallback when no alerts)
   const nycBounds = {
     longitude: -74.0,
     latitude: 40.7,
     zoom: 10
   };
 
-  const getSourceIcon = (source: string): string => {
-    switch (source) {
-      case 'reddit': return '🟠';
-      case '311': return '📞';
-      case 'twitter': return '🐦';
-      default: return '📍';
-    }
+  // Calculate bounds for all visible alerts
+  const calculateAlertBounds = (alerts: Alert[]) => {
+    if (alerts.length === 0) return null;
+
+    let minLat = Infinity;
+    let maxLat = -Infinity; 
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+
+    alerts.forEach(alert => {
+      const { lat, lng } = alert.coordinates;
+      minLat = Math.min(minLat, lat);
+      maxLat = Math.max(maxLat, lat);
+      minLng = Math.min(minLng, lng);
+      maxLng = Math.max(maxLng, lng);
+    });
+
+    // Add padding (roughly 0.01 degrees = ~1km)
+    const padding = 0.01;
+    const paddedBounds: [[number, number], [number, number]] = [
+      [minLng - padding, minLat - padding], // Southwest corner
+      [maxLng + padding, maxLat + padding]  // Northeast corner
+    ];
+
+    return paddedBounds;
   };
 
   // Filter alerts based on current filter settings
@@ -41,6 +59,33 @@ const MapView: React.FC = () => {
     // TODO: Add time range filtering
     return true;
   });
+
+  // Update map bounds when alerts change
+  useEffect(() => {
+    if (mapRef.current && filteredAlerts.length > 0) {
+      const bounds = calculateAlertBounds(filteredAlerts);
+      if (bounds) {
+        try {
+          mapRef.current.fitBounds(bounds, {
+            padding: { top: 100, bottom: 100, left: 300, right: 100 }, // Extra padding for UI elements
+            duration: 1000, // Smooth animation
+            maxZoom: 16 // Don't zoom in too close
+          });
+        } catch (error) {
+          console.warn('Error fitting bounds:', error);
+        }
+      }
+    }
+  }, [filteredAlerts]); // Re-run when filtered alerts change
+
+  const getSourceIcon = (source: string): string => {
+    switch (source) {
+      case 'reddit': return '🟠';
+      case '311': return '📞';
+      case 'twitter': return '🐦';
+      default: return '📍';
+    }
+  };
 
   // Create GeoJSON for alert points
   const alertsGeoJSON: GeoJSON.FeatureCollection = {
@@ -141,6 +186,25 @@ const MapView: React.FC = () => {
             <option value="resolved">Resolved</option>
           </select>
         </div>
+
+        {/* Zoom to Alerts Button */}
+        <button
+          onClick={() => {
+            if (mapRef.current && filteredAlerts.length > 0) {
+              const bounds = calculateAlertBounds(filteredAlerts);
+              if (bounds) {
+                mapRef.current.fitBounds(bounds, {
+                  padding: { top: 100, bottom: 100, left: 300, right: 100 },
+                  duration: 1000,
+                  maxZoom: 16
+                });
+              }
+            }
+          }}
+          className="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 px-3 rounded transition-colors"
+        >
+          🎯 Zoom to All Alerts
+        </button>
       </div>
 
       {/* Alert Count */}
