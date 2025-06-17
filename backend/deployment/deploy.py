@@ -1,7 +1,7 @@
 import vertexai
 from vertexai import agent_engines
 from vertexai.preview.reasoning_engines import AdkApp
-from rag.root_agent import root_agent
+from rag.root_agent import root_agent_instance
 import logging
 import os
 from dotenv import set_key, load_dotenv
@@ -46,7 +46,7 @@ def update_env_file(agent_engine_id, env_file_path):
 
 logger.info("Deploying Atlas Root Agent to Vertex AI ADK...")
 app = AdkApp(
-    agent=root_agent,  # root_agent is now the orchestrator agent
+    agent=root_agent_instance.agent,  # Access the agent property from the instance
     enable_tracing=True,
 )
 
