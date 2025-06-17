@@ -1057,6 +1057,25 @@ google-auth = "*"
 httplib2 = ">=0.19.0"
 
 [[package]]
+name = "google-auth-oauthlib"
+version = "1.2.2"
+description = "Google Authentication Library"
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "google_auth_oauthlib-1.2.2-py3-none-any.whl", hash = "sha256:fd619506f4b3908b5df17b65f39ca8d66ea56986e5472eb5978fd8f3786f00a2"},
+    {file = "google_auth_oauthlib-1.2.2.tar.gz", hash = "sha256:11046fb8d3348b296302dd939ace8af0a724042e8029c1b872d87fabc9f41684"},
+]
+
+[package.dependencies]
+google-auth = ">=2.15.0"
+requests-oauthlib = ">=0.7.0"
+
+[package.extras]
+tool = ["click (>=6.0.0)"]
+
+[[package]]
 name = "google-cloud-aiplatform"
 version = "1.93.1"
 description = "Vertex AI API client library"
@@ -4837,4 +4856,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "74cf7e71e7471247bac11070c97356ccc7d35423e4593c0fa30ed71b86d1fead"
+content-hash = "a454891ebc22430945a397b48528aa5950a9dc363499df138e4b660d2fc03859"
