@@ -75,35 +75,107 @@ def create_rag_retrieval_tool(
 
 def web_search_func(
     query: str,
-    source_types: str = "news,official,academic"
+    source_types: str = "news,official,academic",
+    max_results: int = 10
 ) -> dict:
-    """Comprehensive web search across multiple source types.
+    """
+    Search the web for recent information related to the query.
 
     Args:
-        query: Search query terms
-        source_types: Comma-separated source types (news,official,academic)
+        query: Search query string
+        source_types: Comma-separated types of sources to prioritize (news,official,academic)
+        max_results: Maximum number of results to return (default: 10)
 
     Returns:
-        Search results with URLs, snippets, source credibility
+        dict: Search results with 'results' list and 'summary'
     """
-    # Parse source types from comma-separated string
-    sources = [s.strip() for s in source_types.split(",")]
+    try:
+        from duckduckgo_search import DDGS
 
-    # Simple mock implementation for now
-    return {
-        "results": [
-            {
-                "title": f"Search results for: {query}",
-                "snippet": f"Mock search results about {query} from {', '.join(sources)} sources",
-                "url": "https://example.com/search",
-                "source_type": sources[0] if sources else "news",
-                "credibility_score": 0.8,
-                "timestamp": "2025-01-03T12:00:00Z"
-            }
-        ],
-        "query": query,
-        "source_types": sources
-    }
+        # Initialize DuckDuckGo search
+        ddgs = DDGS()
+
+        # Parse source types
+        sources = [s.strip().lower() for s in source_types.split(",")]
+
+        # Perform the search
+        search_results = []
+
+        # Try regular web search first
+        try:
+            results = ddgs.text(
+                keywords=query,
+                region="wt-wt",  # Worldwide
+                safesearch="moderate",
+                timelimit="m",  # Last month for recent info
+                max_results=max_results
+            )
+
+            for result in results:
+                search_results.append({
+                    "title": result.get("title", ""),
+                    "url": result.get("href", ""),
+                    "snippet": result.get("body", ""),
+                    "type": "web"
+                })
+        except Exception as e:
+            print(f"Web search failed: {e}")
+
+        # If we want news specifically, try news search
+        if "news" in sources and len(search_results) < max_results:
+            try:
+                news_results = ddgs.news(
+                    keywords=query,
+                    region="wt-wt",
+                    safesearch="moderate",
+                    timelimit="m",  # Last month
+                    max_results=min(5, max_results - len(search_results))
+                )
+
+                for result in news_results:
+                    search_results.append({
+                        "title": result.get("title", ""),
+                        "url": result.get("url", ""),
+                        "snippet": result.get("body", ""),
+                        "type": "news",
+                        "date": result.get("date", ""),
+                        "source": result.get("source", "")
+                    })
+            except Exception as e:
+                print(f"News search failed: {e}")
+
+        # Limit to max_results
+        search_results = search_results[:max_results]
+
+        # Create summary
+        summary = f"Found {len(search_results)} results for query: {query}"
+        if search_results:
+            summary += f". Top result: {search_results[0]['title']}"
+
+        return {
+            "success": True,
+            "query": query,
+            "total_results": len(search_results),
+            "results": search_results,
+            "summary": summary
+        }
+
+    except ImportError:
+        return {
+            "success": False,
+            "error": "duckduckgo-search library not installed. Please install it with: pip install duckduckgo-search",
+            "query": query,
+            "results": [],
+            "summary": "Web search unavailable - missing dependency"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Web search failed: {str(e)}",
+            "query": query,
+            "results": [],
+            "summary": f"Web search failed for query: {query}"
+        }
 
 
 def collect_media_content_simple_func(
