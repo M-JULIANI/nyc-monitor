@@ -64,4 +64,6 @@ coverage/
 Thumbs.db 
 
 key.json
+atlas-reports-key.json
+key-slides.json
 **/archive/*

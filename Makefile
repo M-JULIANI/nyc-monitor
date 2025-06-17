@@ -34,6 +34,19 @@ else
     JUDGE_EMAILS := $(shell grep -E '^JUDGE_EMAILS=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 endif
 
+# Google Slides integration variables
+ifeq ($(origin GOOGLE_DRIVE_FOLDER_ID), environment)
+    # Use environment variable as-is
+else
+    GOOGLE_DRIVE_FOLDER_ID := $(shell grep -E '^GOOGLE_DRIVE_FOLDER_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
+
+ifeq ($(origin STATUS_TRACKER_TEMPLATE_ID), environment)
+    # Use environment variable as-is
+else
+    STATUS_TRACKER_TEMPLATE_ID := $(shell grep -E '^STATUS_TRACKER_TEMPLATE_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
+
 # Monitor system variables
 MONITOR_SERVICE_ACCOUNT ?= atlas-monitor-service
 MONITOR_JOB_NAME ?= atlas-monitor
@@ -300,7 +313,7 @@ deploy: deploy-api deploy-vertex-ai deploy-web deploy-monitor
 deploy-vertex-ai: check-gcloud
 	@echo "Deploying backend to Vertex AI..."
 	@if [ -f "backend/deployment/deploy.py" ]; then \
-		cd backend && poetry run python deployment/deploy.py; \
+		cd backend && GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64="$(GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64)" poetry run python deployment/deploy.py; \
 	else \
 		echo "Error: backend/deployment/deploy.py not found"; \
 		exit 1; \
@@ -333,6 +346,15 @@ deploy-api: check-docker check-gcloud
 	fi
 	@if [ -n "$(JUDGE_EMAILS)" ]; then \
 		echo "JUDGE_EMAILS: \"$(JUDGE_EMAILS)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
+	@if [ -n "$(GOOGLE_DRIVE_FOLDER_ID)" ]; then \
+		echo "GOOGLE_DRIVE_FOLDER_ID: \"$(GOOGLE_DRIVE_FOLDER_ID)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
+	@if [ -n "$(STATUS_TRACKER_TEMPLATE_ID)" ]; then \
+		echo "STATUS_TRACKER_TEMPLATE_ID: \"$(STATUS_TRACKER_TEMPLATE_ID)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
+	@if [ -n "$(GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64)" ]; then \
+		echo "GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64: \"$(GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64)\"" >> /tmp/deploy-env-vars.yaml; \
 	fi
 	@echo "📋 Environment variables being set:"
 	@cat /tmp/deploy-env-vars.yaml

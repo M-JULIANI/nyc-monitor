@@ -4,13 +4,28 @@ Test script for the Atlas Investigation System.
 This script tests the complete 5-agent workflow end-to-end.
 """
 
-from rag.investigation_service import investigate_alert
-from rag.investigation.state_manager import AlertData, state_manager
-import asyncio
-import json
-import logging
-from datetime import datetime
+# CRITICAL: Load environment variables FIRST before any other imports
 import sys
+from datetime import datetime
+import logging
+import json
+import asyncio
+from rag.investigation.state_manager import AlertData, state_manager
+from rag.investigation_service import investigate_alert
+import os
+from dotenv import load_dotenv
+
+# Load .env file from the project root (two levels up from this file)
+env_file_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+if os.path.exists(env_file_path):
+    load_dotenv(env_file_path)
+    print(f"✅ Loaded environment variables from {env_file_path}")
+    print(
+        f"   GOOGLE_CLOUD_PROJECT: {os.getenv('GOOGLE_CLOUD_PROJECT', 'NOT SET')}")
+else:
+    print(f"❌ .env file not found at {env_file_path}")
+
+# Now import everything else AFTER environment variables are loaded
 
 # Configure enhanced logging for detailed tracing
 

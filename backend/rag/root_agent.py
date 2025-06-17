@@ -339,8 +339,9 @@ Error Details: {str(e)}
 # Create the root agent instance for ADK deployment
 root_agent_instance = AtlasRootAgent()
 
-# Export the root agent for ADK deployment (now properly structured)
-root_agent = root_agent_instance.agent
+# Don't access .agent property at import time - this would trigger initialization!
+# Instead, export the instance and let consumers access .agent when needed
+# root_agent = root_agent_instance.agent  # <-- REMOVED: This was causing immediate initialization
 
 # ADK expects a callable agent - create the interface
 
@@ -353,5 +354,5 @@ async def adk_investigate(prompt: str, context: CallbackContext = None) -> str:
     context_dict = context.session_data if context else {}
     return await root_agent_instance.investigate(prompt, context_dict)
 
-# Export the agent for deployment
-__all__ = ["root_agent", "adk_investigate", "root_agent_instance"]
+# Export the instance for deployment (consumers should access .agent when needed)
+__all__ = ["root_agent_instance", "adk_investigate"]
