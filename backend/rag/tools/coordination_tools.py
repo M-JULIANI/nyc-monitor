@@ -25,7 +25,7 @@ def update_alert_status_func(
     alert_id: str,
     status: str,
     notes: str = ""
-) -> Dict:
+) -> dict:
     """Update the status of an alert being investigated.
 
     Args:
@@ -50,18 +50,20 @@ def update_alert_status_func(
 def manage_investigation_state_func(
     investigation_id: str,
     action: str,
-    data: Dict = None
-) -> Dict:
+    data: str = ""
+) -> dict:
     """Manage the state of an ongoing investigation.
 
     Args:
         investigation_id: The ID of the investigation
         action: Action to perform (advance_phase, add_finding, update_confidence, complete)
-        data: Additional data for the action
+        data: Additional data for the action (JSON string format)
 
     Returns:
         Updated investigation state information
     """
+    import json
+
     try:
         investigation_state = state_manager.get_investigation(investigation_id)
 
@@ -70,6 +72,16 @@ def manage_investigation_state_func(
                 "error": f"Investigation {investigation_id} not found",
                 "success": False
             }
+
+        # Parse data if provided
+        parsed_data = {}
+        if data:
+            try:
+                parsed_data = json.loads(
+                    data) if isinstance(data, str) else data
+            except json.JSONDecodeError:
+                # If not JSON, treat as simple string data
+                parsed_data = {"data": data}
 
         if action == "advance_phase":
             # Advance to next investigation phase
@@ -84,13 +96,15 @@ def manage_investigation_state_func(
 
         elif action == "add_finding":
             # Add a new finding to the investigation
-            if data and "finding" in data:
-                investigation_state.findings.append(data["finding"])
+            if parsed_data and "finding" in parsed_data:
+                investigation_state.findings.append(parsed_data["finding"])
+            elif parsed_data and "data" in parsed_data:
+                investigation_state.findings.append(parsed_data["data"])
 
         elif action == "update_confidence":
             # Update the confidence score
-            if data and "confidence" in data:
-                investigation_state.confidence_score = data["confidence"]
+            if parsed_data and "confidence" in parsed_data:
+                investigation_state.confidence_score = parsed_data["confidence"]
 
         elif action == "complete":
             # Mark investigation as complete
@@ -122,9 +136,9 @@ def manage_investigation_state_func(
 
 
 def coordinate_sub_agents_func(
-    task_assignments: List[Dict],
+    task_assignments: list,
     priority: str = "normal"
-) -> Dict:
+) -> dict:
     """Coordinate task assignments across sub-agents.
 
     Args:
@@ -144,8 +158,14 @@ def coordinate_sub_agents_func(
     }
 
     for task in task_assignments:
-        agent_name = task.get("agent", "unknown")
-        task_type = task.get("type", "unknown")
+        # Handle both dict and string representations
+        if isinstance(task, dict):
+            agent_name = task.get("agent", "unknown")
+            task_type = task.get("type", "unknown")
+        else:
+            # If task is a string, parse basic info
+            agent_name = "unknown"
+            task_type = str(task)
 
         # Simulate successful assignment
         coordination_results["assigned_tasks"].append({
@@ -167,7 +187,7 @@ coordinate_sub_agents = FunctionTool(coordinate_sub_agents_func)
 
 def get_investigation_progress_func(
     investigation_id: str
-) -> Dict:
+) -> dict:
     """Get current investigation progress and status.
 
     Args:

@@ -12,6 +12,10 @@ from datetime import datetime, date
 from google.genai import types
 from google.adk.agents import Agent
 from google.adk.agents.callback_context import CallbackContext
+from google.adk.sessions import InMemorySessionService
+from google.adk.runners import Runner
+from google.adk.tools.tool_context import ToolContext
+from google.adk.tools.base_tool import BaseTool
 
 # Import the 5 specialized agents
 from .agents.research_agent import create_research_agent
@@ -31,6 +35,73 @@ tracer = get_distributed_tracer()
 workflow_manager = WorkflowManager()
 date_today = date.today()
 
+# Define callback functions (not methods) as required by ADK
+
+
+def _before_agent_callback(callback_context: CallbackContext) -> Optional[types.Content]:
+    """Called before agent execution - track agent activation."""
+    agent_name = callback_context._invocation_context.agent.name
+    investigation_id = _get_investigation_id(callback_context)
+
+    progress_tracker.add_progress(
+        investigation_id=investigation_id,
+        status=ProgressStatus.AGENT_ACTIVE,
+        active_agent=agent_name,
+        message=f"Agent {agent_name} is now active"
+    )
+
+    logger.info(f"🤖 Agent {agent_name} starting execution")
+    return None
+
+
+def _after_agent_callback(callback_context: CallbackContext) -> Optional[types.Content]:
+    """Called after agent execution - track completion."""
+    agent_name = callback_context._invocation_context.agent.name
+    investigation_id = _get_investigation_id(callback_context)
+
+    progress_tracker.add_progress(
+        investigation_id=investigation_id,
+        status=ProgressStatus.THINKING,
+        active_agent=agent_name,
+        message=f"Agent {agent_name} completed execution"
+    )
+
+    logger.info(f"✅ Agent {agent_name} completed execution")
+    return None
+
+
+def _before_tool_callback(tool: BaseTool, args: Dict[str, Any], tool_context: ToolContext) -> Optional[Dict]:
+    """Called before tool execution - track tool usage."""
+    tool_name = tool.name
+    agent_name = tool_context.agent_name
+    investigation_id = tool_context.state.get("investigation_id", "unknown")
+
+    progress_tracker.add_progress(
+        investigation_id=investigation_id,
+        status=ProgressStatus.TOOL_EXECUTING,
+        active_agent=agent_name,
+        current_task=f"Executing {tool_name}",
+        message=f"Agent {agent_name} executing tool: {tool_name}"
+    )
+
+    logger.info(f"🔧 Agent {agent_name} executing tool {tool_name}")
+    return None
+
+
+def _after_tool_callback(tool: BaseTool, args: Dict[str, Any], tool_context: ToolContext, tool_response: Dict) -> Optional[Dict]:
+    """Called after tool execution - track tool completion."""
+    tool_name = tool.name
+    agent_name = tool_context.agent_name
+
+    logger.info(
+        f"✅ Tool {tool_name} completed execution for agent {agent_name}")
+    return None
+
+
+def _get_investigation_id(callback_context: CallbackContext) -> str:
+    """Extract investigation ID from callback context."""
+    return callback_context.state.get("investigation_id", "unknown")
+
 
 class AtlasRootAgent:
     """
@@ -40,35 +111,70 @@ class AtlasRootAgent:
 
     def __init__(self):
         self.agent_name = "atlas_root_investigation_agent"
-        rag_corpus = os.getenv("RAG_CORPUS")
+        self._agent = None  # Lazy initialization
+        self._vertex_initialized = False
 
-        # Create the root agent with 5 direct sub-agents (ADK idiomatic)
-        self.agent = Agent(
-            model='gemini-2.0-flash-001',
-            name=self.agent_name,
-            instruction=self._get_root_instructions(),
-            tools=[
-                update_alert_status,
-                manage_investigation_state,
-            ],
-            sub_agents=[
-                # All 5 agents as direct sub-agents (ADK idiomatic)
-                create_research_agent(rag_corpus=rag_corpus),
-                create_data_agent(rag_corpus=rag_corpus),
-                create_analysis_agent(),
-                create_report_agent(),
-            ],
-            # Use the existing callback system
-            before_agent_callback=self._before_agent_callback,
-            after_agent_callback=self._after_agent_callback,
-            before_tool_callback=self._before_tool_callback,
-            after_tool_callback=self._after_tool_callback,
-            generate_content_config=types.GenerateContentConfig(
-                temperature=0.01),
-        )
+    def _ensure_vertex_ai_initialized(self):
+        """Ensure Vertex AI is initialized (only once)"""
+        if self._vertex_initialized:
+            return
 
+        # Get Vertex AI configuration from environment
+        project = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+        if not project:
+            raise ValueError(
+                "GOOGLE_CLOUD_PROJECT environment variable not set")
+
+        # Initialize Vertex AI (this is what ADK expects)
+        import vertexai
+        vertexai.init(project=project, location=location)
+
+        # Enable Vertex AI for the google-genai library
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
+
+        self._vertex_initialized = True
         logger.info(
-            f"Initialized Atlas Root Agent with RAG corpus: {rag_corpus}")
+            f"Initialized Vertex AI with project={project}, location={location}")
+
+    @property
+    def agent(self):
+        """Lazy-loaded agent property"""
+        if self._agent is None:
+            self._ensure_vertex_ai_initialized()
+
+            rag_corpus = os.getenv("RAG_CORPUS")
+
+            # Create the root agent with 5 direct sub-agents (ADK idiomatic)
+            self._agent = Agent(
+                model='gemini-2.0-flash-001',
+                name=self.agent_name,
+                instruction=self._get_root_instructions(),
+                tools=[
+                    update_alert_status,
+                    manage_investigation_state,
+                ],
+                sub_agents=[
+                    # All 5 agents as direct sub-agents (ADK idiomatic)
+                    create_research_agent(rag_corpus=rag_corpus),
+                    create_data_agent(rag_corpus=rag_corpus),
+                    create_analysis_agent(),
+                    create_report_agent(),
+                ],
+                # Use the existing callback system
+                before_agent_callback=_before_agent_callback,
+                after_agent_callback=_after_agent_callback,
+                before_tool_callback=_before_tool_callback,
+                after_tool_callback=_after_tool_callback,
+                generate_content_config=types.GenerateContentConfig(
+                    temperature=0.01),
+            )
+
+            logger.info(
+                f"Initialized Atlas Root Agent with RAG corpus: {rag_corpus}")
+
+        return self._agent
 
     def _get_root_instructions(self) -> str:
         """Root agent instructions for coordinating 5-agent investigation workflow."""
@@ -116,65 +222,6 @@ Your role is to coordinate a 5-agent investigation workflow for NYC alerts and i
 
 Focus on efficient coordination of the 5-agent workflow while leveraging existing infrastructure.
 """
-
-    # Callback methods (simplified from orchestrator)
-    def _before_agent_callback(self, callback_context: CallbackContext):
-        """Called before agent execution - track agent activation."""
-        agent_name = callback_context._invocation_context.agent.name
-        investigation_id = self._get_investigation_id(callback_context)
-
-        progress_tracker.add_progress(
-            investigation_id=investigation_id,
-            status=ProgressStatus.AGENT_ACTIVE,
-            active_agent=agent_name,
-            message=f"Agent {agent_name} is now active"
-        )
-
-        logger.info(f"🤖 Agent {agent_name} starting execution")
-
-    def _after_agent_callback(self, callback_context: CallbackContext):
-        """Called after agent execution - track completion."""
-        agent_name = callback_context._invocation_context.agent.name
-        investigation_id = self._get_investigation_id(callback_context)
-
-        progress_tracker.add_progress(
-            investigation_id=investigation_id,
-            status=ProgressStatus.THINKING,
-            active_agent=agent_name,
-            message=f"Agent {agent_name} completed execution"
-        )
-
-        logger.info(f"✅ Agent {agent_name} completed execution")
-
-    def _before_tool_callback(self, callback_context: CallbackContext):
-        """Called before tool execution - track tool usage."""
-        tool_name = getattr(callback_context._tool_call, 'name', 'unknown_tool') if hasattr(
-            callback_context, '_tool_call') else 'unknown_tool'
-        agent_name = callback_context._invocation_context.agent.name
-        investigation_id = self._get_investigation_id(callback_context)
-
-        progress_tracker.add_progress(
-            investigation_id=investigation_id,
-            status=ProgressStatus.TOOL_EXECUTING,
-            active_agent=agent_name,
-            current_task=f"Executing {tool_name}",
-            message=f"Agent {agent_name} executing tool: {tool_name}"
-        )
-
-        logger.info(f"🔧 Agent {agent_name} executing tool {tool_name}")
-
-    def _after_tool_callback(self, callback_context: CallbackContext):
-        """Called after tool execution - track tool completion."""
-        tool_name = getattr(callback_context._tool_call, 'name', 'unknown_tool') if hasattr(
-            callback_context, '_tool_call') else 'unknown_tool'
-        agent_name = callback_context._invocation_context.agent.name
-
-        logger.info(
-            f"✅ Tool {tool_name} completed execution for agent {agent_name}")
-
-    def _get_investigation_id(self, callback_context: CallbackContext) -> str:
-        """Extract investigation ID from callback context."""
-        return callback_context.state.get("investigation_id", "unknown")
 
     async def investigate(self, investigation_prompt: str, context: Dict[str, Any] = None) -> str:
         """

@@ -45,6 +45,11 @@ class InvestigationState:
     created_at: datetime
     updated_at: datetime
 
+    @property
+    def start_time(self) -> datetime:
+        """Alias for created_at to maintain compatibility."""
+        return self.created_at
+
 
 class InvestigationStateManager:
     """Manages investigation state and transitions."""
