@@ -10,24 +10,71 @@ import asyncio
 import json
 import logging
 from datetime import datetime
+import sys
 
-# Configure logging
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configure enhanced logging for detailed tracing
+
+
+def setup_enhanced_logging():
+    """Set up detailed logging to trace the investigation process"""
+
+    # Create formatter for detailed output
+    detailed_formatter = logging.Formatter(
+        '%(asctime)s | %(name)-25s | %(levelname)-8s | %(message)s'
+    )
+
+    # Console handler with detailed formatting
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(detailed_formatter)
+    console_handler.setLevel(logging.DEBUG)
+
+    # Set up root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.handlers.clear()  # Clear existing handlers
+    root_logger.addHandler(console_handler)
+
+    # Set specific logger levels for detailed tracing
+    loggers_to_trace = [
+        'rag.investigation_service',
+        'rag.investigation.state_manager',
+        'rag.investigation.progress_tracker',
+        'rag.investigation.tracing',
+        'rag.agents.research_agent',
+        'rag.agents.data_agent',
+        'rag.agents.analysis_agent',
+        'rag.agents.report_agent',
+        'rag.tools.research_tools',
+        'rag.tools.data_tools',
+        'rag.tools.analysis_tools',
+        'rag.tools.report_tools',
+        'google.cloud.aiplatform.adk',
+    ]
+
+    for logger_name in loggers_to_trace:
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.DEBUG)
+
+    print("🔍 Enhanced logging enabled - you'll see detailed agent/tool traces")
+    print("=" * 80)
+
+
+# Configure logging with enhanced detail
+setup_enhanced_logging()
 logger = logging.getLogger(__name__)
 
 # Import the investigation system
 
 
-async def test_investigation_system():
-    """Test the complete investigation system with a mock alert."""
+async def test_investigation_system_with_tracing():
+    """Test the complete investigation system with detailed tracing."""
 
-    print("🚀 Starting Atlas Investigation System Test")
-    print("=" * 60)
+    print("\n🚀 Starting Atlas Investigation System Test WITH DETAILED TRACING")
+    print("=" * 80)
 
     # Create a test alert
     test_alert = AlertData(
-        alert_id="TEST-2024-0003",
+        alert_id="TRACE-TEST-2024-001",
         event_type="Community Protest",
         location="Washington Square Park, Manhattan",
         severity=7,
@@ -36,7 +83,7 @@ async def test_investigation_system():
         timestamp=datetime.utcnow()
     )
 
-    print(f"📋 Test Alert Details:")
+    print(f"\n📋 Test Alert Details:")
     print(f"   Alert ID: {test_alert.alert_id}")
     print(f"   Event: {test_alert.event_type}")
     print(f"   Location: {test_alert.location}")
@@ -45,10 +92,13 @@ async def test_investigation_system():
     print()
 
     try:
+        print("🔍 Starting Investigation with Enhanced Tracing...")
+        print("=" * 60)
+
         # Run the investigation
-        print("🔍 Starting Investigation...")
         investigation_result, investigation_id = await investigate_alert(test_alert)
 
+        print("=" * 60)
         print(f"✅ Investigation Complete!")
         print(f"   Investigation ID: {investigation_id}")
         print(f"   Result Length: {len(investigation_result)} characters")
@@ -61,22 +111,36 @@ async def test_investigation_system():
         print("-" * 40)
         print()
 
-        # Check investigation state
-        print("🔍 Investigation State Check:")
+        # Detailed investigation state inspection
+        print("🔍 Detailed Investigation State:")
         investigation_state = state_manager.get_investigation(investigation_id)
         if investigation_state:
-            print(f"   Phase: {investigation_state.phase}")
-            print(f"   Confidence: {investigation_state.confidence_score}")
-            print(f"   Artifacts: {len(investigation_state.artifacts)}")
-            print(f"   Iteration: {investigation_state.iteration_count}")
+            print(
+                f"   📋 Investigation ID: {investigation_state.investigation_id}")
+            print(f"   🎯 Phase: {investigation_state.phase}")
+            print(f"   📊 Confidence: {investigation_state.confidence_score}")
+            print(f"   🔄 Iteration: {investigation_state.iteration_count}")
+            print(f"   📁 Artifacts: {len(investigation_state.artifacts)}")
+            print(f"   ⏱️  Started: {investigation_state.start_time}")
+            print(f"   📝 Findings: {len(investigation_state.findings)} items")
 
-            # List artifacts if any
+            # Show artifacts if any
             if investigation_state.artifacts:
-                print(f"   📎 Artifacts Created:")
-                for artifact in investigation_state.artifacts:
-                    print(f"      - {artifact}")
-        print()
+                print(f"\n   📎 Artifacts Created:")
+                for i, artifact in enumerate(investigation_state.artifacts, 1):
+                    print(f"      {i}. {artifact}")
 
+            # Show findings summary
+            if investigation_state.findings:
+                print(f"\n   📄 Recent Findings:")
+                # Show last 3
+                for i, finding in enumerate(investigation_state.findings[-3:], 1):
+                    print(f"      {i}. {finding}")
+
+        else:
+            print("   ❌ No investigation state found")
+
+        print()
         return True
 
     except Exception as e:
@@ -85,167 +149,83 @@ async def test_investigation_system():
         return False
 
 
-async def test_individual_agents():
-    """Test individual agents to ensure tools are working."""
+async def trace_individual_tool_calls():
+    """Test individual tools with detailed tracing to see what each one does."""
 
-    print("🧪 Testing Individual Agents")
-    print("=" * 40)
+    print("\n🔧 Tracing Individual Tool Calls")
+    print("=" * 50)
 
     try:
-        # Test imports
-        from rag.agents.research_agent import create_research_agent
-        from rag.agents.data_agent import create_data_agent
-        from rag.agents.analysis_agent import create_analysis_agent
-        from rag.agents.report_agent import create_report_agent
+        # Test a research tool with tracing
+        from rag.tools.research_tools import web_search_func
 
-        print("✅ All agent imports successful")
+        print("\n🌐 Tracing Web Search Tool:")
+        print("-" * 30)
+        result = web_search_func(
+            "NYC housing protest Washington Square Park", "news,official")
+        print(f"📤 Tool Result: {json.dumps(result, indent=2)}")
 
-        # Test agent creation
-        research_agent = create_research_agent()
-        data_agent = create_data_agent()
-        analysis_agent = create_analysis_agent()
-        report_agent = create_report_agent()
+        # Test a data tool
+        from rag.tools.data_tools import search_knowledge_base
 
-        print("✅ All agents created successfully")
-        print(f"   Research Agent: {len(research_agent.tools)} tools")
-        print(f"   Data Agent: {len(data_agent.tools)} tools")
-        print(f"   Analysis Agent: {len(analysis_agent.tools)} tools")
-        print(f"   Report Agent: {len(report_agent.tools)} tools")
-        print()
+        print("\n📚 Tracing Knowledge Base Search:")
+        print("-" * 35)
+        result = search_knowledge_base("community organizing Manhattan")
+        print(f"📤 Tool Result: {json.dumps(result, indent=2)}")
+
+        # Test an analysis tool
+        from rag.tools.analysis_tools import analyze_temporal_patterns
+
+        print("\n📊 Tracing Temporal Analysis:")
+        print("-" * 30)
+        test_events = [
+            {"timestamp": "2024-12-03T14:00:00Z", "type": "social_media_post"},
+            {"timestamp": "2024-12-03T15:30:00Z", "type": "311_complaint"},
+            {"timestamp": "2024-12-03T16:00:00Z", "type": "news_article"}
+        ]
+        result = analyze_temporal_patterns(test_events, "24h")
+        print(f"📤 Tool Result: {json.dumps(result, indent=2)}")
 
         return True
 
     except Exception as e:
-        print(f"❌ Agent test failed: {e}")
-        logger.exception("Agent test failed")
-        return False
-
-
-async def test_tools_individually():
-    """Test tools individually to ensure they work."""
-
-    print("🔧 Testing Individual Tools")
-    print("=" * 30)
-
-    try:
-        # Test research tools
-        from rag.tools.research_tools import web_search_func, search_social_media_func, query_live_apis_func
-
-        print("Testing Research Tools:")
-        web_result = web_search_func(
-            "NYC housing protest", ["news", "official"])
-        print(f"   ✅ Web search: {len(web_result)} results")
-
-        social_result = search_social_media_func(
-            "Washington Square Park protest", "Manhattan")
-        print(f"   ✅ Social media: {len(social_result)} posts")
-
-        api_result = query_live_apis_func(
-            "311", "Manhattan", {"category": "noise"})
-        print(f"   ✅ Live API: {api_result['status']}")
-
-        # Test data tools
-        from rag.tools.data_tools import (
-            search_knowledge_base, query_census_demographics,
-            get_crime_statistics, find_similar_incidents
-        )
-
-        print("Testing Data Tools:")
-        kb_result = search_knowledge_base("housing protest")
-        print(f"   ✅ Knowledge base: {len(kb_result)} documents")
-
-        census_result = query_census_demographics(
-            "Manhattan", ["income", "housing"])
-        print(f"   ✅ Census data: {census_result['confidence']}")
-
-        crime_result = get_crime_statistics("Washington Square", "30d")
-        print(f"   ✅ Crime stats: {crime_result['confidence']}")
-
-        similar_result = find_similar_incidents(
-            "community protest", "Manhattan")
-        print(f"   ✅ Similar incidents: {len(similar_result)} found")
-
-        # Test analysis tools
-        from rag.tools.analysis_tools import (
-            analyze_temporal_patterns, correlate_data_sources,
-            identify_risk_factors, generate_hypotheses
-        )
-
-        print("Testing Analysis Tools:")
-        temporal_result = analyze_temporal_patterns(
-            [{"timestamp": "2024-12-03T14:00:00Z"}], "24h")
-        print(f"   ✅ Temporal analysis: {temporal_result['confidence']}")
-
-        correlation_result = correlate_data_sources(
-            {"web": "data"}, {"census": "data"})
-        print(
-            f"   ✅ Correlation: {len(correlation_result['strong_correlations'])} correlations")
-
-        risk_result = identify_risk_factors(
-            {"severity": 7}, {"location": "Manhattan"})
-        print(f"   ✅ Risk analysis: {risk_result['overall_risk_score']:.2f}")
-
-        hypothesis_result = generate_hypotheses(
-            {"research": "data", "demographics": "data"})
-        print(f"   ✅ Hypotheses: {len(hypothesis_result)} generated")
-
-        # Test report tools
-        from rag.tools.report_tools import (
-            fact_check_claims_func, assess_source_reliability_func,
-            generate_confidence_scores_func
-        )
-
-        print("Testing Report Tools:")
-        fact_result = fact_check_claims_func(
-            ["Test claim"], [{"name": "source1"}])
-        print(f"   ✅ Fact check: {fact_result['overall_confidence']:.2f}")
-
-        reliability_result = assess_source_reliability_func(
-            [{"name": "Reddit", "type": "social"}])
-        print(
-            f"   ✅ Source reliability: {reliability_result['average_credibility']:.2f}")
-
-        confidence_result = generate_confidence_scores_func(
-            {"analysis": "complete"})
-        print(
-            f"   ✅ Confidence scores: {confidence_result['overall_confidence']:.2f}")
-
-        print()
-        return True
-
-    except Exception as e:
-        print(f"❌ Tool test failed: {e}")
-        logger.exception("Tool test failed")
+        print(f"❌ Tool tracing failed: {e}")
+        logger.exception("Tool tracing failed")
         return False
 
 
 async def main():
-    """Main test function."""
+    """Main test function with enhanced tracing."""
 
-    print("🏗️  NYC Atlas Investigation System - End-to-End Test")
-    print("=" * 60)
-    print()
+    print("🏗️  NYC Atlas Investigation System - DETAILED TRACING MODE")
+    print("=" * 70)
+    print("This mode provides detailed logs of:")
+    print("  • Agent creation and tool assignments")
+    print("  • Tool function calls and results")
+    print("  • Investigation state transitions")
+    print("  • Multi-agent coordination")
+    print("  • Error handling and fallbacks")
+    print("=" * 70)
 
-    # Test individual tools
-    tools_ok = await test_tools_individually()
+    # Trace individual tool calls first
+    tools_trace = await trace_individual_tool_calls()
 
-    # Test individual agents
-    agents_ok = await test_individual_agents()
+    # Test full system with tracing
+    system_trace = await test_investigation_system_with_tracing()
 
-    # Test full system
-    system_ok = await test_investigation_system()
+    print("\n" + "=" * 70)
+    print("📊 TRACING SUMMARY:")
+    print(f"   Tool Tracing: {'✅ PASS' if tools_trace else '❌ FAIL'}")
+    print(f"   System Tracing: {'✅ PASS' if system_trace else '❌ FAIL'}")
+    print("=" * 70)
 
-    print("📊 Test Summary:")
-    print(f"   Tools: {'✅ PASS' if tools_ok else '❌ FAIL'}")
-    print(f"   Agents: {'✅ PASS' if agents_ok else '❌ FAIL'}")
-    print(f"   System: {'✅ PASS' if system_ok else '❌ FAIL'}")
-    print()
-
-    if tools_ok and agents_ok and system_ok:
-        print("🎉 ALL TESTS PASSED! System ready for deployment.")
+    if tools_trace and system_trace:
+        print("\n🎉 TRACING COMPLETE! Check the detailed logs above.")
+        print("💡 As you replace stubs with real implementations, run this script")
+        print("   to see exactly how each tool and agent behaves.")
         return 0
     else:
-        print("🚨 SOME TESTS FAILED! Check logs for details.")
+        print("\n🚨 TRACING FAILED! Check logs for details.")
         return 1
 
 

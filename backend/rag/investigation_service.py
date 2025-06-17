@@ -211,8 +211,98 @@ Begin the investigation now.
             logger.info(
                 f"Executing ADK runner for investigation {investigation_state.investigation_id}")
 
-            # Run the investigation through ADK
-            investigation_result = await runner.run_async(investigation_prompt)
+            # Create a proper Content object for the ADK runner
+            from google.genai import types
+
+            # Convert investigation prompt to ADK Content format
+            content = types.Content(
+                role='user',
+                parts=[types.Part(text=investigation_prompt)]
+            )
+
+            # Get the session service from the runner
+            session_service = None
+            if hasattr(runner, '_session_service'):
+                session_service = runner._session_service
+            elif hasattr(runner, 'session_service'):
+                session_service = runner.session_service
+            else:
+                # The session service was passed during Runner creation, let's use it directly
+                from google.adk.sessions import InMemorySessionService
+                session_service = InMemorySessionService()
+                logger.info("Created new session service as fallback")
+
+            if session_service:
+                # Create or get session for this investigation
+                session_id = investigation_state.investigation_id
+                user_id = f"investigation_user_{alert_data.alert_id}"
+
+                # Create session using the proper ADK session service API
+                try:
+                    # Try to create a new session through the session service
+                    session = session_service.create_session(
+                        session_id=session_id,
+                        user_id=user_id,
+                        app_name="atlas_investigation"
+                    )
+                    logger.info(
+                        f"Created ADK session {session_id} via session service API")
+                except Exception as session_create_error:
+                    logger.warning(
+                        f"Failed to create session via API: {session_create_error}")
+
+                    # Fallback to manual session creation
+                    if not hasattr(session_service, '_sessions'):
+                        session_service._sessions = {}
+
+                    session_service._sessions[session_id] = {
+                        "id": session_id,
+                        "user_id": user_id,
+                        "state": {
+                            "investigation_id": investigation_state.investigation_id,
+                            "alert_id": investigation_state.alert_data.alert_id,
+                            "alert_severity": investigation_state.alert_data.severity,
+                            "alert_type": investigation_state.alert_data.event_type,
+                            "alert_location": investigation_state.alert_data.location,
+                            "investigation_phase": investigation_state.phase.value,
+                            "iteration_count": investigation_state.iteration_count,
+                            "trace_id": investigation_state.investigation_id
+                        },
+                        "created_at": investigation_state.created_at,
+                        "investigation_context": investigation_state
+                    }
+                    logger.info(
+                        f"Created ADK session {session_id} via manual fallback")
+
+                # Run the investigation through ADK with proper parameters
+                logger.info(
+                    f"Calling runner.run_async with session_id={session_id}, user_id={user_id}")
+
+                # The correct ADK runner signature is: run_async(session_id, user_id, new_message)
+                investigation_generator = runner.run_async(
+                    session_id=session_id,
+                    user_id=user_id,
+                    new_message=content
+                )
+
+                # ADK runner returns an async generator, so we need to collect the results
+                investigation_result = ""
+                async for result in investigation_generator:
+                    if hasattr(result, 'text'):
+                        investigation_result += result.text
+                    elif isinstance(result, str):
+                        investigation_result += result
+                    else:
+                        investigation_result += str(result)
+
+                logger.info(
+                    f"ADK runner completed for investigation {investigation_state.investigation_id}")
+                logger.debug(
+                    f"ADK result length: {len(investigation_result)} characters")
+
+            else:
+                logger.error("No session service available in runner")
+                raise Exception("Runner session service not configured")
 
             # Update investigation state with results
             state_manager.update_investigation(investigation_state.investigation_id, {

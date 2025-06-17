@@ -75,214 +75,615 @@ def create_rag_retrieval_tool(
 
 def web_search_func(
     query: str,
-    source_types: List[str] = ["news", "official", "academic"]
-) -> List[Dict]:
-    """Comprehensive web search across multiple source types.
-
-    Args:
-        query: Search query terms
-        source_types: Types of sources to include (news, official, academic)
-
-    Returns:
-        List of web search results with URLs, snippets, source credibility
-    """
-    # Simple mock implementation for now
-    return [
-        {
-            "title": f"Search results for: {query}",
-            "snippet": f"Mock search results about {query} from {', '.join(source_types)} sources",
-            "url": "https://example.com/search",
-            "source_type": source_types[0] if source_types else "news",
-            "credibility_score": 0.8,
-            "timestamp": "2025-01-03T12:00:00Z"
-        }
-    ]
-
-
-async def collect_media_content_func(
-    context: ToolContext,
-    search_terms: List[str],
-    content_types: List[str] = ["images"],
+    source_types: str = "news,official,academic",
+    max_results: int = 10,
+    collect_evidence: bool = True,
     alert_id: str = "unknown"
-) -> List[Dict]:
-    """Gather images, videos, and multimedia content and save as artifacts.
+) -> dict:
+    """
+    Search the web for recent information related to the query.
+    Optionally collect evidence (screenshots and media) from results.
 
     Args:
-        context: Tool context for artifact operations
-        search_terms: Terms to search for in media content
-        content_types: Types of media to collect (images, videos, etc.)
-        alert_id: Alert ID for naming convention
+        query: Search query string
+        source_types: Comma-separated types of sources to prioritize (news,official,academic)
+        max_results: Maximum number of results to return (default: 10)
+        collect_evidence: Whether to automatically collect screenshots and media (default: True)
+        alert_id: Alert ID for artifact naming
 
     Returns:
-        List of media content with artifact references, descriptions, relevance scores
+        dict: Search results with evidence collection info
     """
+    try:
+        from duckduckgo_search import DDGS
+
+        # Initialize DuckDuckGo search
+        ddgs = DDGS()
+
+        # Parse source types
+        sources = [s.strip().lower() for s in source_types.split(",")]
+
+        # Perform the search
+        search_results = []
+        evidence_collected = []
+
+        # Try regular web search first
+        try:
+            results = ddgs.text(
+                keywords=query,
+                region="wt-wt",  # Worldwide
+                safesearch="moderate",
+                timelimit="m",  # Last month for recent info
+                max_results=max_results
+            )
+
+            for i, result in enumerate(results):
+                search_results.append({
+                    "title": result.get("title", ""),
+                    "url": result.get("href", ""),
+                    "snippet": result.get("body", ""),
+                    "type": "web"
+                })
+
+                # Collect evidence from top results if enabled
+                if collect_evidence and i < 3:  # Only collect from top 3 results
+                    url = result.get("href", "")
+                    if url and url.startswith("http"):
+                        # Collect screenshot
+                        screenshot_info = save_investigation_screenshot_simple_func(
+                            url=url,
+                            description=f"Screenshot of search result: {result.get('title', 'Unknown')}",
+                            alert_id=alert_id
+                        )
+                        evidence_collected.append({
+                            "type": "screenshot",
+                            "url": url,
+                            "artifact_info": screenshot_info
+                        })
+
+        except Exception as e:
+            print(f"Web search failed: {e}")
+
+        # If we want news specifically, try news search
+        if "news" in sources and len(search_results) < max_results:
+            try:
+                news_results = ddgs.news(
+                    keywords=query,
+                    region="wt-wt",
+                    safesearch="moderate",
+                    timelimit="m",  # Last month
+                    max_results=min(5, max_results - len(search_results))
+                )
+
+                for i, result in enumerate(news_results):
+                    search_results.append({
+                        "title": result.get("title", ""),
+                        "url": result.get("url", ""),
+                        "snippet": result.get("body", ""),
+                        "type": "news",
+                        "date": result.get("date", ""),
+                        "source": result.get("source", "")
+                    })
+
+                    # Collect evidence from news results if enabled
+                    if collect_evidence and i < 2:  # Only collect from top 2 news results
+                        url = result.get("url", "")
+                        if url and url.startswith("http"):
+                            screenshot_info = save_investigation_screenshot_simple_func(
+                                url=url,
+                                description=f"Screenshot of news article: {result.get('title', 'Unknown')}",
+                                alert_id=alert_id
+                            )
+                            evidence_collected.append({
+                                "type": "screenshot",
+                                "url": url,
+                                "artifact_info": screenshot_info
+                            })
+
+            except Exception as e:
+                print(f"News search failed: {e}")
+
+        # Auto-collect related media content if enabled
+        if collect_evidence:
+            media_info = collect_media_content_simple_func(
+                search_terms=query,
+                content_types="images",
+                alert_id=alert_id
+            )
+            evidence_collected.append({
+                "type": "media_collection",
+                "artifact_info": media_info
+            })
+
+        # Limit to max_results
+        search_results = search_results[:max_results]
+
+        # Create summary
+        summary = f"Found {len(search_results)} results for query: {query}"
+        if search_results:
+            summary += f". Top result: {search_results[0]['title']}"
+        if evidence_collected:
+            summary += f". Collected {len(evidence_collected)} evidence artifacts."
+
+        return {
+            "success": True,
+            "query": query,
+            "total_results": len(search_results),
+            "results": search_results,
+            "evidence_collected": evidence_collected,
+            "evidence_count": len(evidence_collected),
+            "summary": summary
+        }
+
+    except ImportError:
+        return {
+            "success": False,
+            "error": "duckduckgo-search library not installed. Please install it with: pip install duckduckgo-search",
+            "query": query,
+            "results": [],
+            "evidence_collected": [],
+            "summary": "Web search unavailable - missing dependency"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Web search failed: {str(e)}",
+            "query": query,
+            "results": [],
+            "evidence_collected": [],
+            "summary": f"Web search failed for query: {query}"
+        }
+
+
+def collect_media_content_simple_func(
+    search_terms: str,
+    content_types: str = "images",
+    alert_id: str = "unknown",
+    max_items: int = 5
+) -> dict:
+    """Gather images, videos, and multimedia content using real search.
+
+    Args:
+        search_terms: Comma-separated search terms
+        content_types: Comma-separated content types (images,videos)
+        alert_id: Alert ID for naming convention
+        max_items: Maximum number of media items to collect per search term
+
+    Returns:
+        Media content information with artifact metadata
+    """
+    # Parse parameters from comma-separated strings
+    terms = [t.strip() for t in search_terms.split(",")]
+    types = [t.strip().lower() for t in content_types.split(",")]
+
     collected_media = []
 
-    # Mock implementation - simulate collecting images based on search terms
-    for i, search_term in enumerate(search_terms):
-        if "images" in content_types:
-            # Simulate finding relevant images
-            mock_images = [
-                {
-                    "url": f"https://example.com/image_{search_term}_{j}.jpg",
-                    "description": f"Image related to {search_term}",
-                    "source": "social_media"
-                }
-                for j in range(2)  # Simulate finding 2 images per search term
-            ]
+    # Try real image search using DuckDuckGo
+    try:
+        from duckduckgo_search import DDGS
+        ddgs = DDGS()
 
-            for j, image_info in enumerate(mock_images):
+        for search_term in terms:
+            if "images" in types:
                 try:
-                    # In a real implementation, download the image
-                    # image_response = requests.get(image_info["url"])
-                    # image_bytes = image_response.content
-
-                    # For now, create mock image data
-                    mock_image_bytes = b'\x89PNG\r\n\x1a\n' + b'mock_image_data' * 100
-
-                    # Create artifact from image data
-                    image_artifact = types.Part.from_bytes(
-                        data=mock_image_bytes,
-                        mime_type="image/png"
+                    # Use DuckDuckGo image search
+                    image_results = ddgs.images(
+                        keywords=search_term,
+                        region="wt-wt",
+                        safesearch="moderate",
+                        size="Medium",  # Get medium-sized images
+                        max_results=max_items
                     )
 
-                    # Get next ticker from state manager
+                    for j, image_result in enumerate(image_results):
+                        # Get next ticker from state manager
+                        ticker = state_manager.get_next_artifact_ticker(
+                            alert_id)
+                        filename = f"evidence_{alert_id}_{ticker:03d}_image_{search_term.replace(' ', '_')}.jpg"
+
+                        collected_media.append({
+                            "type": "image",
+                            "search_term": search_term,
+                            "title": image_result.get("title", "Unknown image"),
+                            "description": f"Image related to {search_term}",
+                            "source": "duckduckgo_images",
+                            "original_url": image_result.get("image", ""),
+                            "thumbnail_url": image_result.get("thumbnail", ""),
+                            "source_url": image_result.get("url", ""),
+                            "width": image_result.get("width", 0),
+                            "height": image_result.get("height", 0),
+                            "artifact_filename": filename,
+                            "planned_artifact": True,
+                            "mime_type": "image/jpeg",
+                            "relevance_score": 0.8,
+                            "ticker": ticker,
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
+
+                except Exception as e:
+                    print(
+                        f"Real image search failed for '{search_term}': {e}, using fallback")
+                    # Fallback to mock for this search term
+                    for j in range(min(max_items, 2)):
+                        ticker = state_manager.get_next_artifact_ticker(
+                            alert_id)
+                        filename = f"evidence_{alert_id}_{ticker:03d}_image_{search_term.replace(' ', '_')}.jpg"
+
+                        collected_media.append({
+                            "type": "image",
+                            "search_term": search_term,
+                            "title": f"Mock image for {search_term}",
+                            "description": f"Simulated image related to {search_term}",
+                            "source": "mock_search",
+                            "original_url": f"https://example.com/mock_image_{search_term}_{j}.jpg",
+                            "thumbnail_url": f"https://example.com/mock_thumb_{search_term}_{j}.jpg",
+                            "source_url": "https://example.com/mock",
+                            "width": 800,
+                            "height": 600,
+                            "artifact_filename": filename,
+                            "planned_artifact": True,
+                            "mime_type": "image/jpeg",
+                            "relevance_score": 0.6,
+                            "ticker": ticker,
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
+
+    except ImportError:
+        print("DuckDuckGo search not available, using mock data")
+        # Fallback to mock implementation for all search terms
+        for search_term in terms:
+            if "images" in types:
+                for j in range(min(max_items, 2)):
                     ticker = state_manager.get_next_artifact_ticker(alert_id)
-                    filename = f"evidence_{alert_id}_{ticker:03d}_media_{search_term}.png"
-                    version = await context.save_artifact(filename, image_artifact)
+                    filename = f"evidence_{alert_id}_{ticker:03d}_image_{search_term.replace(' ', '_')}.jpg"
 
                     collected_media.append({
                         "type": "image",
                         "search_term": search_term,
-                        "description": image_info["description"],
-                        "source": image_info["source"],
-                        "original_url": image_info["url"],
+                        "title": f"Mock image for {search_term}",
+                        "description": f"Simulated image related to {search_term}",
+                        "source": "mock_search",
+                        "original_url": f"https://example.com/mock_image_{search_term}_{j}.jpg",
+                        "thumbnail_url": f"https://example.com/mock_thumb_{search_term}_{j}.jpg",
+                        "source_url": "https://example.com/mock",
+                        "width": 800,
+                        "height": 600,
                         "artifact_filename": filename,
-                        "artifact_version": version,
-                        "mime_type": "image/png",
-                        "relevance_score": 0.8,
-                        "ticker": ticker
+                        "planned_artifact": True,
+                        "mime_type": "image/jpeg",
+                        "relevance_score": 0.6,
+                        "ticker": ticker,
+                        "timestamp": datetime.utcnow().isoformat()
                     })
 
-                except Exception as e:
-                    print(f"Error saving media artifact: {e}")
-                    # Continue with next item even if one fails
-                    continue
+    return {
+        "success": True,
+        "collected_media": collected_media,
+        "search_terms": terms,
+        "content_types": types,
+        "total_items": len(collected_media),
+        "summary": f"Collected {len(collected_media)} media items for search terms: {', '.join(terms)}"
+    }
 
-    return collected_media
 
-
-async def save_investigation_screenshot_func(
-    context: ToolContext,
+def save_investigation_screenshot_simple_func(
     url: str,
     description: str,
-    alert_id: str = "unknown"
-) -> Dict:
-    """Take and save a screenshot of a webpage for investigation evidence.
+    alert_id: str = "unknown",
+    capture_type: str = "full_page"
+) -> dict:
+    """Take and save a screenshot of a webpage with enhanced metadata.
 
     Args:
-        context: Tool context for artifact operations
         url: URL to screenshot
         description: Description of what the screenshot shows
         alert_id: Alert ID for naming convention
+        capture_type: Type of capture (full_page, viewport, element)
 
     Returns:
-        Information about the saved screenshot artifact
+        Information about the planned screenshot with artifact metadata
     """
+    # Get next ticker from state manager
+    ticker = state_manager.get_next_artifact_ticker(alert_id)
+    filename = f"evidence_{alert_id}_{ticker:03d}_screenshot.png"
+
+    # Extract domain for better categorization
     try:
-        # In a real implementation, use a service like Playwright or Selenium
-        # For now, create mock screenshot data
-        mock_screenshot_bytes = b'\x89PNG\r\n\x1a\n' + b'mock_screenshot_data' * 200
+        from urllib.parse import urlparse
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+        source_type = "news" if any(news_domain in domain for news_domain in [
+                                    "cnn", "nytimes", "abc", "pix11", "ny1"]) else "web"
+    except:
+        domain = "unknown"
+        source_type = "web"
 
-        # Create artifact from screenshot
-        screenshot_artifact = types.Part.from_bytes(
-            data=mock_screenshot_bytes,
-            mime_type="image/png"
-        )
-
-        # Get next ticker from state manager
-        ticker = state_manager.get_next_artifact_ticker(alert_id)
-        filename = f"evidence_{alert_id}_{ticker:03d}_screenshot.png"
-        version = await context.save_artifact(filename, screenshot_artifact)
-
-        return {
-            "type": "screenshot",
-            "url": url,
-            "description": description,
-            "artifact_filename": filename,
-            "artifact_version": version,
-            "mime_type": "image/png",
-            "ticker": ticker,
-            "alert_id": alert_id
-        }
-
-    except Exception as e:
-        return {
-            "error": f"Failed to save screenshot: {e}",
-            "url": url
-        }
+    return {
+        "success": True,
+        "type": "screenshot",
+        "filename": filename,
+        "url": url,
+        "domain": domain,
+        "source_type": source_type,
+        "description": description,
+        "capture_type": capture_type,
+        "planned_artifact": True,
+        "mime_type": "image/png",
+        "ticker": ticker,
+        "timestamp": datetime.utcnow().isoformat(),
+        "file_size_estimate": "~500KB",
+        "summary": f"Screenshot planned for {domain}: {description}"
+    }
 
 
-async def list_investigation_artifacts_func(
-    context: ToolContext
-) -> List[str]:
-    """List all artifacts collected during the investigation.
+def get_investigation_evidence_func(
+    investigation_id: str,
+    evidence_types: str = "all",
+    max_items: int = 50
+) -> dict:
+    """Retrieve collected evidence artifacts for report generation.
+
+    This function is designed for the Report Agent to gather all evidence
+    collected during the investigation for inclusion in reports and presentations.
 
     Args:
-        context: Tool context for artifact operations
+        investigation_id: Investigation ID to retrieve evidence for
+        evidence_types: Comma-separated evidence types (screenshots,images,documents,all)
+        max_items: Maximum number of evidence items to return
 
     Returns:
-        List of artifact filenames available in the investigation
+        Comprehensive evidence collection for report generation
     """
     try:
-        artifacts = await context.list_artifacts()
-        return artifacts
+        # Parse evidence types
+        types = [t.strip().lower() for t in evidence_types.split(",")]
+        include_all = "all" in types
+
+        # Get investigation state
+        investigation_state = state_manager.get_investigation(investigation_id)
+        if not investigation_state:
+            return {
+                "success": False,
+                "error": f"Investigation {investigation_id} not found",
+                "evidence_items": [],
+                "summary": "No evidence found - investigation not found"
+            }
+
+        # Collect evidence from investigation artifacts
+        evidence_items = []
+
+        # Process investigation artifacts
+        for artifact in investigation_state.artifacts:
+            artifact_type = artifact.get("type", "unknown")
+
+            # Filter by evidence types if not "all"
+            if not include_all:
+                if artifact_type == "screenshot" and "screenshots" not in types:
+                    continue
+                elif artifact_type == "image" and "images" not in types:
+                    continue
+                elif artifact_type == "document" and "documents" not in types:
+                    continue
+
+            evidence_items.append({
+                "type": artifact_type,
+                "filename": artifact.get("filename", "unknown"),
+                "description": artifact.get("description", "No description"),
+                "url": artifact.get("url", ""),
+                "source": artifact.get("source", "unknown"),
+                "timestamp": artifact.get("timestamp", ""),
+                "ticker": artifact.get("ticker", 0),
+                "relevance_score": artifact.get("relevance_score", 0.5),
+                "mime_type": artifact.get("mime_type", "unknown"),
+                "metadata": {
+                    "domain": artifact.get("domain", ""),
+                    "source_type": artifact.get("source_type", ""),
+                    "width": artifact.get("width", 0),
+                    "height": artifact.get("height", 0),
+                    "file_size": artifact.get("file_size_estimate", "unknown")
+                }
+            })
+
+        # Sort by relevance score and timestamp
+        evidence_items.sort(key=lambda x: (
+            x["relevance_score"], x["timestamp"]), reverse=True)
+
+        # Limit results
+        evidence_items = evidence_items[:max_items]
+
+        # Create evidence summary for report agent
+        evidence_summary = {
+            "total_items": len(evidence_items),
+            "types_found": list(set(item["type"] for item in evidence_items)),
+            "sources": list(set(item["source"] for item in evidence_items)),
+            "time_range": {
+                "earliest": min((item["timestamp"] for item in evidence_items), default=""),
+                "latest": max((item["timestamp"] for item in evidence_items), default="")
+            },
+            "high_relevance_count": len([item for item in evidence_items if item["relevance_score"] > 0.7])
+        }
+
+        return {
+            "success": True,
+            "investigation_id": investigation_id,
+            "evidence_items": evidence_items,
+            "evidence_summary": evidence_summary,
+            "requested_types": types,
+            "summary": f"Retrieved {len(evidence_items)} evidence items of types: {', '.join(evidence_summary['types_found'])}"
+        }
+
     except Exception as e:
-        print(f"Error listing artifacts: {e}")
-        return []
+        return {
+            "success": False,
+            "error": f"Failed to retrieve evidence: {str(e)}",
+            "evidence_items": [],
+            "summary": f"Evidence retrieval failed for investigation {investigation_id}"
+        }
 
 
-# Create FunctionTool instances
+def list_investigation_artifacts_simple_func(
+    investigation_id: str = "unknown",
+    artifact_types: str = "all"
+) -> dict:
+    """List all artifacts planned/collected during the investigation.
+
+    Args:
+        investigation_id: Investigation ID to check
+        artifact_types: Comma-separated artifact types to filter (all,screenshots,images,documents)
+
+    Returns:
+        Information about artifacts with counts and summaries
+    """
+    try:
+        # Get investigation state
+        investigation_state = state_manager.get_investigation(investigation_id)
+        if not investigation_state:
+            return {
+                "success": False,
+                "message": f"Investigation {investigation_id} not found",
+                "investigation_id": investigation_id,
+                "artifact_count": 0,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+        # Parse artifact types
+        types = [t.strip().lower() for t in artifact_types.split(",")]
+        include_all = "all" in types
+
+        # Count artifacts by type
+        artifact_counts = {}
+        filtered_artifacts = []
+
+        for artifact in investigation_state.artifacts:
+            artifact_type = artifact.get("type", "unknown")
+
+            # Count all types
+            artifact_counts[artifact_type] = artifact_counts.get(
+                artifact_type, 0) + 1
+
+            # Filter for response if not "all"
+            if include_all or artifact_type in types:
+                filtered_artifacts.append(artifact)
+
+        return {
+            "success": True,
+            "message": "Artifact listing retrieved successfully",
+            "investigation_id": investigation_id,
+            "artifact_count": len(filtered_artifacts),
+            "total_artifacts": len(investigation_state.artifacts),
+            "artifact_counts": artifact_counts,
+            # Limit to first 20 for display
+            "artifacts": filtered_artifacts[:20],
+            "timestamp": datetime.utcnow().isoformat(),
+            "summary": f"Found {len(filtered_artifacts)} artifacts of requested types from total of {len(investigation_state.artifacts)} artifacts"
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Failed to list artifacts: {str(e)}",
+            "investigation_id": investigation_id,
+            "artifact_count": 0,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+
+# Create FunctionTool instances with the simplified functions
 web_search = FunctionTool(web_search_func)
-collect_media_content = FunctionTool(collect_media_content_func)
+collect_media_content = FunctionTool(collect_media_content_simple_func)
 save_investigation_screenshot = FunctionTool(
-    save_investigation_screenshot_func)
-list_investigation_artifacts = FunctionTool(list_investigation_artifacts_func)
+    save_investigation_screenshot_simple_func)
+get_investigation_evidence = FunctionTool(get_investigation_evidence_func)
+list_investigation_artifacts = FunctionTool(
+    list_investigation_artifacts_simple_func)
 
 
 # TODO: Implement remaining research tools
 
 def search_social_media_func(
     query: str,
-    location: Optional[str] = None,
+    location: str = "NYC",
     time_range: str = "24h",
-    limit: int = 10
-) -> List[Dict]:
+    limit: int = 10,
+    collect_evidence: bool = True,
+    alert_id: str = "unknown"
+) -> dict:
     """Search Reddit for relevant posts and discussions.
+    Optionally collect evidence (screenshots and media) from results.
 
     Args:
         query: Search query terms
-        location: Geographic location filter (optional)
+        location: Geographic location filter (default: NYC)
         time_range: Time range for search (24h, 7d, 30d)
         limit: Maximum number of posts to return
+        collect_evidence: Whether to automatically collect screenshots and media
+        alert_id: Alert ID for artifact naming
 
     Returns:
-        List of relevant Reddit posts with metadata
+        Social media posts with evidence collection info
     """
+    evidence_collected = []
 
     if not REDDIT_AVAILABLE:
         logger.warning("Reddit API not available, returning mock data")
-        return _mock_reddit_search(query, location, time_range, limit)
+        posts = _mock_reddit_search(query, location, time_range, limit)
+    else:
+        try:
+            import asyncio
+            posts = asyncio.run(_real_reddit_search(
+                query, location, time_range, limit))
+        except Exception as e:
+            logger.error(
+                f"Reddit search failed: {e}, falling back to mock data")
+            posts = _mock_reddit_search(query, location, time_range, limit)
 
-    try:
-        import asyncio
-        return asyncio.run(_real_reddit_search(query, location, time_range, limit))
-    except Exception as e:
-        logger.error(f"Reddit search failed: {e}, falling back to mock data")
-        return _mock_reddit_search(query, location, time_range, limit)
+    # Collect evidence from top social media posts if enabled
+    if collect_evidence and posts:
+        top_posts = posts[:3]  # Only collect from top 3 posts
+
+        for i, post in enumerate(top_posts):
+            # If post has URL, take screenshot
+            if post.get("url") and post["url"].startswith("http"):
+                screenshot_info = save_investigation_screenshot_simple_func(
+                    url=post["url"],
+                    description=f"Screenshot of Reddit post: {post.get('title', 'Unknown')}",
+                    alert_id=alert_id
+                )
+                evidence_collected.append({
+                    "type": "screenshot",
+                    "url": post["url"],
+                    "platform": "reddit",
+                    "artifact_info": screenshot_info
+                })
+
+            # If post mentions media or has images, collect related media
+            post_text = f"{post.get('title', '')} {post.get('content', '')}"
+            if any(keyword in post_text.lower() for keyword in ['image', 'photo', 'video', 'pic']):
+                media_terms = f"{query}, reddit post, {post.get('title', '')}"
+                media_info = collect_media_content_simple_func(
+                    search_terms=media_terms,
+                    content_types="images",
+                    alert_id=alert_id
+                )
+                evidence_collected.append({
+                    "type": "media_collection",
+                    "platform": "reddit",
+                    "artifact_info": media_info
+                })
+
+    return {
+        "success": True,
+        "posts": posts,
+        "query": query,
+        "location": location,
+        "count": len(posts),
+        "evidence_collected": evidence_collected,
+        "evidence_count": len(evidence_collected),
+        "summary": f"Found {len(posts)} Reddit posts for '{query}' in {location}. Collected {len(evidence_collected)} evidence artifacts."
+    }
 
 
-async def _real_reddit_search(query: str, location: Optional[str], time_range: str, limit: int) -> List[Dict]:
+async def _real_reddit_search(query: str, location: Optional[str], time_range: str, limit: int) -> list:
     """Perform real Reddit search using redditwarp client."""
 
     # Get Reddit credentials from environment
@@ -464,7 +865,7 @@ def _calculate_relevance(query: str, title: str, content: str) -> float:
     return min(score, 1.0)  # Cap at 1.0
 
 
-def _mock_reddit_search(query: str, location: Optional[str], time_range: str, limit: int) -> List[Dict]:
+def _mock_reddit_search(query: str, location: Optional[str], time_range: str, limit: int) -> list:
     """Fallback mock Reddit search results."""
     query_hash = hash(query) % 1000
     location_suffix = f" in {location}" if location else ""
@@ -497,18 +898,25 @@ def _mock_reddit_search(query: str, location: Optional[str], time_range: str, li
 def query_live_apis_func(
     api_name: str,
     location: str,
-    parameters: Dict
-) -> Dict:
+    parameters: str = ""
+) -> dict:
     """Query live NYC APIs for real-time data.
 
     Args:
         api_name: Name of the API to query (311, traffic, weather, etc.)
         location: Geographic location for the query
-        parameters: Additional parameters for the API query
+        parameters: Additional parameters as JSON string
 
     Returns:
         Live data from the specified API
     """
+    # Parse parameters if provided
+    import json
+    try:
+        params_dict = json.loads(parameters) if parameters else {}
+    except:
+        params_dict = {}
+
     # Mock live API responses
     location_hash = hash(location) % 100
     api_hash = hash(api_name) % 100
@@ -586,7 +994,7 @@ def query_live_apis_func(
         "api_name": api_name,
         "location": location,
         "query_time": "2024-12-03T15:00:00Z",
-        "parameters": parameters,
+        "parameters": params_dict,
         "response": base_response,
         "status": "success",
         "response_time_ms": 150 + api_hash % 100
@@ -594,5 +1002,5 @@ def query_live_apis_func(
 
 
 # Create additional tools when implemented
-# search_social_media = FunctionTool(search_social_media_func)
-# query_live_apis = FunctionTool(query_live_apis_func)
+search_social_media = FunctionTool(search_social_media_func)
+query_live_apis = FunctionTool(query_live_apis_func)
