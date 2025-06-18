@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAlerts } from '@/hooks/useAlerts';
+import { useAlerts } from '../contexts/AlertsContext';
 
 const Dashboard: React.FC = () => {
   const { alerts, stats, error, isConnected } = useAlerts();
