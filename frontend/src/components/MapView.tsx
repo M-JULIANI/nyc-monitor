@@ -3,13 +3,15 @@ import Map, { Layer, Source, Popup } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Alert } from '../types';
 import { useAlerts } from '../contexts/AlertsContext';
+import { useMapState } from '../contexts/MapStateContext';
 import Spinner from './Spinner';
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA';
 
 const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
-  const { alerts, error, isConnected } = useAlerts();;
+  const { alerts, error, isConnected } = useAlerts();
+  const { viewport, setViewport } = useMapState();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [filter, setFilter] = useState({
     priority: 'all',
@@ -17,13 +19,9 @@ const MapView: React.FC = () => {
     status: 'all',
     timeRange: '24h'
   });
-
-  // NYC bounding box for initial viewport (fallback when no alerts)
-  const nycBounds = {
-    longitude: -74.0,
-    latitude: 40.7,
-    zoom: 10
-  };
+  
+  // Track if we should auto-fit to alerts (only on first load or filter changes)
+  const [shouldAutoFit, setShouldAutoFit] = useState(true);
 
   // Calculate bounds for all visible alerts
   const calculateAlertBounds = (alerts: Alert[]) => {
@@ -61,9 +59,9 @@ const MapView: React.FC = () => {
     return true;
   });
 
-  // Update map bounds when alerts change
+  // Update map bounds when alerts change, but only if we should auto-fit
   useEffect(() => {
-    if (mapRef.current && filteredAlerts.length > 0) {
+    if (mapRef.current && filteredAlerts.length > 0 && shouldAutoFit) {
       const bounds = calculateAlertBounds(filteredAlerts);
       if (bounds) {
         try {
@@ -72,12 +70,42 @@ const MapView: React.FC = () => {
             duration: 1000, // Smooth animation
             maxZoom: 16 // Don't zoom in too close
           });
+          
+          // Update viewport state after fitBounds completes
+          setTimeout(() => {
+            if (mapRef.current) {
+              const newViewState = mapRef.current.getMap().getCenter();
+              const newZoom = mapRef.current.getMap().getZoom();
+              setViewport({
+                longitude: newViewState.lng,
+                latitude: newViewState.lat,
+                zoom: newZoom
+              });
+            }
+          }, 1100); // Wait slightly longer than the animation duration
+          
+          // Disable auto-fit after first automatic fit
+          setShouldAutoFit(false);
         } catch (error) {
           console.warn('Error fitting bounds:', error);
         }
       }
     }
-  }, [filteredAlerts]); // Re-run when filtered alerts change
+  }, [filteredAlerts, shouldAutoFit, setViewport]); // Re-run when filtered alerts change
+  
+  // Reset auto-fit when filters change
+  useEffect(() => {
+    setShouldAutoFit(true);
+  }, [filter]);
+
+  // Handle viewport changes from the map
+  const handleViewportChange = (evt: any) => {
+    setViewport({
+      longitude: evt.viewState.longitude,
+      latitude: evt.viewState.latitude,
+      zoom: evt.viewState.zoom
+    });
+  };
 
   const getSourceIcon = (source: string): string => {
     switch (source) {
@@ -214,7 +242,7 @@ const MapView: React.FC = () => {
       <div className={`w-full h-full ${!isConnected ? 'grayscale opacity-50' : ''}`}>
         <Map
           ref={mapRef}
-          initialViewState={nycBounds}
+          initialViewState={viewport}
           mapboxAccessToken={MAPBOX_TOKEN}
           style={{ width: '100%', height: '100%' }}
           mapStyle="mapbox://styles/mapbox/dark-v11"
@@ -226,6 +254,7 @@ const MapView: React.FC = () => {
           scrollZoom={isConnected}
           keyboard={isConnected}
           doubleClickZoom={isConnected}
+          onMove={handleViewportChange}
         >
           <Source type="geojson" data={alertsGeoJSON}>
             <Layer
