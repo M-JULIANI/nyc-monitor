@@ -16,7 +16,12 @@ alerts_router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 def get_db():
     """Get Firestore client instance"""
-    return firestore.Client(project=get_config().GOOGLE_CLOUD_PROJECT)
+    try:
+        return firestore.Client(project=get_config().GOOGLE_CLOUD_PROJECT)
+    except Exception as e:
+        logger.error(f"Failed to initialize Firestore client: {e}")
+        raise HTTPException(
+            status_code=500, detail="Database configuration error")
 
 
 def deduplicate_alerts(alerts: List[Dict[Any, Any]]) -> List[Dict[Any, Any]]:
