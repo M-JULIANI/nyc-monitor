@@ -191,8 +191,8 @@ async def force_artifact_collection(investigation_id: str, location: str):
     print("=" * 50)
 
     try:
-        # 1. Generate location map
-        print("📍 Step 1: Generating location map...")
+        # 1. Generate location map (normal zoom)
+        print("📍 Step 1: Generating location map (normal zoom)...")
         from rag.tools.map_tools import generate_location_map_func
 
         map_result = generate_location_map_func(
@@ -206,6 +206,19 @@ async def force_artifact_collection(investigation_id: str, location: str):
         if map_result.get("success"):
             print(f"   Map File: {map_result.get('filename')}")
             print(f"   Map Source: {map_result.get('source')}")
+
+        # 1b. Generate location map (wide zoom)
+        print("📍 Step 1b: Generating location map (wide zoom)...")
+        map_wide_result = generate_location_map_func(
+            location=location,
+            alert_id=investigation_id,
+            map_type="satellite",
+            include_pin=True
+        )
+        print(f"   Wide Map Result: {map_wide_result.get('success', False)}")
+        if map_wide_result.get("success"):
+            print(f"   Wide Map File: {map_wide_result.get('filename')}")
+            print(f"   Wide Map Source: {map_wide_result.get('source')}")
 
         # 2. Collect media content related to the investigation
         print("\n🖼️ Step 2: Collecting media content...")
