@@ -24,6 +24,7 @@ from google.adk.tools import FunctionTool, ToolContext
 from ..investigation.state_manager import state_manager
 from google.adk.tools.retrieval.vertex_ai_rag_retrieval import VertexAiRagRetrieval
 from vertexai.preview import rag
+from .artifact_manager import artifact_manager
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,14 @@ def web_search_func(
                             description=f"Screenshot of search result: {result.get('title', 'Unknown')}",
                             alert_id=alert_id
                         )
+
+                        # IMPORTANT: Actually save the artifact to investigation state
+                        investigation_state = state_manager.get_investigation(
+                            alert_id)
+                        if investigation_state and screenshot_info.get("success"):
+                            investigation_state.artifacts.append(
+                                screenshot_info)
+
                         evidence_collected.append({
                             "type": "screenshot",
                             "url": url,
@@ -174,6 +183,14 @@ def web_search_func(
                                 description=f"Screenshot of news article: {result.get('title', 'Unknown')}",
                                 alert_id=alert_id
                             )
+
+                            # IMPORTANT: Actually save the artifact to investigation state
+                            investigation_state = state_manager.get_investigation(
+                                alert_id)
+                            if investigation_state and screenshot_info.get("success"):
+                                investigation_state.artifacts.append(
+                                    screenshot_info)
+
                             evidence_collected.append({
                                 "type": "screenshot",
                                 "url": url,
@@ -190,6 +207,14 @@ def web_search_func(
                 content_types="images",
                 alert_id=alert_id
             )
+
+            # IMPORTANT: Actually save media artifacts to investigation state
+            investigation_state = state_manager.get_investigation(alert_id)
+            if investigation_state and media_info.get("success"):
+                # Save each collected media item as an artifact
+                for media_item in media_info.get("collected_media", []):
+                    investigation_state.artifacts.append(media_item)
+
             evidence_collected.append({
                 "type": "media_collection",
                 "artifact_info": media_info
@@ -276,29 +301,130 @@ def collect_media_content_simple_func(
                     )
 
                     for j, image_result in enumerate(image_results):
-                        # Get next ticker from state manager
-                        ticker = state_manager.get_next_artifact_ticker(
-                            alert_id)
-                        filename = f"evidence_{alert_id}_{ticker:03d}_image_{search_term.replace(' ', '_')}.jpg"
+                        # Get image URL
+                        image_url = image_result.get("image", "")
+                        if not image_url:
+                            continue
 
-                        collected_media.append({
-                            "type": "image",
-                            "search_term": search_term,
-                            "title": image_result.get("title", "Unknown image"),
-                            "description": f"Image related to {search_term}",
-                            "source": "duckduckgo_images",
-                            "original_url": image_result.get("image", ""),
-                            "thumbnail_url": image_result.get("thumbnail", ""),
-                            "source_url": image_result.get("url", ""),
-                            "width": image_result.get("width", 0),
-                            "height": image_result.get("height", 0),
-                            "artifact_filename": filename,
-                            "planned_artifact": True,
-                            "mime_type": "image/jpeg",
-                            "relevance_score": 0.8,
-                            "ticker": ticker,
-                            "timestamp": datetime.utcnow().isoformat()
-                        })
+                        # Download and save the image using artifact manager
+                        try:
+                            artifact_result = artifact_manager.download_and_save_image(
+                                investigation_id=alert_id,
+                                image_url=image_url,
+                                artifact_type="images",
+                                description=f"Image related to {search_term}: {image_result.get('title', 'Unknown')}"
+                            )
+
+                            if artifact_result["success"]:
+                                # Add to investigation artifacts
+                                investigation_state = state_manager.get_investigation(
+                                    alert_id)
+                                if investigation_state:
+                                    artifact_info = {
+                                        "type": "image",
+                                        "filename": artifact_result["filename"],
+                                        "gcs_path": artifact_result["gcs_path"],
+                                        "gcs_url": artifact_result["gcs_url"],
+                                        "public_url": artifact_result["public_url"],
+                                        "signed_url": artifact_result["signed_url"],
+                                        "search_term": search_term,
+                                        "title": image_result.get("title", "Unknown image"),
+                                        "description": f"Image related to {search_term}",
+                                        "source": "duckduckgo_images",
+                                        "original_url": image_url,
+                                        "thumbnail_url": image_result.get("thumbnail", ""),
+                                        "source_url": image_result.get("url", ""),
+                                        "width": image_result.get("width", 0),
+                                        "height": image_result.get("height", 0),
+                                        "content_type": artifact_result["content_type"],
+                                        "size_bytes": artifact_result["size_bytes"],
+                                        "relevance_score": 0.8,
+                                        "ticker": state_manager.get_next_artifact_ticker(alert_id),
+                                        "timestamp": artifact_result["created_at"],
+                                        "metadata": artifact_result.get("metadata", {})
+                                    }
+                                    investigation_state.artifacts.append(
+                                        artifact_info)
+                                    logger.info(
+                                        f"✅ Downloaded and saved image: {artifact_result['filename']}")
+
+                                collected_media.append({
+                                    "type": "image",
+                                    "search_term": search_term,
+                                    "title": image_result.get("title", "Unknown image"),
+                                    "description": f"Image related to {search_term}",
+                                    "source": "duckduckgo_images",
+                                    "original_url": image_url,
+                                    "thumbnail_url": image_result.get("thumbnail", ""),
+                                    "source_url": image_result.get("url", ""),
+                                    "width": image_result.get("width", 0),
+                                    "height": image_result.get("height", 0),
+                                    "artifact_filename": artifact_result["filename"],
+                                    "saved_to_gcs": True,
+                                    "gcs_url": artifact_result["gcs_url"],
+                                    "signed_url": artifact_result["signed_url"],
+                                    "mime_type": artifact_result["content_type"],
+                                    "size_bytes": artifact_result["size_bytes"],
+                                    "relevance_score": 0.8,
+                                    "ticker": state_manager.get_next_artifact_ticker(alert_id),
+                                    "timestamp": artifact_result["created_at"]
+                                })
+                            else:
+                                logger.warning(
+                                    f"Failed to download image {image_url}: {artifact_result.get('error')}")
+                                # Add as planned artifact if download fails
+                                ticker = state_manager.get_next_artifact_ticker(
+                                    alert_id)
+                                filename = f"evidence_{alert_id}_{ticker:03d}_image_{search_term.replace(' ', '_')}.jpg"
+
+                                collected_media.append({
+                                    "type": "image",
+                                    "search_term": search_term,
+                                    "title": image_result.get("title", "Unknown image"),
+                                    "description": f"Image related to {search_term} (download failed)",
+                                    "source": "duckduckgo_images",
+                                    "original_url": image_url,
+                                    "thumbnail_url": image_result.get("thumbnail", ""),
+                                    "source_url": image_result.get("url", ""),
+                                    "width": image_result.get("width", 0),
+                                    "height": image_result.get("height", 0),
+                                    "artifact_filename": filename,
+                                    "saved_to_gcs": False,
+                                    "download_error": artifact_result.get("error"),
+                                    "planned_artifact": True,
+                                    "mime_type": "image/jpeg",
+                                    "relevance_score": 0.6,
+                                    "ticker": ticker,
+                                    "timestamp": datetime.utcnow().isoformat()
+                                })
+                        except Exception as e:
+                            logger.error(
+                                f"Error downloading image {image_url}: {e}")
+                            # Fallback to planned artifact
+                            ticker = state_manager.get_next_artifact_ticker(
+                                alert_id)
+                            filename = f"evidence_{alert_id}_{ticker:03d}_image_{search_term.replace(' ', '_')}.jpg"
+
+                            collected_media.append({
+                                "type": "image",
+                                "search_term": search_term,
+                                "title": image_result.get("title", "Unknown image"),
+                                "description": f"Image related to {search_term} (error during download)",
+                                "source": "duckduckgo_images",
+                                "original_url": image_url,
+                                "thumbnail_url": image_result.get("thumbnail", ""),
+                                "source_url": image_result.get("url", ""),
+                                "width": image_result.get("width", 0),
+                                "height": image_result.get("height", 0),
+                                "artifact_filename": filename,
+                                "saved_to_gcs": False,
+                                "download_error": str(e),
+                                "planned_artifact": True,
+                                "mime_type": "image/jpeg",
+                                "relevance_score": 0.6,
+                                "ticker": ticker,
+                                "timestamp": datetime.utcnow().isoformat()
+                            })
 
                 except Exception as e:
                     print(
@@ -470,17 +596,28 @@ def get_investigation_evidence_func(
                 "filename": artifact.get("filename", "unknown"),
                 "description": artifact.get("description", "No description"),
                 "url": artifact.get("url", ""),
+                # Add GCS URLs and signed URLs for Google Slides integration
+                "gcs_url": artifact.get("gcs_url", ""),
+                "signed_url": artifact.get("signed_url", ""),
+                "public_url": artifact.get("public_url", ""),
+                "original_url": artifact.get("original_url", ""),
+                "saved_to_gcs": artifact.get("saved_to_gcs", False),
+                # Also check alternative keys that might be used
+                "image_url": artifact.get("image_url", ""),
                 "source": artifact.get("source", "unknown"),
                 "timestamp": artifact.get("timestamp", ""),
                 "ticker": artifact.get("ticker", 0),
                 "relevance_score": artifact.get("relevance_score", 0.5),
                 "mime_type": artifact.get("mime_type", "unknown"),
+                "title": artifact.get("title", ""),
                 "metadata": {
                     "domain": artifact.get("domain", ""),
                     "source_type": artifact.get("source_type", ""),
                     "width": artifact.get("width", 0),
                     "height": artifact.get("height", 0),
-                    "file_size": artifact.get("file_size_estimate", "unknown")
+                    "file_size": artifact.get("file_size_estimate", "unknown"),
+                    "content_type": artifact.get("content_type", ""),
+                    "size_bytes": artifact.get("size_bytes", 0)
                 }
             })
 

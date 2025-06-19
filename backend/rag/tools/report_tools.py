@@ -141,35 +141,49 @@ def create_slides_presentation_func(
         # Copy template to create new presentation
         if template_type == "status_tracker" and STATUS_TRACKER_TEMPLATE_ID:
             template_id = STATUS_TRACKER_TEMPLATE_ID
+
+            try:
+                # Try to copy from template
+                copy_body = {
+                    'name': title,
+                    'parents': [GOOGLE_DRIVE_FOLDER_ID] if GOOGLE_DRIVE_FOLDER_ID else []
+                }
+
+                copied_file = drive_service.files().copy(
+                    fileId=template_id,
+                    body=copy_body,
+                    supportsAllDrives=True
+                ).execute()
+
+                presentation_id = copied_file['id']
+                logger.info(
+                    f"✅ Created presentation from template: {presentation_id}")
+
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Failed to copy from template {template_id}: {e}")
+                logger.info("🔄 Falling back to blank presentation...")
+
+                # Fall back to blank presentation
+                presentation_body = {
+                    'title': title
+                }
+                presentation = slides_service.presentations().create(
+                    body=presentation_body).execute()
+                presentation_id = presentation['presentationId']
+                logger.info(
+                    f"✅ Created blank presentation as fallback: {presentation_id}")
         else:
             # Create blank presentation if no template available
+            logger.info(
+                "📝 Creating blank presentation (no template specified)")
             presentation_body = {
                 'title': title
             }
             presentation = slides_service.presentations().create(
                 body=presentation_body).execute()
             presentation_id = presentation['presentationId']
-
-            logger.info(f"Created blank presentation: {presentation_id}")
-            return _populate_presentation_with_data(
-                slides_service, drive_service, presentation_id, investigation_id, title, evidence_types
-            )
-
-        # Copy from template
-        copy_body = {
-            'name': title,
-            'parents': [GOOGLE_DRIVE_FOLDER_ID] if GOOGLE_DRIVE_FOLDER_ID else []
-        }
-
-        copied_file = drive_service.files().copy(
-            fileId=template_id,
-            body=copy_body,
-            supportsAllDrives=True
-        ).execute()
-
-        presentation_id = copied_file['id']
-
-        logger.info(f"Created presentation from template: {presentation_id}")
+            logger.info(f"✅ Created blank presentation: {presentation_id}")
 
         # Populate with investigation data
         return _populate_presentation_with_data(
@@ -198,54 +212,162 @@ def _populate_presentation_with_data(
 ) -> dict:
     """Populate presentation with investigation data and evidence."""
     try:
+        logger.info(
+            f"🔧 Starting presentation population for investigation: {investigation_id}")
+
         # Get investigation evidence
         from .research_tools import get_investigation_evidence_func
         evidence_data = get_investigation_evidence_func(
             investigation_id, evidence_types)
+        logger.debug(
+            f"Evidence data retrieved: {len(evidence_data.get('evidence_items', []))} items")
 
         # Get investigation state for additional data
         from ..investigation.state_manager import state_manager
         investigation_state = state_manager.get_investigation(investigation_id)
 
+        if not investigation_state:
+            logger.error(
+                f"❌ No investigation state found for ID: {investigation_id}")
+            return {
+                "success": False,
+                "error": "Investigation state not found",
+                "presentation_id": presentation_id,
+                "summary": "Failed to find investigation data"
+            }
+
+        logger.info(
+            f"✅ Investigation state found: Phase={investigation_state.phase}, Confidence={investigation_state.confidence_score}")
+        logger.debug(
+            f"Investigation findings count: {len(investigation_state.findings)}")
+
         # Prepare replacement data
         replacements = _prepare_replacement_data(
             investigation_state, evidence_data)
+
+        logger.info(f"🎯 Prepared {len(replacements)} replacement mappings")
+        logger.debug("Replacement data preview:")
+        # Show first 10 for debugging
+        for key, value in list(replacements.items())[:10]:
+            logger.debug(
+                f"   {key}: {str(value)[:100]}{'...' if len(str(value)) > 100 else ''}")
 
         # Batch update presentation with text replacements
         requests = []
 
         # Replace text placeholders
         for placeholder, replacement_text in replacements.items():
-            requests.append({
+            placeholder_pattern = f'{{{{{placeholder}}}}}'
+            request = {
                 'replaceAllText': {
                     'containsText': {
-                        'text': f'{{{{{placeholder}}}}}'
+                        'text': placeholder_pattern
                     },
-                    'replaceText': replacement_text
+                    'replaceText': str(replacement_text)
                 }
-            })
+            }
+            requests.append(request)
+            logger.debug(
+                f"Added replacement: {placeholder_pattern} -> {str(replacement_text)[:50]}{'...' if len(str(replacement_text)) > 50 else ''}")
 
         # Execute batch update
         if requests:
-            slides_service.presentations().batchUpdate(
-                presentationId=presentation_id,
-                body={'requests': requests}
-            ).execute()
+            logger.info(
+                f"📤 Sending {len(requests)} replacement requests to Google Slides API")
+            try:
+                batch_result = slides_service.presentations().batchUpdate(
+                    presentationId=presentation_id,
+                    body={'requests': requests}
+                ).execute()
 
-        # Add evidence images
+                replies = batch_result.get('replies', [])
+                logger.info(
+                    f"✅ Batch update completed successfully with {len(replies)} replies")
+
+                # Check for any errors in replies
+                for i, reply in enumerate(replies):
+                    if 'error' in reply:
+                        logger.error(
+                            f"❌ Replacement {i} failed: {reply['error']}")
+                    else:
+                        logger.debug(f"✅ Replacement {i} successful")
+
+            except Exception as e:
+                logger.error(f"❌ Google Slides API batch update failed: {e}")
+                return {
+                    "success": False,
+                    "error": f"Google Slides API error: {str(e)}",
+                    "presentation_id": presentation_id,
+                    "summary": "Failed to update presentation placeholders"
+                }
+        else:
+            logger.warning("⚠️ No replacement requests generated")
+
+        # Add evidence images (non-blocking - don't fail presentation if images fail)
+        logger.info("🖼️ Adding evidence images...")
         evidence_requests = _create_evidence_image_requests(
             evidence_data, slides_service, presentation_id)
-        if evidence_requests:
-            slides_service.presentations().batchUpdate(
-                presentationId=presentation_id,
-                body={'requests': evidence_requests}
-            ).execute()
 
-        # Share the presentation publicly for viewing
-        _share_presentation_publicly(drive_service, presentation_id)
+        image_insertion_success = False
+        successful_images = 0
+        failed_images = 0
+
+        if evidence_requests:
+            # Try to insert images individually to avoid one failure blocking all
+            successful_requests = []
+
+            # Group requests by image (each image has 4 requests: image + 3 caption parts)
+            image_groups = []
+            for i in range(0, len(evidence_requests), 4):
+                group = evidence_requests[i:i+4]
+                image_groups.append(group)
+
+            logger.info(
+                f"🎯 Attempting to insert {len(image_groups)} images individually...")
+
+            for i, image_group in enumerate(image_groups):
+                try:
+                    # Try to insert this image group
+                    slides_service.presentations().batchUpdate(
+                        presentationId=presentation_id,
+                        body={'requests': image_group}
+                    ).execute()
+                    successful_requests.extend(image_group)
+                    successful_images += 1
+                    logger.info(f"✅ Successfully inserted image {i+1}")
+                except Exception as e:
+                    failed_images += 1
+                    logger.warning(f"⚠️ Failed to insert image {i+1}: {e}")
+                    # Continue with next image - don't let one failure block others
+                    continue
+
+            if successful_images > 0:
+                image_insertion_success = True
+                logger.info(
+                    f"✅ Successfully inserted {successful_images}/{len(image_groups)} images")
+            else:
+                logger.warning(
+                    f"❌ Failed to insert all {len(image_groups)} images")
+        else:
+            logger.info("📝 No evidence images to add")
+
+        # ALWAYS continue to share presentation - don't let image failures block this
+        logger.info("🌐 Sharing presentation publicly...")
+        try:
+            _share_presentation_publicly(drive_service, presentation_id)
+            logger.info("✅ Successfully shared presentation publicly")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to share presentation publicly: {e}")
+            # Continue anyway - presentation still exists
 
         # Generate public viewing URL
         public_url = f"https://docs.google.com/presentation/d/{presentation_id}/edit?usp=sharing"
+
+        logger.info(f"🎉 Presentation creation completed!")
+        logger.info(f"   URL: {public_url}")
+        logger.info(f"   Text replacements: {len(requests)} applied")
+        logger.info(
+            f"   Images: {successful_images} successful, {failed_images} failed")
 
         return {
             "success": True,
@@ -255,11 +377,16 @@ def _populate_presentation_with_data(
             "investigation_id": investigation_id,
             "evidence_count": evidence_data.get("evidence_summary", {}).get("total_items", 0),
             "template_type": "status_tracker",
-            "summary": f"Successfully created presentation '{title}' with {evidence_data.get('evidence_summary', {}).get('total_items', 0)} evidence items"
+            "replacements_applied": len(requests),
+            "images_inserted": successful_images,
+            "images_failed": failed_images,
+            "image_insertion_success": image_insertion_success,
+            "summary": f"Successfully created presentation '{title}' with {len(requests)} placeholder replacements, {successful_images} images inserted ({failed_images} failed)"
         }
 
     except Exception as e:
-        logger.error(f"Failed to populate presentation: {e}")
+        logger.error(f"❌ Failed to populate presentation: {e}")
+        logger.exception("Full error details:")
         return {
             "success": False,
             "error": f"Failed to populate presentation: {str(e)}",
@@ -293,7 +420,11 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
         findings_text = ["• Investigation in progress",
                          "• Evidence collection ongoing", "• Analysis pending"]
 
-    return {
+    # Format the findings for different placeholder names
+    findings_formatted = "\n".join(findings_text)
+
+    # Prepare base replacements
+    replacements = {
         "investigation_title": f"{alert_data.event_type} Investigation - {alert_data.location}",
         "investigation_id": investigation_state.investigation_id,
         "alert_location": alert_data.location,
@@ -301,13 +432,13 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
         "alert_summary": alert_data.summary,
         "status": investigation_state.phase.value.title(),
         "confidence_score": f"{investigation_state.confidence_score:.1%}",
-        "findings_summary": "\n".join(findings_text),
+        "findings_summary": findings_formatted,
         "evidence_count": str(evidence_summary.get("total_items", 0)),
         "evidence_types": ", ".join(evidence_summary.get("types_found", ["None"])),
         "high_relevance_count": str(evidence_summary.get("high_relevance_count", 0)),
         "timestamp": investigation_state.created_at.strftime("%Y-%m-%d %H:%M:%S"),
         "phase": investigation_state.phase.value.title(),
-        "iteration_count": str(investigation_state.iteration_count),
+        "iteration": str(investigation_state.iteration_count),
         # Image placeholder URLs (to be replaced with actual image insertions)
         "evidence_image_1": "{{EVIDENCE_IMAGE_1}}",
         "evidence_image_2": "{{EVIDENCE_IMAGE_2}}",
@@ -318,11 +449,33 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
         "timeline_chart": "{{TIMELINE_CHART}}"
     }
 
+    # Add alternative placeholder names for template compatibility
+    # Based on the user's template export, these are the missing placeholders:
+    replacements.update({
+        # Template uses {{key_findings}} but we provide {{findings_summary}}
+        "key_findings": findings_formatted,
+        # Template uses {{stats}} but we provide {{status}}
+        "stats": investigation_state.phase.value.title(),
+        # Template uses {{iteration}} but we provide {{iteration_count}}
+        "iteration": str(investigation_state.iteration_count),
+        # Also provide iteration_count for backwards compatibility
+        "iteration_count": str(investigation_state.iteration_count)
+    })
+
+    logger.debug(f"Prepared {len(replacements)} placeholder replacements")
+    logger.debug(f"Replacement keys: {list(replacements.keys())}")
+
+    return replacements
+
 
 def _create_evidence_image_requests(evidence_data, slides_service, presentation_id: str) -> List[dict]:
     """Create requests to insert actual evidence images into presentation."""
     requests = []
     evidence_items = evidence_data.get("evidence_items", [])
+    public_artifacts_to_cleanup = []  # Track artifacts made public for cleanup
+
+    logger.info(
+        f"🖼️ Creating image requests from {len(evidence_items)} evidence items")
 
     # Get the presentation to find slides
     try:
@@ -337,16 +490,86 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
         # Use the second slide (index 1) for evidence, or first if only one exists
         target_slide_id = slides[1]['objectId'] if len(
             slides) > 1 else slides[0]['objectId']
+        logger.info(f"Target slide for images: {target_slide_id}")
 
     except Exception as e:
         logger.error(f"Failed to get presentation slides: {e}")
         return requests
 
     # Add up to 4 high-relevance images (2x2 grid layout)
-    image_items = [
-        item for item in evidence_items
-        if item["type"] in ["image", "screenshot"] and item.get("relevance_score", 0) > 0.7
-    ][:4]
+    # Prioritize images that have been saved to GCS with signed URLs
+    image_items = []
+
+    logger.info("🔍 Filtering evidence items for images...")
+    for i, item in enumerate(evidence_items):
+        item_type = item.get("type", "unknown")
+        relevance = item.get("relevance_score", 0)
+
+        logger.debug(
+            f"   Item {i}: type={item_type}, relevance={relevance:.2f}")
+
+        if item_type in ["image", "screenshot", "map_image"] and relevance > 0.7:
+            # Log available URLs for debugging
+            gcs_url = item.get("gcs_url", "")
+            signed_url = item.get("signed_url", "")
+            original_url = item.get("url", "") or item.get(
+                "image_url", "") or item.get("original_url", "")
+            saved_to_gcs = item.get("saved_to_gcs", False)
+
+            logger.debug(f"      GCS URL: {gcs_url}")
+            logger.debug(f"      Signed URL: {signed_url}")
+            logger.debug(f"      Original URL: {original_url}")
+            logger.debug(f"      Saved to GCS: {saved_to_gcs}")
+
+            # Add all suitable items - we'll make them accessible later
+            image_items.append(item)
+
+    # Take top 4 images
+    image_items = image_items[:4]
+    logger.info(f"📊 Selected {len(image_items)} images for insertion")
+
+    # Generate Slides-accessible URLs using service account credentials
+    try:
+        from .artifact_manager import artifact_manager
+
+        logger.info(
+            "🔗 Generating Slides-accessible URLs using service account...")
+
+        for item in image_items:
+            filename = item.get("filename", "")
+            if filename and item.get("gcs_url"):
+                # Extract investigation ID from item or GCS path
+                investigation_id = "unknown"
+                gcs_path = item.get("gcs_path", "")
+                if "/investigations/" in gcs_path:
+                    # Parse: artifacts/investigations/DEBUG-SLIDESHOW-001_20250619_211306/images/filename
+                    investigation_id = gcs_path.split(
+                        "/investigations/")[1].split("/")[0]
+                elif "/investigations/" in item.get("gcs_url", ""):
+                    # Try GCS URL: gs://bucket/artifacts/investigations/ID/type/filename
+                    gcs_url = item.get("gcs_url", "")
+                    investigation_id = gcs_url.split(
+                        "/investigations/")[1].split("/")[0]
+
+                logger.debug(
+                    f"   Extracted investigation ID: {investigation_id} from {gcs_path or item.get('gcs_url', 'no-path')}")
+
+                # Get Slides-accessible URL using service account
+                url_result = artifact_manager.get_slides_accessible_url(
+                    investigation_id, filename)
+
+                if url_result["success"]:
+                    # Update item with Slides-accessible URL
+                    item["slides_accessible_url"] = url_result["url"]
+                    item["url_type"] = url_result["url_type"]
+                    logger.info(
+                        f"✅ Generated Slides-accessible URL for: {filename} ({url_result['url_type']})")
+                else:
+                    logger.warning(
+                        f"❌ Could not generate accessible URL: {filename} - {url_result.get('error')}")
+
+    except Exception as e:
+        logger.warning(f"Could not access artifact manager: {e}")
 
     # Grid layout: 2 columns, 2 rows
     positions = [
@@ -360,10 +583,64 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
         if i >= len(positions):
             break
 
-        image_url = item.get("url") or item.get("image_url")
+        # Determine which URL to use (prefer Slides-accessible URLs from service account)
+        image_url = None
+        url_type = "unknown"
+
+        # Helper function to validate URL accessibility
+        def validate_image_url(url, url_type_name):
+            if not url or not url.startswith("http"):
+                return False, f"Invalid URL format: {url}"
+
+            try:
+                import requests
+                # Quick HEAD request to check accessibility
+                response = requests.head(url, timeout=10, allow_redirects=True)
+                if response.status_code == 200:
+                    # Check content type if available
+                    content_type = response.headers.get(
+                        'content-type', '').lower()
+                    if any(img_type in content_type for img_type in ['image/', 'application/octet-stream']):
+                        return True, f"Valid {url_type_name} (HTTP {response.status_code})"
+                    else:
+                        return True, f"Valid {url_type_name} (HTTP {response.status_code}, content-type: {content_type})"
+                else:
+                    return False, f"HTTP {response.status_code} from {url_type_name}"
+            except Exception as e:
+                return False, f"Failed to validate {url_type_name}: {str(e)}"
+
+        # Priority order: slides_accessible_url > signed_url > original_url
+        candidate_urls = [
+            (item.get("slides_accessible_url"), "slides_accessible_url",
+             item.get("url_type", "slides_accessible_url")),
+            (item.get("signed_url"), "signed_url", "GCS signed URL"),
+            (item.get("url"), "url", "external URL"),
+            (item.get("image_url"), "image_url", "image URL"),
+            (item.get("original_url"), "original_url", "original URL")
+        ]
+
+        for candidate_url, field_name, type_name in candidate_urls:
+            if candidate_url:
+                is_valid, validation_msg = validate_image_url(
+                    candidate_url, type_name)
+                if is_valid:
+                    image_url = candidate_url
+                    url_type = type_name
+                    logger.info(
+                        f"✅ Using {type_name} for image {i+1}: {item.get('filename', 'unknown')} - {validation_msg}")
+                    break
+                else:
+                    logger.warning(
+                        f"❌ {type_name} failed validation for image {i+1}: {validation_msg}")
+
         if not image_url:
-            logger.warning(f"No URL found for evidence item {i}")
+            logger.warning(
+                f"❌ No valid URL found for evidence item {i+1} ({item.get('filename', 'unknown')})")
+            # Skip this image but continue with others
             continue
+
+        logger.info(
+            f"🎯 Image {i+1}: {url_type} = {image_url[:100]}{'...' if len(image_url) > 100 else ''}")
 
         try:
             # Create image element
@@ -381,7 +658,8 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
                             'scaleX': 1,
                             'scaleY': 1,
                             'translateX': positions[i]['x'],
-                            'translateY': positions[i]['y']
+                            'translateY': positions[i]['y'],
+                            'unit': 'PT'
                         }
                     }
                 }
@@ -389,6 +667,10 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
             requests.append(image_request)
 
             # Add caption below image
+            caption_text = f"Evidence {i+1}: {item.get('description', item.get('title', 'Collected evidence'))[:30]}..."
+            if item.get("saved_to_gcs"):
+                caption_text += " [GCS]"
+
             caption_request = {
                 'createShape': {
                     'objectId': f'evidence_caption_{i}',
@@ -403,7 +685,8 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
                             'scaleX': 1,
                             'scaleY': 1,
                             'translateX': positions[i]['x'],
-                            'translateY': positions[i]['y'] + 125
+                            'translateY': positions[i]['y'] + 125,
+                            'unit': 'PT'
                         }
                     }
                 }
@@ -414,7 +697,7 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
             caption_text_request = {
                 'insertText': {
                     'objectId': f'evidence_caption_{i}',
-                    'text': f"Evidence {i+1}: {item.get('description', 'Collected evidence')[:30]}..."
+                    'text': caption_text
                 }
             }
             requests.append(caption_text_request)
@@ -432,12 +715,23 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
             }
             requests.append(caption_style_request)
 
+            logger.info(
+                f"✅ Created 4 requests for image {i+1} using {url_type}")
+
         except Exception as e:
-            logger.error(f"Failed to create image request for item {i}: {e}")
+            logger.error(
+                f"❌ Failed to create image request for item {i+1}: {e}")
+            # Don't add this image's requests, but continue with others
             continue
 
+    # Store cleanup info for later use
+    if public_artifacts_to_cleanup:
+        logger.info(
+            f"📝 Will cleanup {len(public_artifacts_to_cleanup)} public artifacts after presentation creation")
+        # You could store this in the presentation metadata or investigation state for later cleanup
+
     logger.info(
-        f"Created {len(requests)} image requests for {len(image_items)} evidence items")
+        f"📤 Created {len(requests)} total image requests for {len(image_items)} evidence items")
     return requests
 
 
