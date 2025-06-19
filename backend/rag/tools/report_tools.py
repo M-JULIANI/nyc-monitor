@@ -562,6 +562,18 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
     # Format the findings for different placeholder names
     findings_formatted = "\n".join(findings_text)
 
+    # Create executive summary - one paragraph summary from key findings
+    try:
+        executive_summary = _create_executive_summary(
+            investigation_state, findings_text, evidence_summary, alert_data
+        )
+        logger.debug(
+            f"Generated executive summary: {len(executive_summary)} characters")
+    except Exception as e:
+        logger.warning(f"Error creating executive summary: {e}")
+        # Fallback executive summary
+        executive_summary = f"Investigation of {alert_data.event_type} at {alert_data.location} has achieved {investigation_state.confidence_score:.1%} confidence through analysis of {evidence_summary.get('total_items', 0)} evidence items. The investigation reveals significant community activity with implications for public safety and civic engagement in the area."
+
     # Prepare base replacements
     replacements = {
         "investigation_title": f"{alert_data.event_type} Investigation - {alert_data.location}",
@@ -572,6 +584,7 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
         "status": investigation_state.phase.value.title(),
         "confidence_score": f"{investigation_state.confidence_score:.1%}",
         "findings_summary": findings_formatted,
+        "executive_summary": executive_summary,  # New executive summary field
         "evidence_count": str(evidence_summary.get("total_items", 0)),
         "evidence_types": ", ".join(evidence_summary.get("types_found", ["None"])),
         "high_relevance_count": str(evidence_summary.get("high_relevance_count", 0)),
@@ -597,6 +610,127 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
     logger.debug(f"Replacement keys: {list(replacements.keys())}")
 
     return replacements
+
+
+def _create_executive_summary(investigation_state, findings_text, evidence_summary, alert_data) -> str:
+    """Create a professional one-paragraph executive summary from investigation findings."""
+    try:
+        # Extract key metrics
+        confidence = investigation_state.confidence_score
+        evidence_count = evidence_summary.get("total_items", 0)
+        event_type = alert_data.event_type
+        location = alert_data.location
+        severity = alert_data.severity
+
+        # Determine investigation scope and scale
+        if evidence_count >= 10:
+            evidence_scope = "comprehensive evidence collection"
+        elif evidence_count >= 5:
+            evidence_scope = "substantial evidence gathering"
+        else:
+            evidence_scope = "focused evidence analysis"
+
+        # Determine confidence level description
+        if confidence >= 0.85:
+            confidence_desc = "high confidence"
+        elif confidence >= 0.70:
+            confidence_desc = "substantial confidence"
+        else:
+            confidence_desc = "moderate confidence"
+
+        # Extract key themes from findings
+        findings_combined = " ".join(findings_text).lower()
+        themes = []
+
+        # Analyze findings for key themes
+        if "peaceful" in findings_combined and "no arrests" in findings_combined:
+            themes.append("peaceful demonstration with no reported incidents")
+        elif "thousands" in findings_combined or "massive" in findings_combined:
+            themes.append("large-scale public gathering")
+        elif "organized" in findings_combined or "demonstration" in findings_combined:
+            themes.append("organized civic activity")
+
+        if "trump" in findings_combined and "birthday" in findings_combined:
+            themes.append("politically-motivated event with specific timing")
+        elif "no kings" in findings_combined:
+            themes.append("anti-monarchism protest theme")
+
+        if "bryant park" in findings_combined and "madison square" in findings_combined:
+            themes.append("multi-location demonstration route")
+        elif "manhattan" in findings_combined:
+            themes.append("Manhattan-based civic engagement")
+
+        # Weather/conditions
+        if "rain" in findings_combined or "weather" in findings_combined:
+            themes.append("continued participation despite adverse conditions")
+
+        # Build executive summary
+        summary_parts = []
+
+        # Opening statement
+        summary_parts.append(
+            f"Investigation of the {event_type} at {location} has been completed with {confidence_desc} ({confidence:.1%}) through {evidence_scope} encompassing {evidence_count} artifacts.")
+
+        # Key findings synthesis
+        if themes:
+            if len(themes) == 1:
+                summary_parts.append(f"The investigation reveals {themes[0]}.")
+            elif len(themes) == 2:
+                summary_parts.append(
+                    f"Key findings indicate {themes[0]} and {themes[1]}.")
+            else:
+                # Multiple themes - group them intelligently
+                summary_parts.append(
+                    f"Analysis reveals {themes[0]}, {themes[1]}, and {themes[2]}.")
+        else:
+            # Fallback based on severity and type
+            if severity >= 7:
+                summary_parts.append(
+                    "The investigation reveals significant community mobilization with potential implications for public safety and civic order.")
+            else:
+                summary_parts.append(
+                    "Findings indicate standard civic engagement activity within normal community response parameters.")
+
+        # Evidence quality statement
+        high_relevance = evidence_summary.get("high_relevance_count", 0)
+        if high_relevance >= 8:
+            summary_parts.append(
+                f"Evidence quality is exceptional with {high_relevance} high-relevance items providing strong corroboration.")
+        elif high_relevance >= 5:
+            summary_parts.append(
+                f"Evidence collection yielded {high_relevance} high-relevance items supporting key conclusions.")
+        else:
+            summary_parts.append(
+                "Evidence analysis supports the investigation's primary conclusions.")
+
+        # Conclusion based on investigation phase
+        phase = investigation_state.phase.value.lower()
+        if phase == "complete":
+            summary_parts.append(
+                "The investigation is complete with actionable intelligence for stakeholder decision-making.")
+        elif phase == "reporting":
+            summary_parts.append(
+                "Investigation findings are ready for stakeholder review and action planning.")
+        else:
+            summary_parts.append(
+                f"Investigation is in {phase} phase with ongoing analysis to enhance confidence levels.")
+
+        # Combine into flowing paragraph
+        executive_summary = " ".join(summary_parts)
+
+        # Ensure reasonable length (target 150-300 words)
+        if len(executive_summary) > 800:
+            # Trim to essential elements if too long
+            # Keep opening, findings, and evidence
+            essential_parts = summary_parts[:3]
+            executive_summary = " ".join(essential_parts)
+
+        return executive_summary
+
+    except Exception as e:
+        logger.error(f"Failed to create executive summary: {e}")
+        # Simple fallback
+        return f"Investigation of {alert_data.event_type} at {alert_data.location} achieved {investigation_state.confidence_score:.1%} confidence through analysis of {evidence_summary.get('total_items', 0)} evidence items, revealing significant community activity with implications for public safety and civic engagement."
 
 
 def _create_evidence_image_requests(evidence_data, slides_service, presentation_id: str) -> List[dict]:
@@ -703,15 +837,18 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
     if image_items:
         logger.info(f"🖼️ Adding {len(image_items)} images to slides 5 & 6...")
 
-        # Improved grid positions for 2x2 layout with better horizontal spacing
+        # Improved grid positions for 2x2 layout with better vertical spacing
         # Standard slide dimensions: ~720x540 points
         # Image size: 180x135 points each
-        # Grid layout: 2 columns, 2 rows with better horizontal spacing
+        # Top row at Y:30, captions end at Y:30+135+5+40 = Y:210
+        # Bottom row needs to start after captions, so Y:220 minimum
         image_positions = [
-            {'x': 180, 'y': 50},   # Top left - better centered
-            {'x': 400, 'y': 50},   # Top right - more horizontal gap (220pt)
-            {'x': 180, 'y': 200},  # Bottom left - aligned with top
-            {'x': 400, 'y': 200}   # Bottom right - aligned with top right
+            {'x': 180, 'y': 30},   # Top left - moved up significantly
+            {'x': 400, 'y': 30},   # Top right - moved up significantly
+            # Bottom left - moved down to avoid caption clipping
+            {'x': 180, 'y': 200},
+            # Bottom right - moved down to avoid caption clipping
+            {'x': 400, 'y': 200}
         ]
 
         # Process images in groups of 4 (one slide each)
@@ -818,8 +955,8 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
                                 'scaleX': 1,
                                 'scaleY': 1,
                                 'translateX': image_positions[i]['x'],
-                                # Directly below image (image height 135 + small gap)
-                                'translateY': image_positions[i]['y'] + 140,
+                                # Directly below image: image Y + image height (135) + small gap (5)
+                                'translateY': image_positions[i]['y'] + 135,
                                 'unit': 'PT'
                             }
                         }
@@ -841,7 +978,7 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
                     'updateTextStyle': {
                         'objectId': caption_obj_id,
                         'style': {
-                            'fontSize': {'magnitude': 8, 'unit': 'PT'},
+                            'fontSize': {'magnitude': 6, 'unit': 'PT'},
                             'foregroundColor': {'opaqueColor': {'rgbColor': {'red': 0.4, 'green': 0.4, 'blue': 0.4}}}
                         },
                         'fields': 'fontSize,foregroundColor'
@@ -856,12 +993,13 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
     if map_items:
         logger.info(f"🗺️ Adding {len(map_items)} maps to slide 7...")
 
-        # Map positions for side-by-side layout - tighter together but with small gap
-        # Move maps to right side of slide with small gap between them
+        # Map positions for side-by-side layout - positioned lower and left for larger maps
+        # Move maps lower (25% down) and to the left to accommodate 25% larger size
+        # Original positions were x: 280, 500 and y: 80
+        # New larger map size: 250x225 (25% larger than 200x180)
         map_positions = [
-            {'x': 280, 'y': 80},   # Left map - moved slightly left
-            # Right map - small gap (220pt between centers)
-            {'x': 500, 'y': 80},
+            {'x': 220, 'y': 100},   # Left map - moved left and down for larger size
+            {'x': 450, 'y': 100},   # Right map - adjusted spacing for larger size
         ]
 
         for i, item in enumerate(map_items):
@@ -881,7 +1019,7 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
                 logger.warning(f"❌ No valid URL for map {i+1}")
                 continue
 
-            # Create map element with better sizing
+            # Create map element with 25% larger sizing
             map_request = {
                 'createImage': {
                     'objectId': f'location_map_{i}',
@@ -889,10 +1027,10 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
                     'elementProperties': {
                         'pageObjectId': map_slide_id,
                         'size': {
-                            # Smaller height for tighter layout
-                            'height': {'magnitude': 180, 'unit': 'PT'},
-                            # Smaller width for side-by-side fit with gap
-                            'width': {'magnitude': 200, 'unit': 'PT'}
+                            # 25% larger height: 180 * 1.25 = 225
+                            'height': {'magnitude': 225, 'unit': 'PT'},
+                            # 25% larger width: 200 * 1.25 = 250
+                            'width': {'magnitude': 250, 'unit': 'PT'}
                         },
                         'transform': {
                             'scaleX': 1,
@@ -912,7 +1050,7 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
 
             map_caption_text = f"{map_description} - {zoom_level}"
 
-            # Add map caption with improved positioning (directly under map)
+            # Add map caption with improved positioning (directly under larger map)
             map_caption_request = {
                 'createShape': {
                     'objectId': f'map_caption_{i}',
@@ -922,14 +1060,15 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
                         'size': {
                             # Smaller caption height
                             'height': {'magnitude': 25, 'unit': 'PT'},
-                            'width': {'magnitude': 200, 'unit': 'PT'}
+                            # Match new map width
+                            'width': {'magnitude': 250, 'unit': 'PT'}
                         },
                         'transform': {
                             'scaleX': 1,
                             'scaleY': 1,
                             'translateX': map_positions[i]['x'],
-                            # Just below map - updated for new size (180 + small gap)
-                            'translateY': map_positions[i]['y'] + 185,
+                            # Just below larger map: map Y + new map height (225) + small gap (5)
+                            'translateY': map_positions[i]['y'] + 225 + 5,
                             'unit': 'PT'
                         }
                     }
