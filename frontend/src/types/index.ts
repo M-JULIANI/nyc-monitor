@@ -94,4 +94,4 @@ export interface Report {
   author: string;
   createdAt: string;
   driveLink?: string;
-} 
+}
