@@ -212,6 +212,7 @@ async def force_artifact_collection(investigation_id: str, location: str):
         map_wide_result = generate_location_map_func(
             location=location,
             alert_id=investigation_id,
+            zoom_level=12,  # Wider zoom level
             map_type="satellite",
             include_pin=True
         )
