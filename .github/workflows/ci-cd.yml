@@ -139,6 +139,7 @@ jobs:
           GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
           GOOGLE_CUSTOM_SEARCH_ENGINE_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ENGINE_ID }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          NYC_311_APP_TOKEN: ${{ secrets.NYC_311_APP_TOKEN }}
 
       - name: Deploy Vertex AI Backend
         run: |
@@ -156,6 +157,7 @@ jobs:
           GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
           GOOGLE_CUSTOM_SEARCH_ENGINE_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ENGINE_ID }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          NYC_311_APP_TOKEN: ${{ secrets.NYC_311_APP_TOKEN }}
 
       - name: Deploy Frontend
         run: |

@@ -3,11 +3,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Alert } from '../types';
 
 interface UseAlertsOptions {
-  useStream?: boolean; // Default true - set false to only use REST endpoint
-  pollInterval?: number; // For REST-only mode, default 15 minutes
+  pollInterval?: number; // How often to refresh data
+  limit?: number; // Max number of alerts to load
 }
 
-// Function to normalize convoluted alert objects
+// Function to normalize alert objects
 const normalizeAlert = (rawAlert: any): Alert => {
   const original = rawAlert.original_alert || {};
   const originalData = original.original_alert_data || {};
@@ -27,8 +27,9 @@ const normalizeAlert = (rawAlert: any): Alert => {
   } else if (originalData.coordinates?.lat && originalData.coordinates?.lng &&
              originalData.coordinates.lat !== null && originalData.coordinates.lng !== null) {
     coordinates = originalData.coordinates;
+  } else if (rawAlert.coordinates?.lat && rawAlert.coordinates?.lng) {
+    coordinates = rawAlert.coordinates;
   }
-  // If no valid coordinates found, coordinates remains the NYC center fallback
 
   // Use the most complete/accurate data available
   return {
@@ -36,12 +37,12 @@ const normalizeAlert = (rawAlert: any): Alert => {
     title: rawAlert.title || original.title || rawAlert.topic,
     description: original.description || rawAlert.description || '',
     source: original.source || rawAlert.source === 'unknown' ? originalData.signals?.[0] || 'unknown' : rawAlert.source,
-    priority: original.priority || 'medium',
-    status: original.status || rawAlert.status,
+    priority: original.priority || rawAlert.priority || 'medium',
+    status: original.status || rawAlert.status || 'active',
     
-    timestamp: original.timestamp || original.created_at || rawAlert.created_at || new Date().toISOString(),
-    neighborhood: original.neighborhood || originalData.area || rawAlert.area || 'Unknown',
-    borough: original.borough || original.borough_primary || 'Unknown',
+    timestamp: original.timestamp || original.created_at || rawAlert.created_at || rawAlert.timestamp || new Date().toISOString(),
+    neighborhood: original.neighborhood || originalData.area || rawAlert.area || rawAlert.neighborhood || 'Unknown',
+    borough: original.borough || original.borough_primary || rawAlert.borough || 'Unknown',
     
     // Additional date/time fields
     event_date: original.event_date || rawAlert.event_date,
@@ -50,7 +51,7 @@ const normalizeAlert = (rawAlert: any): Alert => {
     
     // Location data
     coordinates: coordinates as { lat: number; lng: number },
-    area: originalData.area || original.neighborhood || rawAlert.area || 'Unknown',
+    area: originalData.area || original.neighborhood || rawAlert.area || rawAlert.neighborhood || 'Unknown',
     venue_address: originalData.venue_address || rawAlert.venue_address || '',
     specific_streets: originalData.specific_streets || rawAlert.specific_streets || [],
     cross_streets: originalData.cross_streets || rawAlert.cross_streets || [],
@@ -69,87 +70,54 @@ const normalizeAlert = (rawAlert: any): Alert => {
 };
 
 export const useAlerts = (options: UseAlertsOptions = {}) => {
-  const { useStream = true, pollInterval = 1800000 } = options; // 30 minutes = 900000ms
+  const { 
+    pollInterval = 1800000, // 30 minutes
+    limit = 2000 // High limit for map display
+  } = options;
   
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastFetch, setLastFetch] = useState<Date | null>(null);
 
-  // Memoized function to merge alerts to prevent unnecessary re-renders
-  const mergeAlerts = useCallback((prevAlerts: Alert[], newAlerts: Alert[]) => {
-    const existingIds = new Set(prevAlerts.map((alert: Alert) => alert.id));
-    const uniqueNewAlerts = newAlerts.filter((alert: Alert) => !existingIds.has(alert.id));
-    return [...uniqueNewAlerts, ...prevAlerts].slice(0, 100); // Keep last 100
-  }, []);
-
-  // Fetch initial alerts using REST endpoint
-  const fetchRecentAlerts = useCallback(async () => {
+  // Fetch all alerts - simplified
+  const fetchAlerts = useCallback(async () => {
     try {
-      const response = await fetch('/api/alerts/recent');
-      if (!response.ok) throw new Error('Failed to fetch alerts');
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await fetch(`/api/alerts/recent?limit=${limit}&hours=24`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch alerts: ${response.status}`);
+      }
       
       const data = await response.json();
-      // Normalize the alerts before setting them
+      
+      // Normalize the alerts
       const normalizedAlerts = (data.alerts || []).map(normalizeAlert);
+      
       setAlerts(normalizedAlerts);
-      setError(null);
+      setLastFetch(new Date());
       setIsLoading(false);
-      if(!isConnected)setIsConnected(true);
     } catch (err) {
-      setError('Failed to load recent alerts');
+      setError(err instanceof Error ? err.message : 'Failed to load alerts');
       setIsLoading(false);
-      console.error('Error fetching recent alerts:', err);
+      console.error('Error fetching alerts:', err);
     }
-  }, []);
+  }, [limit]);
 
+  // Auto-refresh alerts
   useEffect(() => {
-    // Always load initial data first
-    fetchRecentAlerts();
+    // Initial load
+    fetchAlerts();
 
-    if (!useStream) {
-      // REST-only mode: set up polling
-      const interval = setInterval(fetchRecentAlerts, pollInterval);
-      return () => clearInterval(interval);
-    }
+    // Set up polling
+    const interval = setInterval(fetchAlerts, pollInterval);
+    return () => clearInterval(interval);
+  }, [fetchAlerts, pollInterval]);
 
-    // Stream mode: set up SSE after initial load
-    // const eventSource = new EventSource('/api/alerts/stream');
-
-    
-    // eventSource.onopen = () => {
-    //   setIsConnected(true);
-    //   setError(null);
-    // };
-    
-    // eventSource.onmessage = (event) => {
-    //   try {
-    //     const data: AlertsData = JSON.parse(event.data);
-    //     if (data.alerts && Array.isArray(data.alerts)) {
-    //       // Normalize the alerts before merging
-    //       const normalizedAlerts = data.alerts.map(normalizeAlert);
-    //       setAlerts(prevAlerts => mergeAlerts(prevAlerts, normalizedAlerts));
-    //     }
-    //   } catch (err) {
-    //     setError('Failed to parse alert data');
-    //     console.error('Error parsing alert data:', err);
-    //   }
-    // };
-    
-    // eventSource.onerror = (event) => {
-    //   setError('Connection to alert stream failed');
-    //   setIsConnected(false);
-    //   // EventSource will automatically try to reconnect
-    //   console.warn('SSE connection error, will retry automatically');
-    //   console.error('SSE connection error:', event);
-    // };
-
-    // return () => {
-    //   eventSource.close();
-    // };
-  }, [mergeAlerts, useStream, pollInterval, fetchRecentAlerts]);
-
-  // Memoized stats to prevent recalculation on every render
+  // Memoized stats
   const alertStats = useMemo(() => {
     const total = alerts.length;
     const byPriority = alerts.reduce((acc, alert) => {
@@ -184,9 +152,9 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   return { 
     alerts, 
     error, 
-    isConnected: useStream ? isConnected : true, // Always "connected" in REST mode
     isLoading,
+    lastFetch,
     stats: alertStats,
-    refetch: fetchRecentAlerts // Manual refresh function
+    refetch: fetchAlerts
   };
 };
