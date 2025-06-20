@@ -25,7 +25,6 @@ from google.adk.tools.retrieval.vertex_ai_rag_retrieval import VertexAiRagRetrie
 from google.adk.artifacts import InMemoryArtifactService, GcsArtifactService
 from vertexai.preview import rag
 
-from dotenv import load_dotenv
 from .prompts.orchestrator import return_orchestrator_instructions
 # Note: This is not used since we switched to root_agent, but keeping import for potential reference
 # from .agents.research_agent import create_research_agent
