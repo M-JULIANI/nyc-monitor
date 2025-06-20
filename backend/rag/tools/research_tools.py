@@ -318,10 +318,39 @@ def collect_media_content_simple_func(
                             description=f"Image related to {query}"
                         )
 
-                        if success:
+                        if success and success.get("success"):
                             downloaded_count += 1
                             logger.info(
                                 f"✅ Downloaded and saved image: {success}")
+
+                            # CRITICAL FIX: Add to investigation artifacts
+                            investigation_state = state_manager.get_investigation(
+                                alert_id)
+                            if investigation_state:
+                                artifact_info = {
+                                    "type": "image",
+                                    "filename": success["filename"],
+                                    "gcs_path": success["gcs_path"],
+                                    "gcs_url": success["gcs_url"],
+                                    "public_url": success["public_url"],
+                                    "signed_url": success["signed_url"],
+                                    "description": f"Image related to {query}",
+                                    "source": "image_search",
+                                    "search_query": query,
+                                    "source_url": image_url,
+                                    "content_type": success["content_type"],
+                                    "size_bytes": success["size_bytes"],
+                                    "ticker": state_manager.get_next_artifact_ticker(alert_id),
+                                    "timestamp": success["created_at"],
+                                    "relevance_score": 0.8,  # High relevance for search results
+                                    "metadata": success.get("metadata", {}),
+                                    "saved_to_gcs": True  # Mark as saved to GCS
+                                }
+
+                                investigation_state.artifacts.append(
+                                    artifact_info)
+                                logger.info(
+                                    f"✅ Added image artifact to investigation: {success['filename']}")
 
                         # Limit total downloads to prevent overwhelming
                         if downloaded_count >= 12:

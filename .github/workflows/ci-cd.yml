@@ -33,6 +33,11 @@ jobs:
           curl -sSL https://install.python-poetry.org | python3 -
           poetry config virtualenvs.create false
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
       - name: Install dependencies
         run: |
           make install

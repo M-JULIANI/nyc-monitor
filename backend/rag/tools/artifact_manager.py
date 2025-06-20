@@ -35,6 +35,9 @@ class AtlasArtifactManager:
     def __init__(self):
         self.bucket_name = BUCKET_NAME
         self.artifacts_prefix = ARTIFACTS_PREFIX
+        self.storage_client = None
+        self.bucket = None
+        self.adk_artifact_service = None
 
         # Initialize GCS client and ADK artifact service
         try:
@@ -49,8 +52,19 @@ class AtlasArtifactManager:
                 f"✅ Initialized Atlas Artifact Manager with bucket: {self.bucket_name}")
 
         except Exception as e:
-            logger.error(f"❌ Failed to initialize artifact manager: {e}")
-            raise
+            logger.warning(
+                f"⚠️ Could not initialize Google Cloud Storage: {e}")
+            logger.info(
+                "🔧 Artifact manager will operate in limited mode (no GCS operations)")
+            # Don't raise - allow the application to continue without GCS
+
+    def _ensure_gcs_initialized(self) -> bool:
+        """Ensure GCS is initialized before operations."""
+        if self.storage_client is None:
+            logger.error(
+                "❌ Google Cloud Storage not initialized - cannot perform GCS operations")
+            return False
+        return True
 
     def save_artifact(
         self,
@@ -75,6 +89,15 @@ class AtlasArtifactManager:
         Returns:
             Dict with artifact information including public and signed URLs
         """
+        # Check if GCS is initialized
+        if not self._ensure_gcs_initialized():
+            return {
+                "success": False,
+                "error": "Google Cloud Storage not initialized",
+                "investigation_id": investigation_id,
+                "filename": filename
+            }
+
         try:
             # Create organized path: artifacts/investigations/{investigation_id}/{artifact_type}/{filename}
             artifact_path = f"{self.artifacts_prefix}/{investigation_id}/{artifact_type}/{filename}"
@@ -163,6 +186,15 @@ class AtlasArtifactManager:
         Returns:
             Dict with saved artifact information
         """
+        # Check if GCS is initialized
+        if not self._ensure_gcs_initialized():
+            return {
+                "success": False,
+                "error": "Google Cloud Storage not initialized",
+                "image_url": image_url,
+                "investigation_id": investigation_id
+            }
+
         try:
             # Download the image
             headers = {
@@ -251,6 +283,15 @@ class AtlasArtifactManager:
         Returns:
             Dict with saved map artifact information
         """
+        # Check if GCS is initialized
+        if not self._ensure_gcs_initialized():
+            return {
+                "success": False,
+                "error": "Google Cloud Storage not initialized",
+                "location": location,
+                "investigation_id": investigation_id
+            }
+
         try:
             # Get Google Maps API key
             api_key = os.getenv("GOOGLE_MAPS_API_KEY", "")
@@ -337,6 +378,16 @@ class AtlasArtifactManager:
         Returns:
             Dict with list of artifacts and summary
         """
+        # Check if GCS is initialized
+        if not self._ensure_gcs_initialized():
+            return {
+                "success": False,
+                "error": "Google Cloud Storage not initialized",
+                "investigation_id": investigation_id,
+                "total_artifacts": 0,
+                "artifacts": []
+            }
+
         try:
             prefix = f"{self.artifacts_prefix}/{investigation_id}/"
             blobs = list(self.bucket.list_blobs(prefix=prefix))
