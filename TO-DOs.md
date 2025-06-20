@@ -52,7 +52,7 @@ These are basically the agents. The search one will do most of the work, so mayb
     - [x] filtering by severity
 
 ## Critical path
-- [ ] ensure 311 daily collector works
+- [x] ensure 311 daily collector works
 - [ ] fix basic auth: should be able to login via google oauth, and it should kick you out if you leave and ask you to login again
 - [ ] ensure map filters work
     - [ ] include twitter, reddit, 311 icons
