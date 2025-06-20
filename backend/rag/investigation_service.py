@@ -41,20 +41,20 @@ date_today = date.today()
 tracer = get_distributed_tracer()
 
 
-def _create_artifact_service() -> InMemoryArtifactService:
+def _create_artifact_service() -> GcsArtifactService:
     """
     Create an artifact service for the investigation system.
 
     Returns:
-        ArtifactService instance for storing investigation artifacts
+        GcsArtifactService instance for storing investigation artifacts in GCS
     """
-    # TODO: For production, use GcsArtifactService
-    # gcs_bucket = os.getenv("INVESTIGATION_ARTIFACTS_BUCKET", "atlas-investigation-artifacts")
-    # return GcsArtifactService(bucket_name=gcs_bucket)
+    # Use existing staging bucket for Vertex AI native integration
+    staging_bucket = os.getenv(
+        "STAGING_BUCKET", "gs://atlas-460522-vertex-deploy")
+    bucket_name = staging_bucket.replace("gs://", "").split("/")[0]
 
-    # For now, use in-memory for development
-    logger.info("Using InMemoryArtifactService for investigation artifacts")
-    return InMemoryArtifactService()
+    logger.info(f"Using GcsArtifactService with bucket: {bucket_name}")
+    return GcsArtifactService(bucket_name=bucket_name)
 
 
 def _create_investigation_runner(investigation_state):

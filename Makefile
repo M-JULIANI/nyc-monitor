@@ -47,6 +47,26 @@ else
     STATUS_TRACKER_TEMPLATE_ID := $(shell grep -E '^STATUS_TRACKER_TEMPLATE_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 endif
 
+# Google Custom Search fallback variables
+ifeq ($(origin GOOGLE_CUSTOM_SEARCH_API_KEY), environment)
+    # Use environment variable as-is
+else
+    GOOGLE_CUSTOM_SEARCH_API_KEY := $(shell grep -E '^GOOGLE_CUSTOM_SEARCH_API_KEY=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
+
+ifeq ($(origin GOOGLE_CUSTOM_SEARCH_ENGINE_ID), environment)
+    # Use environment variable as-is
+else
+    GOOGLE_CUSTOM_SEARCH_ENGINE_ID := $(shell grep -E '^GOOGLE_CUSTOM_SEARCH_ENGINE_ID=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
+
+# Google Maps API key (for map image generation)
+ifeq ($(origin GOOGLE_MAPS_API_KEY), environment)
+    # Use environment variable as-is
+else
+    GOOGLE_MAPS_API_KEY := $(shell grep -E '^GOOGLE_MAPS_API_KEY=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
+
 # Monitor system variables
 MONITOR_SERVICE_ACCOUNT ?= atlas-monitor-service
 MONITOR_JOB_NAME ?= atlas-monitor
@@ -313,7 +333,12 @@ deploy: deploy-api deploy-vertex-ai deploy-web deploy-monitor
 deploy-vertex-ai: check-gcloud
 	@echo "Deploying backend to Vertex AI..."
 	@if [ -f "backend/deployment/deploy.py" ]; then \
-		cd backend && GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64="$(GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64)" poetry run python deployment/deploy.py; \
+		cd backend && \
+		GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64="$(GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64)" \
+		GOOGLE_CUSTOM_SEARCH_API_KEY="$(GOOGLE_CUSTOM_SEARCH_API_KEY)" \
+		GOOGLE_CUSTOM_SEARCH_ENGINE_ID="$(GOOGLE_CUSTOM_SEARCH_ENGINE_ID)" \
+		GOOGLE_MAPS_API_KEY="$(GOOGLE_MAPS_API_KEY)" \
+		poetry run python deployment/deploy.py; \
 	else \
 		echo "Error: backend/deployment/deploy.py not found"; \
 		exit 1; \
@@ -355,6 +380,15 @@ deploy-api: check-docker check-gcloud
 	fi
 	@if [ -n "$(GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64)" ]; then \
 		echo "GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64: \"$(GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
+	@if [ -n "$(GOOGLE_CUSTOM_SEARCH_API_KEY)" ]; then \
+		echo "GOOGLE_CUSTOM_SEARCH_API_KEY: \"$(GOOGLE_CUSTOM_SEARCH_API_KEY)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
+	@if [ -n "$(GOOGLE_CUSTOM_SEARCH_ENGINE_ID)" ]; then \
+		echo "GOOGLE_CUSTOM_SEARCH_ENGINE_ID: \"$(GOOGLE_CUSTOM_SEARCH_ENGINE_ID)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
+	@if [ -n "$(GOOGLE_MAPS_API_KEY)" ]; then \
+		echo "GOOGLE_MAPS_API_KEY: \"$(GOOGLE_MAPS_API_KEY)\"" >> /tmp/deploy-env-vars.yaml; \
 	fi
 	@echo "📋 Environment variables being set:"
 	@cat /tmp/deploy-env-vars.yaml

@@ -33,6 +33,11 @@ jobs:
           curl -sSL https://install.python-poetry.org | python3 -
           poetry config virtualenvs.create false
 
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
       - name: Install dependencies
         run: |
           make install
@@ -131,6 +136,9 @@ jobs:
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           STATUS_TRACKER_TEMPLATE_ID: ${{ secrets.STATUS_TRACKER_TEMPLATE_ID }}
           GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64: ${{ secrets.GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64 }}
+          GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
+          GOOGLE_CUSTOM_SEARCH_ENGINE_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ENGINE_ID }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
 
       - name: Deploy Vertex AI Backend
         run: |
@@ -145,6 +153,9 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           RAG_CORPUS: ${{ secrets.RAG_CORPUS }}
           GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64: ${{ secrets.GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64 }}
+          GOOGLE_CUSTOM_SEARCH_API_KEY: ${{ secrets.GOOGLE_CUSTOM_SEARCH_API_KEY }}
+          GOOGLE_CUSTOM_SEARCH_ENGINE_ID: ${{ secrets.GOOGLE_CUSTOM_SEARCH_ENGINE_ID }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
 
       - name: Deploy Frontend
         run: |

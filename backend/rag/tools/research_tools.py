@@ -24,8 +24,41 @@ from google.adk.tools import FunctionTool, ToolContext
 from ..investigation.state_manager import state_manager
 from google.adk.tools.retrieval.vertex_ai_rag_retrieval import VertexAiRagRetrieval
 from vertexai.preview import rag
+from .artifact_manager import artifact_manager
+from duckduckgo_search import DDGS
 
 logger = logging.getLogger(__name__)
+
+# Google Custom Search Configuration (Fallback)
+# Load these at runtime instead of import time to ensure .env is loaded first
+GOOGLE_CUSTOM_SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
+
+
+def _get_google_search_config():
+    """Get Google Custom Search configuration at runtime."""
+    # Try to load .env file if variables aren't set
+    api_key = os.getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
+    engine_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
+
+    # If not found, try loading .env file explicitly
+    if not api_key or not engine_id:
+        try:
+            from dotenv import load_dotenv
+            # Load from project root
+            env_file_path = os.path.join(os.path.dirname(
+                __file__), "..", "..", "..", ".env")
+            if os.path.exists(env_file_path):
+                load_dotenv(env_file_path)
+                api_key = os.getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
+                engine_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
+        except ImportError:
+            pass  # dotenv not available
+
+    return {
+        'api_key': api_key,
+        'engine_id': engine_id
+    }
+
 
 # Import redditwarp for real Reddit API calls
 try:
@@ -95,8 +128,6 @@ def web_search_func(
         dict: Search results with evidence collection info
     """
     try:
-        from duckduckgo_search import DDGS
-
         # Initialize DuckDuckGo search
         ddgs = DDGS()
 
@@ -107,27 +138,16 @@ def web_search_func(
         search_results = []
         evidence_collected = []
 
-        # Try regular web search first
+        # Try regular web search first with fallback
         try:
-            results = ddgs.text(
-                keywords=query,
-                region="wt-wt",  # Worldwide
-                safesearch="moderate",
-                timelimit="m",  # Last month for recent info
-                max_results=max_results
-            )
+            # Use the new fallback search function
+            search_results = _search_web_with_fallback(
+                query, max_results, search_type="text")
 
-            for i, result in enumerate(results):
-                search_results.append({
-                    "title": result.get("title", ""),
-                    "url": result.get("href", ""),
-                    "snippet": result.get("body", ""),
-                    "type": "web"
-                })
-
+            for i, result in enumerate(search_results):
                 # Collect evidence from top results if enabled
                 if collect_evidence and i < 3:  # Only collect from top 3 results
-                    url = result.get("href", "")
+                    url = result.get("url", "")
                     if url and url.startswith("http"):
                         # Collect screenshot
                         screenshot_info = save_investigation_screenshot_simple_func(
@@ -135,6 +155,14 @@ def web_search_func(
                             description=f"Screenshot of search result: {result.get('title', 'Unknown')}",
                             alert_id=alert_id
                         )
+
+                        # IMPORTANT: Actually save the artifact to investigation state
+                        investigation_state = state_manager.get_investigation(
+                            alert_id)
+                        if investigation_state and screenshot_info.get("success"):
+                            investigation_state.artifacts.append(
+                                screenshot_info)
+
                         evidence_collected.append({
                             "type": "screenshot",
                             "url": url,
@@ -142,28 +170,18 @@ def web_search_func(
                         })
 
         except Exception as e:
-            print(f"Web search failed: {e}")
+            logger.error(f"Web search with fallback failed: {e}")
 
-        # If we want news specifically, try news search
+        # If we want news specifically, try news search with fallback
         if "news" in sources and len(search_results) < max_results:
             try:
-                news_results = ddgs.news(
-                    keywords=query,
-                    region="wt-wt",
-                    safesearch="moderate",
-                    timelimit="m",  # Last month
-                    max_results=min(5, max_results - len(search_results))
-                )
+                # Use the new fallback search function for news
+                remaining_results = max_results - len(search_results)
+                news_results = _search_web_with_fallback(
+                    query, remaining_results, search_type="news")
 
                 for i, result in enumerate(news_results):
-                    search_results.append({
-                        "title": result.get("title", ""),
-                        "url": result.get("url", ""),
-                        "snippet": result.get("body", ""),
-                        "type": "news",
-                        "date": result.get("date", ""),
-                        "source": result.get("source", "")
-                    })
+                    search_results.append(result)
 
                     # Collect evidence from news results if enabled
                     if collect_evidence and i < 2:  # Only collect from top 2 news results
@@ -174,6 +192,14 @@ def web_search_func(
                                 description=f"Screenshot of news article: {result.get('title', 'Unknown')}",
                                 alert_id=alert_id
                             )
+
+                            # IMPORTANT: Actually save the artifact to investigation state
+                            investigation_state = state_manager.get_investigation(
+                                alert_id)
+                            if investigation_state and screenshot_info.get("success"):
+                                investigation_state.artifacts.append(
+                                    screenshot_info)
+
                             evidence_collected.append({
                                 "type": "screenshot",
                                 "url": url,
@@ -181,7 +207,7 @@ def web_search_func(
                             })
 
             except Exception as e:
-                print(f"News search failed: {e}")
+                logger.error(f"News search with fallback failed: {e}")
 
         # Auto-collect related media content if enabled
         if collect_evidence:
@@ -190,6 +216,14 @@ def web_search_func(
                 content_types="images",
                 alert_id=alert_id
             )
+
+            # IMPORTANT: Actually save media artifacts to investigation state
+            investigation_state = state_manager.get_investigation(alert_id)
+            if investigation_state and media_info.get("success"):
+                # Save each collected media item as an artifact
+                for media_item in media_info.get("collected_media", []):
+                    investigation_state.artifacts.append(media_item)
+
             evidence_collected.append({
                 "type": "media_collection",
                 "artifact_info": media_info
@@ -241,13 +275,13 @@ def collect_media_content_simple_func(
     alert_id: str = "unknown",
     max_items: int = 5
 ) -> dict:
-    """Gather images, videos, and multimedia content using real search.
+    """Collect media content (images, videos) with fallback search providers.
 
     Args:
         search_terms: Comma-separated search terms
-        content_types: Comma-separated content types (images,videos)
-        alert_id: Alert ID for naming convention
-        max_items: Maximum number of media items to collect per search term
+        content_types: Types of content to collect (images, videos, documents)
+        alert_id: Alert ID for artifact management
+        max_items: Maximum items per search term
 
     Returns:
         Media content information with artifact metadata
@@ -257,94 +291,103 @@ def collect_media_content_simple_func(
     types = [t.strip().lower() for t in content_types.split(",")]
 
     collected_media = []
+    downloaded_count = 0
 
-    # Try real image search using DuckDuckGo
+    # Try real image search using DuckDuckGo with Google Custom Search fallback
     try:
-        from duckduckgo_search import DDGS
-        ddgs = DDGS()
+        for query in terms:
+            logger.info(f"🔍 Searching for images: {query}")
 
-        for search_term in terms:
-            if "images" in types:
-                try:
-                    # Use DuckDuckGo image search
-                    image_results = ddgs.images(
-                        keywords=search_term,
-                        region="wt-wt",
-                        safesearch="moderate",
-                        size="Medium",  # Get medium-sized images
-                        max_results=max_items
-                    )
+            # Use the new fallback search function
+            search_results = _search_images_with_fallback(query, max_results=3)
 
-                    for j, image_result in enumerate(image_results):
-                        # Get next ticker from state manager
-                        ticker = state_manager.get_next_artifact_ticker(
-                            alert_id)
-                        filename = f"evidence_{alert_id}_{ticker:03d}_image_{search_term.replace(' ', '_')}.jpg"
+            if search_results:
+                logger.info(
+                    f"Found {len(search_results)} images for query: {query}")
 
-                        collected_media.append({
-                            "type": "image",
-                            "search_term": search_term,
-                            "title": image_result.get("title", "Unknown image"),
-                            "description": f"Image related to {search_term}",
-                            "source": "duckduckgo_images",
-                            "original_url": image_result.get("image", ""),
-                            "thumbnail_url": image_result.get("thumbnail", ""),
-                            "source_url": image_result.get("url", ""),
-                            "width": image_result.get("width", 0),
-                            "height": image_result.get("height", 0),
-                            "artifact_filename": filename,
-                            "planned_artifact": True,
-                            "mime_type": "image/jpeg",
-                            "relevance_score": 0.8,
-                            "ticker": ticker,
-                            "timestamp": datetime.utcnow().isoformat()
-                        })
+                for result in search_results:
+                    try:
+                        # Download and save the image
+                        image_url = result.get('image') or result.get('url')
+                        if not image_url:
+                            continue
 
-                except Exception as e:
-                    print(
-                        f"Real image search failed for '{search_term}': {e}, using fallback")
-                    # Fallback to mock for this search term
-                    for j in range(min(max_items, 2)):
-                        ticker = state_manager.get_next_artifact_ticker(
-                            alert_id)
-                        filename = f"evidence_{alert_id}_{ticker:03d}_image_{search_term.replace(' ', '_')}.jpg"
+                        success = artifact_manager.download_and_save_image(
+                            investigation_id=alert_id,
+                            image_url=image_url,
+                            description=f"Image related to {query}"
+                        )
 
-                        collected_media.append({
-                            "type": "image",
-                            "search_term": search_term,
-                            "title": f"Mock image for {search_term}",
-                            "description": f"Simulated image related to {search_term}",
-                            "source": "mock_search",
-                            "original_url": f"https://example.com/mock_image_{search_term}_{j}.jpg",
-                            "thumbnail_url": f"https://example.com/mock_thumb_{search_term}_{j}.jpg",
-                            "source_url": "https://example.com/mock",
-                            "width": 800,
-                            "height": 600,
-                            "artifact_filename": filename,
-                            "planned_artifact": True,
-                            "mime_type": "image/jpeg",
-                            "relevance_score": 0.6,
-                            "ticker": ticker,
-                            "timestamp": datetime.utcnow().isoformat()
-                        })
+                        if success and success.get("success"):
+                            downloaded_count += 1
+                            logger.info(
+                                f"✅ Downloaded and saved image: {success}")
 
-    except ImportError:
-        print("DuckDuckGo search not available, using mock data")
-        # Fallback to mock implementation for all search terms
-        for search_term in terms:
+                            # CRITICAL FIX: Add to investigation artifacts
+                            investigation_state = state_manager.get_investigation(
+                                alert_id)
+                            if investigation_state:
+                                artifact_info = {
+                                    "type": "image",
+                                    "filename": success["filename"],
+                                    "gcs_path": success["gcs_path"],
+                                    "gcs_url": success["gcs_url"],
+                                    "public_url": success["public_url"],
+                                    "signed_url": success["signed_url"],
+                                    "description": f"Image related to {query}",
+                                    "source": "image_search",
+                                    "search_query": query,
+                                    "source_url": image_url,
+                                    "content_type": success["content_type"],
+                                    "size_bytes": success["size_bytes"],
+                                    "ticker": state_manager.get_next_artifact_ticker(alert_id),
+                                    "timestamp": success["created_at"],
+                                    "relevance_score": 0.8,  # High relevance for search results
+                                    "metadata": success.get("metadata", {}),
+                                    "saved_to_gcs": True  # Mark as saved to GCS
+                                }
+
+                                investigation_state.artifacts.append(
+                                    artifact_info)
+                                logger.info(
+                                    f"✅ Added image artifact to investigation: {success['filename']}")
+
+                        # Limit total downloads to prevent overwhelming
+                        if downloaded_count >= 12:
+                            break
+
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to download image {image_url}: {e}")
+                        continue
+
+                if downloaded_count >= 12:
+                    break
+            else:
+                logger.warning(f"No images found for query: {query}")
+
+    except Exception as e:
+        logger.error(f"Image search failed: {e}")
+        # Continue with fallback mock images
+
+    # If no real images were downloaded, create mock entries for compatibility
+    if downloaded_count == 0:
+        logger.info(
+            "No real images downloaded, creating mock entries for testing")
+        for i, term in enumerate(terms):
             if "images" in types:
                 for j in range(min(max_items, 2)):
                     ticker = state_manager.get_next_artifact_ticker(alert_id)
-                    filename = f"evidence_{alert_id}_{ticker:03d}_image_{search_term.replace(' ', '_')}.jpg"
+                    filename = f"evidence_{alert_id}_{ticker:03d}_image_{term.replace(' ', '_')}.jpg"
 
                     collected_media.append({
                         "type": "image",
-                        "search_term": search_term,
-                        "title": f"Mock image for {search_term}",
-                        "description": f"Simulated image related to {search_term}",
+                        "search_term": term,
+                        "title": f"Mock image for {term}",
+                        "description": f"Simulated image related to {term}",
                         "source": "mock_search",
-                        "original_url": f"https://example.com/mock_image_{search_term}_{j}.jpg",
-                        "thumbnail_url": f"https://example.com/mock_thumb_{search_term}_{j}.jpg",
+                        "original_url": f"https://example.com/mock_image_{term}_{j}.jpg",
+                        "thumbnail_url": f"https://example.com/mock_thumb_{term}_{j}.jpg",
                         "source_url": "https://example.com/mock",
                         "width": 800,
                         "height": 600,
@@ -362,7 +405,8 @@ def collect_media_content_simple_func(
         "search_terms": terms,
         "content_types": types,
         "total_items": len(collected_media),
-        "summary": f"Collected {len(collected_media)} media items for search terms: {', '.join(terms)}"
+        "downloaded_count": downloaded_count,
+        "summary": f"Collected {len(collected_media)} media items for search terms: {', '.join(terms)} ({downloaded_count} real downloads)"
     }
 
 
@@ -470,17 +514,28 @@ def get_investigation_evidence_func(
                 "filename": artifact.get("filename", "unknown"),
                 "description": artifact.get("description", "No description"),
                 "url": artifact.get("url", ""),
+                # Add GCS URLs and signed URLs for Google Slides integration
+                "gcs_url": artifact.get("gcs_url", ""),
+                "signed_url": artifact.get("signed_url", ""),
+                "public_url": artifact.get("public_url", ""),
+                "original_url": artifact.get("original_url", ""),
+                "saved_to_gcs": artifact.get("saved_to_gcs", False),
+                # Also check alternative keys that might be used
+                "image_url": artifact.get("image_url", ""),
                 "source": artifact.get("source", "unknown"),
                 "timestamp": artifact.get("timestamp", ""),
                 "ticker": artifact.get("ticker", 0),
                 "relevance_score": artifact.get("relevance_score", 0.5),
                 "mime_type": artifact.get("mime_type", "unknown"),
+                "title": artifact.get("title", ""),
                 "metadata": {
                     "domain": artifact.get("domain", ""),
                     "source_type": artifact.get("source_type", ""),
                     "width": artifact.get("width", 0),
                     "height": artifact.get("height", 0),
-                    "file_size": artifact.get("file_size_estimate", "unknown")
+                    "file_size": artifact.get("file_size_estimate", "unknown"),
+                    "content_type": artifact.get("content_type", ""),
+                    "size_bytes": artifact.get("size_bytes", 0)
                 }
             })
 
@@ -1004,3 +1059,246 @@ def query_live_apis_func(
 # Create additional tools when implemented
 search_social_media = FunctionTool(search_social_media_func)
 query_live_apis = FunctionTool(query_live_apis_func)
+
+
+def _search_images_google_custom(query: str, max_results: int = 10) -> List[Dict]:
+    """Search for images using Google Custom Search API as fallback."""
+    if not _get_google_search_config().get('api_key') or not _get_google_search_config().get('engine_id'):
+        logger.warning(
+            "Google Custom Search not configured - missing API key or Engine ID")
+        return []
+
+    try:
+        params = {
+            'key': _get_google_search_config().get('api_key'),
+            'cx': _get_google_search_config().get('engine_id'),
+            'q': query,
+            'searchType': 'image',
+            # Google Custom Search max 10 per request
+            'num': min(max_results, 10),
+            'safe': 'medium',
+            'imgSize': 'medium',
+            'imgType': 'photo'
+        }
+
+        logger.info(f"🔍 Google Custom Search fallback for: {query}")
+        response = requests.get(GOOGLE_CUSTOM_SEARCH_URL,
+                                params=params, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        items = data.get('items', [])
+
+        results = []
+        for item in items:
+            try:
+                result = {
+                    'title': item.get('title', ''),
+                    'image': item.get('link', ''),
+                    'thumbnail': item.get('image', {}).get('thumbnailLink', ''),
+                    'source': item.get('displayLink', ''),
+                    'width': item.get('image', {}).get('width', 0),
+                    'height': item.get('image', {}).get('height', 0)
+                }
+                results.append(result)
+            except Exception as e:
+                logger.warning(
+                    f"Error parsing Google Custom Search result: {e}")
+                continue
+
+        logger.info(
+            f"✅ Google Custom Search found {len(results)} images for: {query}")
+        return results
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Google Custom Search API error: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Google Custom Search error: {e}")
+        return []
+
+
+def _search_images_with_fallback(query: str, max_results: int = 10) -> List[Dict]:
+    """Search for images with DuckDuckGo primary and Google Custom Search fallback."""
+    # Try DuckDuckGo first (free, no API key needed)
+    try:
+        ddgs = DDGS()
+        results = list(ddgs.images(
+            keywords=query,
+            region="us-en",
+            safesearch="moderate",
+            size="Medium",
+            max_results=max_results
+        ))
+
+        if results:
+            logger.info(
+                f"✅ DuckDuckGo found {len(results)} images for: {query}")
+            return results
+        else:
+            logger.warning(f"DuckDuckGo returned no results for: {query}")
+
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "ratelimit" in error_msg or "403" in error_msg or "202" in error_msg:
+            logger.warning(f"DuckDuckGo rate limited for '{query}': {e}")
+        else:
+            logger.error(f"DuckDuckGo error for '{query}': {e}")
+
+    # Fallback to Google Custom Search
+    logger.info(f"🔄 Falling back to Google Custom Search for: {query}")
+    google_results = _search_images_google_custom(query, max_results)
+
+    if google_results:
+        # Convert Google Custom Search format to DuckDuckGo format for compatibility
+        converted_results = []
+        for item in google_results:
+            converted_result = {
+                'title': item['title'],
+                'image': item['image'],
+                'thumbnail': item['thumbnail'],
+                'url': item['image'],  # Use image URL as main URL
+                'source': item['source']
+            }
+            converted_results.append(converted_result)
+
+        logger.info(
+            f"✅ Google Custom Search fallback found {len(converted_results)} images")
+        return converted_results
+
+    # If both fail, return empty list (will trigger mock generation)
+    logger.warning(
+        f"❌ Both DuckDuckGo and Google Custom Search failed for: {query}")
+    return []
+
+
+def _search_web_google_custom(query: str, max_results: int = 10) -> List[Dict]:
+    """Search for web pages using Google Custom Search API as fallback for general web search."""
+    if not _get_google_search_config().get('api_key') or not _get_google_search_config().get('engine_id'):
+        logger.warning(
+            "Google Custom Search not configured - missing API key or Engine ID")
+        return []
+
+    try:
+        params = {
+            'key': _get_google_search_config().get('api_key'),
+            'cx': _get_google_search_config().get('engine_id'),
+            'q': query,
+            # No searchType = general web search (not just images)
+            # Google Custom Search max 10 per request
+            'num': min(max_results, 10),
+            'safe': 'medium'
+        }
+
+        logger.info(f"🔍 Google Custom Search web fallback for: {query}")
+        response = requests.get(GOOGLE_CUSTOM_SEARCH_URL,
+                                params=params, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        items = data.get('items', [])
+
+        results = []
+        for item in items:
+            try:
+                result = {
+                    'title': item.get('title', ''),
+                    'url': item.get('link', ''),
+                    'snippet': item.get('snippet', ''),
+                    'source': item.get('displayLink', ''),
+                    'type': 'web'
+                }
+                results.append(result)
+            except Exception as e:
+                logger.warning(
+                    f"Error parsing Google Custom Search web result: {e}")
+                continue
+
+        logger.info(
+            f"✅ Google Custom Search found {len(results)} web results for: {query}")
+        return results
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Google Custom Search web API error: {e}")
+        return []
+    except Exception as e:
+        logger.error(f"Google Custom Search web error: {e}")
+        return []
+
+
+def _search_web_with_fallback(query: str, max_results: int = 10, search_type: str = "text") -> List[Dict]:
+    """Search for web content with DuckDuckGo primary and Google Custom Search fallback."""
+    # Try DuckDuckGo first (free, no API key needed)
+    try:
+        ddgs = DDGS()
+
+        if search_type == "news":
+            results = list(ddgs.news(
+                keywords=query,
+                region="wt-wt",
+                safesearch="moderate",
+                timelimit="m",  # Last month
+                max_results=max_results
+            ))
+
+            # Convert news results to standard format
+            formatted_results = []
+            for result in results:
+                formatted_results.append({
+                    'title': result.get('title', ''),
+                    'url': result.get('url', ''),
+                    'snippet': result.get('body', ''),
+                    'type': 'news',
+                    'date': result.get('date', ''),
+                    'source': result.get('source', '')
+                })
+
+        else:  # Default to text search
+            results = list(ddgs.text(
+                keywords=query,
+                region="wt-wt",
+                safesearch="moderate",
+                timelimit="m",  # Last month
+                max_results=max_results
+            ))
+
+            # Convert text results to standard format
+            formatted_results = []
+            for result in results:
+                formatted_results.append({
+                    'title': result.get('title', ''),
+                    'url': result.get('href', ''),
+                    'snippet': result.get('body', ''),
+                    'type': 'web'
+                })
+
+        if formatted_results:
+            logger.info(
+                f"✅ DuckDuckGo found {len(formatted_results)} {search_type} results for: {query}")
+            return formatted_results
+        else:
+            logger.warning(
+                f"DuckDuckGo returned no {search_type} results for: {query}")
+
+    except Exception as e:
+        error_msg = str(e).lower()
+        if "ratelimit" in error_msg or "403" in error_msg or "202" in error_msg:
+            logger.warning(
+                f"DuckDuckGo {search_type} search rate limited for '{query}': {e}")
+        else:
+            logger.error(
+                f"DuckDuckGo {search_type} search error for '{query}': {e}")
+
+    # Fallback to Google Custom Search (general web search)
+    logger.info(f"🔄 Falling back to Google Custom Search web for: {query}")
+    google_results = _search_web_google_custom(query, max_results)
+
+    if google_results:
+        logger.info(
+            f"✅ Google Custom Search web fallback found {len(google_results)} results")
+        return google_results
+
+    # If both fail, return empty list
+    logger.warning(
+        f"❌ Both DuckDuckGo and Google Custom Search failed for web search: {query}")
+    return []

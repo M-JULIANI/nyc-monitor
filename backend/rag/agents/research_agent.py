@@ -17,6 +17,10 @@ from ..tools.research_tools import (
     search_social_media_func,
     query_live_apis_func
 )
+from ..tools.map_tools import (
+    generate_location_map,
+    generate_investigation_timeline
+)
 from ..prompts.research import return_research_instructions
 
 logger = logging.getLogger(__name__)
@@ -47,6 +51,9 @@ def create_research_agent(
         # Add the newly implemented tools
         FunctionTool(search_social_media_func),
         FunctionTool(query_live_apis_func),
+        # Add map generation tools
+        generate_location_map,
+        generate_investigation_timeline,
     ]
 
     # Add RAG retrieval tool if corpus is provided
