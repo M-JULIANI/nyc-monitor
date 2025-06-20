@@ -197,18 +197,35 @@ async def get_recent_alerts(
             alerts_ref = db.collection('nyc_monitor_alerts')
             monitor_query = (alerts_ref
                              .where('created_at', '>=', cutoff_time)
-                             .select(['created_at', 'title', 'description', 'priority', 'latitude', 'longitude'])
+                             .select(['created_at', 'title', 'description', 'priority', 'latitude', 'longitude', 'original_alert'])
                              .limit(monitor_limit))
 
             for doc in monitor_query.stream():
                 data = doc.to_dict()
+
+                # Extract the real source from the nested structure
+                real_source = 'monitor'  # Default fallback
+                try:
+                    original_alert = data.get('original_alert', {})
+                    if original_alert:
+                        original_alert_data = original_alert.get(
+                            'original_alert_data', {})
+                        if original_alert_data:
+                            signals = original_alert_data.get('signals', [])
+                            if signals and len(signals) > 0:
+                                # First signal is the true source (reddit, twitter, etc.)
+                                real_source = signals[0]
+                except Exception as e:
+                    logger.warning(
+                        f"Could not extract source for alert {doc.id}: {e}")
 
                 # Ultra-minimal transformation
                 alert = {
                     'id': doc.id,
                     'title': data.get('title', 'NYC Alert'),
                     'description': data.get('description', ''),
-                    'source': 'monitor',
+                    # Now shows the actual source: reddit, twitter, etc.
+                    'source': real_source,
                     'severity': _get_severity_from_priority(data.get('priority', 'medium')),
                     'date': data.get('created_at', datetime.utcnow()).isoformat() if isinstance(data.get('created_at'), datetime) else str(data.get('created_at', '')),
                     'coordinates': {
@@ -220,8 +237,11 @@ async def get_recent_alerts(
 
             monitor_time = (datetime.utcnow() - monitor_start).total_seconds()
             query_stats['monitor'] = {
-                'count': len([a for a in all_alerts if a['source'] == 'monitor']),
-                'time_seconds': round(monitor_time, 3)
+                # Count non-311 alerts
+                'count': len([a for a in all_alerts if a['source'] != '311']),
+                'time_seconds': round(monitor_time, 3),
+                # Show actual sources found
+                'sources_found': list(set([a['source'] for a in all_alerts if a['source'] != '311']))
             }
 
         except Exception as e:

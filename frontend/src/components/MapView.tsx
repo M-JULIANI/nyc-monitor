@@ -264,9 +264,9 @@ const MapView: React.FC = () => {
               paint={{
                 'circle-radius': [
                   'case',
-                  ['==', ['get', 'priority'], 'critical'], 12,
-                  ['==', ['get', 'priority'], 'high'], 10,
-                  ['==', ['get', 'priority'], 'medium'], 8,
+                  ['==', ['get', 'priority'], 'critical'], 10,
+                  ['==', ['get', 'priority'], 'high'], 8,
+                  ['==', ['get', 'priority'], 'medium'], 6,
                   6
                 ],
                 'circle-color': [
@@ -277,7 +277,7 @@ const MapView: React.FC = () => {
                   '#65a30d'
                 ],
                 'circle-opacity': 0.8,
-                'circle-stroke-width': 2,
+                'circle-stroke-width': 1,
                 'circle-stroke-color': '#ffffff'
               }}
             />
