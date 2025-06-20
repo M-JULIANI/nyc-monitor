@@ -2,7 +2,8 @@ import React from 'react';
 import { useAlerts } from '../contexts/AlertsContext';
 
 const Dashboard: React.FC = () => {
-  const { alerts, stats, error, isConnected } = useAlerts();
+  const { alerts, stats, error, isLoading } = useAlerts();
+  const isConnected = !isLoading;
 
   return (
     <div className="w-full h-full p-4 md:p-8 bg-zinc-900 text-white">
