@@ -5,7 +5,6 @@ import { Alert } from '../types';
 interface AlertsContextType {
   alerts: Alert[];
   error: string | null;
-  isConnected: boolean;
   isLoading: boolean;
   stats: {
     total: number;
