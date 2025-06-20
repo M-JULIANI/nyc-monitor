@@ -75,8 +75,6 @@ class MonitorJob:
                 logger.warning(
                     f"⚠️  Twitter collector not initialized: {str(e)}")
 
-            # TODO: Add more collectors here (traffic, crime, 311, etc.)
-
             # Initialize triage agent
             self.triage_agent = TriageAgent()
             logger.info("Triage agent initialized successfully")

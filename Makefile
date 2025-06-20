@@ -67,18 +67,31 @@ else
     GOOGLE_MAPS_API_KEY := $(shell grep -E '^GOOGLE_MAPS_API_KEY=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
 endif
 
+# NYC 311 API token (for 311 service requests data)
+ifeq ($(origin NYC_311_APP_TOKEN), environment)
+    # Use environment variable as-is
+else
+    NYC_311_APP_TOKEN := $(shell grep -E '^NYC_311_APP_TOKEN=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+endif
+
 # Monitor system variables
 MONITOR_SERVICE_ACCOUNT ?= atlas-monitor-service
 MONITOR_JOB_NAME ?= atlas-monitor
 MONITOR_SCHEDULER_NAME ?= atlas-monitor-monitor
 MONITOR_IMAGE ?= $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-monitor
 
+# NYC 311 job variables
+NYC311_JOB_NAME ?= atlas-nyc311
+NYC311_SCHEDULER_NAME ?= atlas-nyc311-daily
+NYC311_IMAGE ?= $(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-nyc311
+
 # Get project number for Cloud Run API endpoints (needed for scheduler URLs)
 GOOGLE_CLOUD_PROJECT_NUMBER ?= $(shell gcloud projects describe $(GOOGLE_CLOUD_PROJECT) --format='value(projectNumber)')
 
-# Cloud Run API URL for scheduler (split to prevent line wrapping)
+# Cloud Run API URLs for scheduler
 CLOUD_RUN_API_BASE := https://$(GOOGLE_CLOUD_LOCATION)-run.googleapis.com/apis/run.googleapis.com/v1
 CLOUD_RUN_JOB_URL := $(CLOUD_RUN_API_BASE)/namespaces/$(GOOGLE_CLOUD_PROJECT_NUMBER)/jobs/$(MONITOR_JOB_NAME):run
+NYC311_JOB_EXEC_URL := https://run.googleapis.com/v2/projects/$(GOOGLE_CLOUD_PROJECT)/locations/$(GOOGLE_CLOUD_LOCATION)/jobs/$(NYC311_JOB_NAME):run
 
 # Alternative: Use gcloud execution URL for Cloud Run Jobs
 CLOUD_RUN_JOB_EXEC_URL := https://run.googleapis.com/v2/projects/$(GOOGLE_CLOUD_PROJECT)/locations/$(GOOGLE_CLOUD_LOCATION)/jobs/$(MONITOR_JOB_NAME):run
@@ -338,6 +351,7 @@ deploy-vertex-ai: check-gcloud
 		GOOGLE_CUSTOM_SEARCH_API_KEY="$(GOOGLE_CUSTOM_SEARCH_API_KEY)" \
 		GOOGLE_CUSTOM_SEARCH_ENGINE_ID="$(GOOGLE_CUSTOM_SEARCH_ENGINE_ID)" \
 		GOOGLE_MAPS_API_KEY="$(GOOGLE_MAPS_API_KEY)" \
+		NYC_311_APP_TOKEN="$(NYC_311_APP_TOKEN)" \
 		poetry run python deployment/deploy.py; \
 	else \
 		echo "Error: backend/deployment/deploy.py not found"; \
@@ -389,6 +403,9 @@ deploy-api: check-docker check-gcloud
 	fi
 	@if [ -n "$(GOOGLE_MAPS_API_KEY)" ]; then \
 		echo "GOOGLE_MAPS_API_KEY: \"$(GOOGLE_MAPS_API_KEY)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
+	@if [ -n "$(NYC_311_APP_TOKEN)" ]; then \
+		echo "NYC_311_APP_TOKEN: \"$(NYC_311_APP_TOKEN)\"" >> /tmp/deploy-env-vars.yaml; \
 	fi
 	@echo "📋 Environment variables being set:"
 	@cat /tmp/deploy-env-vars.yaml
@@ -762,3 +779,115 @@ setup-domain-direct: check-gcloud
 	fi
 	@chmod +x scripts/setup-custom-domain-direct.sh
 	@./scripts/setup-custom-domain-direct.sh "$(CUSTOM_DOMAIN)"
+
+# Build NYC 311 image
+build-nyc311: check-docker check-gcloud
+	@echo "🐳 Building NYC 311 Daily Collector image..."
+	@echo "Image tag: $(NYC311_IMAGE):$(VERSION)"
+	@echo ""
+	@docker build \
+		--platform linux/amd64 \
+		-f backend/monitor/Dockerfile.nyc311 \
+		-t "$(NYC311_IMAGE):$(VERSION)" \
+		-t "$(NYC311_IMAGE):latest" \
+		backend/
+	@echo "✅ NYC 311 image built successfully"
+
+# Deploy NYC 311 Daily Collection Job
+deploy-nyc311: build-nyc311 check-gcloud
+	@echo "☁️ Deploying NYC 311 Daily Collection Job..."
+	@echo ""
+	@echo "🐳 Pushing Docker image..."
+	@docker push "$(NYC311_IMAGE):$(VERSION)"
+	@docker push "$(NYC311_IMAGE):latest"
+	@echo ""
+	@echo "📦 Deploying Cloud Run Job..."
+	@if gcloud run jobs describe $(NYC311_JOB_NAME) --region=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
+		echo "Updating existing NYC 311 Cloud Run Job..."; \
+		gcloud run jobs update $(NYC311_JOB_NAME) \
+			--image="$(NYC311_IMAGE):$(VERSION)" \
+			--region=$(GOOGLE_CLOUD_LOCATION) \
+			--service-account="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+			--set-env-vars="GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT)" \
+			--set-env-vars="NYC_311_APP_TOKEN=$(NYC_311_APP_TOKEN)" \
+			--quiet; \
+	else \
+		echo "Creating new NYC 311 Cloud Run Job..."; \
+		gcloud run jobs create $(NYC311_JOB_NAME) \
+			--image="$(NYC311_IMAGE):$(VERSION)" \
+			--service-account="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+			--region=$(GOOGLE_CLOUD_LOCATION) \
+			--memory=1Gi \
+			--cpu=1 \
+			--task-timeout=1800 \
+			--parallelism=1 \
+			--set-env-vars="GOOGLE_CLOUD_PROJECT=$(GOOGLE_CLOUD_PROJECT)" \
+			--set-env-vars="NYC_311_APP_TOKEN=$(NYC_311_APP_TOKEN)" \
+			--max-retries=2 --quiet; \
+	fi
+	@echo ""
+	@echo "⚠️ Ensuring Cloud Scheduler service account can invoke NYC 311 job..."
+	@gcloud run jobs add-iam-policy-binding $(NYC311_JOB_NAME) \
+		--member="serviceAccount:$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+		--role="roles/run.invoker" \
+		--region=$(GOOGLE_CLOUD_LOCATION) \
+		--quiet || true
+	@echo ""
+	@echo "⏰ Setting up daily Cloud Scheduler..."
+	@if gcloud scheduler jobs describe $(NYC311_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
+		echo "Updating existing NYC 311 scheduler job..."; \
+		gcloud scheduler jobs update http $(NYC311_SCHEDULER_NAME) \
+			--schedule="0 6 * * *" \
+			--time-zone="America/New_York" \
+			--uri="$(NYC311_JOB_EXEC_URL)" \
+			--http-method=POST \
+			--location=$(GOOGLE_CLOUD_LOCATION) \
+			--oauth-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+			--quiet; \
+	else \
+		echo "Creating new NYC 311 scheduler job..."; \
+		gcloud scheduler jobs create http $(NYC311_SCHEDULER_NAME) \
+			--schedule="0 6 * * *" \
+			--time-zone="America/New_York" \
+			--uri="$(NYC311_JOB_EXEC_URL)" \
+			--http-method=POST \
+			--location=$(GOOGLE_CLOUD_LOCATION) \
+			--oauth-service-account-email="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
+			--quiet; \
+	fi
+	@echo ""
+	@echo "✅ NYC 311 daily collection system deployment complete!"
+	@echo ""
+	@echo "📊 NYC 311 System Status:"
+	@echo "- Cloud Run Job: https://console.cloud.google.com/run/jobs/details/$(GOOGLE_CLOUD_LOCATION)/$(NYC311_JOB_NAME)"
+	@echo "- Cloud Scheduler: https://console.cloud.google.com/cloudscheduler/jobs/$(GOOGLE_CLOUD_LOCATION)/$(NYC311_SCHEDULER_NAME)"
+	@echo "- Firestore Collection: https://console.cloud.google.com/firestore/data/nyc_311_signals"
+	@echo ""
+	@echo "🔧 To test the NYC 311 job manually:"
+	@echo "make test-nyc311"
+	@echo ""
+	@echo "📅 Scheduled to run daily at 6 AM EST"
+
+test-nyc311: check-gcloud
+	@echo "🧪 Testing NYC 311 daily collection job..."
+	@echo "Checking if job exists..."
+	@gcloud run jobs describe $(NYC311_JOB_NAME) --region=$(GOOGLE_CLOUD_LOCATION) --format="value(metadata.name)" || (echo "❌ NYC 311 job not found!" && exit 1)
+	@echo "Executing NYC 311 job..."
+	@gcloud run jobs execute $(NYC311_JOB_NAME) --region=$(GOOGLE_CLOUD_LOCATION) --wait
+	@echo "📝 Recent NYC 311 job logs:"
+	@gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="$(NYC311_JOB_NAME)"' \
+		--limit=10 \
+		--format='table(timestamp,textPayload)' \
+		--freshness=5m
+
+logs-nyc311: check-gcloud
+	@echo "📝 Viewing NYC 311 system logs..."
+	@gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="$(NYC311_JOB_NAME)"' \
+		--limit=50 \
+		--format='table(timestamp,textPayload)' \
+		--freshness=1d
+
+# Test NYC 311 job locally
+test-nyc311-local:
+	@echo "🧪 Testing NYC 311 job locally..."
+	cd backend && poetry run python test_nyc311_job.py

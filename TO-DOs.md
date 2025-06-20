@@ -19,7 +19,8 @@ Decide which of these are valuable and worth pursuing as we will build an integr
 
 - [x] reddit
 - [x] hackernews
-- [ ] twitter
+- [x] twitter
+- [x] 311
 - [ ] yelp
 - [ ] tripadvisor
 - [ ] google trends
@@ -34,11 +35,18 @@ Decide which of these are valuable and worth pursuing as we will build an integr
 ## Agents (Backend)
 These are basically the agents. The search one will do most of the work, so maybe worth splitting into search APIs and search datasets
 
-- [ ] Searcher: APIs
+- [ ] Searcher: 
+    - [x] web-search
+    - [ ] api calls?
 - [ ] Searcher: Datasets
+    - [ ] big query census
+
 - [ ] Ingest (takes data and ingests it into vertex AI to be able to RAG over data)
 - [ ] Chat
 
 ## Frontend
 - [ ] Chat interface
 - [ ] Map functionality
+    - [ ] filtering by day range
+    - [x] filtering by source
+    - [x] filtering by severity
