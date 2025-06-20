@@ -35,24 +35,30 @@ GOOGLE_CUSTOM_SEARCH_URL = "https://www.googleapis.com/customsearch/v1"
 
 
 def _get_google_search_config():
-    """Get Google Custom Search configuration at runtime."""
-    # Try to load .env file if variables aren't set
+    """Get Google Custom Search configuration from environment variables.
+
+    Returns:
+        dict: Configuration with api_key and engine_id
+    """
+    # Try to get from environment variables first (production)
     api_key = os.getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
     engine_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
 
-    # If not found, try loading .env file explicitly
-    if not api_key or not engine_id:
+    # If not available and .env file exists, try loading it (local development only)
+    if (not api_key or not engine_id):
         try:
             from dotenv import load_dotenv
-            # Load from project root
+            # Load from project root only if .env file exists
             env_file_path = os.path.join(os.path.dirname(
                 __file__), "..", "..", "..", ".env")
             if os.path.exists(env_file_path):
                 load_dotenv(env_file_path)
-                api_key = os.getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
-                engine_id = os.getenv("GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
-        except ImportError:
-            pass  # dotenv not available
+                api_key = api_key or os.getenv("GOOGLE_CUSTOM_SEARCH_API_KEY")
+                engine_id = engine_id or os.getenv(
+                    "GOOGLE_CUSTOM_SEARCH_ENGINE_ID")
+        except (ImportError, Exception):
+            # dotenv not available or loading failed, continue with environment variables
+            pass
 
     return {
         'api_key': api_key,
