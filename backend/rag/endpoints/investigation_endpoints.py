@@ -12,6 +12,7 @@ import os
 from datetime import datetime
 import asyncio
 import logging
+from google.cloud import firestore
 
 from ..investigation_service import investigate_alert as investigate_alert_adk
 from ..investigation_service_simple import investigate_alert_simple
@@ -31,6 +32,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 # Get tracing service
 tracer = get_distributed_tracer()
+
 
 # Configuration for investigation approach
 # config.INVESTIGATION_APPROACH = os.getenv(
@@ -53,6 +55,8 @@ class InvestigationResponse(BaseModel):
     findings: str
     artifacts: List[str]
     confidence_score: float
+    report_url: str | None
+    trace_id: str | None
 
 
 @investigation_router.post("", response_model=InvestigationResponse)
@@ -117,12 +121,50 @@ async def start_investigation(
                 logger.info(
                     f"Found investigation state: {investigation_state.investigation_id}")
 
+                # Generate Google Slides presentation for this investigation
+                report_url = None
+                trace_id = None
+
+                try:
+                    # Generate slides with artifacts collected by ADK agents
+                    from ..tools.report_tools import create_slides_presentation_func
+
+                    slides_result = create_slides_presentation_func(
+                        investigation_id=investigation_id,
+                        title=f"{alert_data.event_type} Investigation - {alert_data.location}",
+                        template_type="status_tracker",
+                        evidence_types="all"
+                    )
+
+                    if slides_result.get('success'):
+                        report_url = slides_result.get('url')
+                        logger.info(f"✅ Generated slides report: {report_url}")
+                    else:
+                        logger.warning(
+                            f"⚠️ Slides generation failed: {slides_result.get('error')}")
+
+                except Exception as e:
+                    logger.warning(f"⚠️ Could not generate slides report: {e}")
+
+                # Save agent trace to Firestore
+                try:
+                    trace_id = save_agent_trace_to_firestore(investigation_id)
+                    if trace_id:
+                        logger.info(f"✅ Saved agent trace: {trace_id}")
+                    else:
+                        logger.warning("⚠️ Could not save agent trace")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error saving agent trace: {e}")
+
                 return InvestigationResponse(
                     investigation_id=investigation_state.investigation_id,
                     status="completed",
                     findings=investigation_result,
-                    artifacts=investigation_state.artifacts,
-                    confidence_score=investigation_state.confidence_score
+                    artifacts=[artifact.get('filename', artifact.get('file', str(
+                        artifact))) for artifact in investigation_state.artifacts] if investigation_state.artifacts else [],
+                    confidence_score=investigation_state.confidence_score,
+                    report_url=report_url,  # Add report URL to response
+                    trace_id=trace_id       # Add trace ID to response
                 )
             else:
                 logger.warning(
@@ -136,7 +178,9 @@ async def start_investigation(
             status="completed",
             findings=investigation_result,
             artifacts=[],
-            confidence_score=0.7
+            confidence_score=0.7,
+            report_url=None,
+            trace_id=None
         )
 
     except HTTPException:
@@ -287,7 +331,8 @@ async def export_trace_data(
 ):
     """Export complete trace data"""
     try:
-        trace_data = tracer.export_trace_data(investigation_id)
+        config = get_config()
+        trace_data = tracer.export_trace(investigation_id)
 
         if not trace_data:
             raise HTTPException(status_code=404, detail="Trace data not found")
@@ -357,3 +402,45 @@ async def get_investigation_config(user=Depends(verify_google_token)):
             "multi_agent": config.INVESTIGATION_APPROACH == "adk"
         }
     }
+
+
+def save_agent_trace_to_firestore(investigation_id: str) -> str:
+    """Save agent trace to Firestore and return trace ID.
+
+    Args:
+        investigation_id: Investigation ID to get trace for
+
+    Returns:
+        Firestore document ID for the saved trace
+    """
+    try:
+        # Get trace data
+        trace_data = tracer.export_trace(investigation_id)
+
+        if not trace_data:
+            logger.warning(
+                f"No trace data found for investigation {investigation_id}")
+            return None
+
+        # Initialize Firestore
+        db = firestore.Client()
+
+        # Prepare trace document
+        trace_doc = {
+            'investigation_id': investigation_id,
+            # Convert to JSON-serializable format
+            'trace_data': json.loads(json.dumps(trace_data, default=str)),
+            'created_at': datetime.utcnow(),
+            'approach': get_config().INVESTIGATION_APPROACH
+        }
+
+        # Save to Firestore
+        doc_ref = db.collection('agent_traces').add(trace_doc)
+        trace_id = doc_ref[1].id
+
+        logger.info(f"✅ Saved agent trace to Firestore: {trace_id}")
+        return trace_id
+
+    except Exception as e:
+        logger.error(f"❌ Failed to save agent trace: {e}")
+        return None

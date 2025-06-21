@@ -19,6 +19,8 @@ interface AlertsContextType {
     resolved: number;
   };
   refetch: () => void;
+  generateReport: (alertId: string) => Promise<{ success: boolean; message: string; investigationId?: string }>;
+  fetchAgentTrace: (traceId: string) => Promise<{ success: boolean; trace?: string; message: string }>;
 }
 
 const AlertsContext = createContext<AlertsContextType | undefined>(undefined);

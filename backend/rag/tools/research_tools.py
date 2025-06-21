@@ -117,7 +117,7 @@ def web_search_func(
     source_types: str = "news,official,academic",
     max_results: int = 10,
     collect_evidence: bool = True,
-    alert_id: str = "unknown"
+    investigation_id: str = "unknown"
 ) -> dict:
     """
     Search the web for recent information related to the query.
@@ -128,7 +128,7 @@ def web_search_func(
         source_types: Comma-separated types of sources to prioritize (news,official,academic)
         max_results: Maximum number of results to return (default: 10)
         collect_evidence: Whether to automatically collect screenshots and media (default: True)
-        alert_id: Alert ID for artifact naming
+        investigation_id: Investigation ID for artifact naming
 
     Returns:
         dict: Search results with evidence collection info
@@ -159,12 +159,12 @@ def web_search_func(
                         screenshot_info = save_investigation_screenshot_simple_func(
                             url=url,
                             description=f"Screenshot of search result: {result.get('title', 'Unknown')}",
-                            alert_id=alert_id
+                            investigation_id=investigation_id
                         )
 
                         # IMPORTANT: Actually save the artifact to investigation state
                         investigation_state = state_manager.get_investigation(
-                            alert_id)
+                            investigation_id)
                         if investigation_state and screenshot_info.get("success"):
                             investigation_state.artifacts.append(
                                 screenshot_info)
@@ -196,12 +196,12 @@ def web_search_func(
                             screenshot_info = save_investigation_screenshot_simple_func(
                                 url=url,
                                 description=f"Screenshot of news article: {result.get('title', 'Unknown')}",
-                                alert_id=alert_id
+                                investigation_id=investigation_id
                             )
 
                             # IMPORTANT: Actually save the artifact to investigation state
                             investigation_state = state_manager.get_investigation(
-                                alert_id)
+                                investigation_id)
                             if investigation_state and screenshot_info.get("success"):
                                 investigation_state.artifacts.append(
                                     screenshot_info)
@@ -220,11 +220,12 @@ def web_search_func(
             media_info = collect_media_content_simple_func(
                 search_terms=query,
                 content_types="images",
-                alert_id=alert_id
+                investigation_id=investigation_id
             )
 
             # IMPORTANT: Actually save media artifacts to investigation state
-            investigation_state = state_manager.get_investigation(alert_id)
+            investigation_state = state_manager.get_investigation(
+                investigation_id)
             if investigation_state and media_info.get("success"):
                 # Save each collected media item as an artifact
                 for media_item in media_info.get("collected_media", []):
@@ -278,99 +279,103 @@ def web_search_func(
 def collect_media_content_simple_func(
     search_terms: str,
     content_types: str = "images",
-    alert_id: str = "unknown",
+    investigation_id: str = "unknown",
     max_items: int = 5
 ) -> dict:
-    """Collect media content (images, videos) with fallback search providers.
+    """Collect media content (images, videos) related to search terms with GCS storage.
 
     Args:
         search_terms: Comma-separated search terms
-        content_types: Types of content to collect (images, videos, documents)
-        alert_id: Alert ID for artifact management
+        content_types: Types of content to collect (images, videos, all)
+        investigation_id: Investigation ID for naming and artifact tracking
         max_items: Maximum items per search term
 
     Returns:
-        Media content information with artifact metadata
+        Information about collected media with artifact metadata
     """
-    # Parse parameters from comma-separated strings
-    terms = [t.strip() for t in search_terms.split(",")]
-    types = [t.strip().lower() for t in content_types.split(",")]
-
     collected_media = []
     downloaded_count = 0
 
-    # Try real image search using DuckDuckGo with Google Custom Search fallback
+    # Parse search terms and content types
+    terms = [term.strip() for term in search_terms.split(",")]
+    types = [t.strip().lower() for t in content_types.split(",")]
+
+    # Import artifact manager
+    from .artifact_manager import artifact_manager
+
     try:
-        for query in terms:
-            logger.info(f"🔍 Searching for images: {query}")
+        # Collect images if requested
+        if "images" in types or "all" in types:
+            for query in terms:
+                # Search for images using DuckDuckGo
+                try:
+                    images = _search_images_with_fallback(query, max_items)
+                    logger.info(
+                        f"Found {len(images)} images for query: {query}")
 
-            # Use the new fallback search function
-            search_results = _search_images_with_fallback(query, max_results=3)
-
-            if search_results:
-                logger.info(
-                    f"Found {len(search_results)} images for query: {query}")
-
-                for result in search_results:
-                    try:
-                        # Download and save the image
-                        image_url = result.get('image') or result.get('url')
+                    for image in images:
+                        image_url = image.get("image", "")
                         if not image_url:
                             continue
 
-                        success = artifact_manager.download_and_save_image(
-                            investigation_id=alert_id,
-                            image_url=image_url,
-                            description=f"Image related to {query}"
-                        )
+                        try:
+                            # Download and save to GCS
+                            success = artifact_manager.download_and_save_image(
+                                investigation_id=investigation_id,
+                                image_url=image_url,
+                                description=f"Image related to {query}"
+                            )
 
-                        if success and success.get("success"):
-                            downloaded_count += 1
-                            logger.info(
-                                f"✅ Downloaded and saved image: {success}")
-
-                            # CRITICAL FIX: Add to investigation artifacts
-                            investigation_state = state_manager.get_investigation(
-                                alert_id)
-                            if investigation_state:
-                                artifact_info = {
-                                    "type": "image",
-                                    "filename": success["filename"],
-                                    "gcs_path": success["gcs_path"],
-                                    "gcs_url": success["gcs_url"],
-                                    "public_url": success["public_url"],
-                                    "signed_url": success["signed_url"],
-                                    "description": f"Image related to {query}",
-                                    "source": "image_search",
-                                    "search_query": query,
-                                    "source_url": image_url,
-                                    "content_type": success["content_type"],
-                                    "size_bytes": success["size_bytes"],
-                                    "ticker": state_manager.get_next_artifact_ticker(alert_id),
-                                    "timestamp": success["created_at"],
-                                    "relevance_score": 0.8,  # High relevance for search results
-                                    "metadata": success.get("metadata", {}),
-                                    "saved_to_gcs": True  # Mark as saved to GCS
-                                }
-
-                                investigation_state.artifacts.append(
-                                    artifact_info)
+                            if success and success.get("success"):
+                                downloaded_count += 1
                                 logger.info(
-                                    f"✅ Added image artifact to investigation: {success['filename']}")
+                                    f"✅ Downloaded and saved image: {success}")
 
-                        # Limit total downloads to prevent overwhelming
-                        if downloaded_count >= 12:
-                            break
+                                # CRITICAL FIX: Add to investigation artifacts using correct investigation_id
+                                investigation_state = state_manager.get_investigation(
+                                    investigation_id)
+                                if investigation_state:
+                                    artifact_info = {
+                                        "type": "image",
+                                        "filename": success["filename"],
+                                        "gcs_path": success["gcs_path"],
+                                        "gcs_url": success["gcs_url"],
+                                        "public_url": success["public_url"],
+                                        "signed_url": success["signed_url"],
+                                        "description": f"Image related to {query}",
+                                        "source": "image_search",
+                                        "search_query": query,
+                                        "source_url": image_url,
+                                        "content_type": success["content_type"],
+                                        "size_bytes": success["size_bytes"],
+                                        "ticker": state_manager.get_next_artifact_ticker(investigation_id),
+                                        "timestamp": success["created_at"],
+                                        "relevance_score": 0.8,  # High relevance for search results
+                                        "metadata": success.get("metadata", {}),
+                                        "saved_to_gcs": True  # Mark as saved to GCS
+                                    }
 
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to download image {image_url}: {e}")
-                        continue
+                                    investigation_state.artifacts.append(
+                                        artifact_info)
+                                    logger.info(
+                                        f"✅ Added image artifact to investigation {investigation_id}: {success['filename']}")
+                                else:
+                                    logger.warning(
+                                        f"❌ Investigation state not found for {investigation_id}")
 
-                if downloaded_count >= 12:
-                    break
-            else:
-                logger.warning(f"No images found for query: {query}")
+                            # Limit total downloads to prevent overwhelming
+                            if downloaded_count >= 12:
+                                break
+
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to download image {image_url}: {e}")
+                            continue
+
+                    if downloaded_count >= 12:
+                        break
+                except Exception as e:
+                    logger.warning(f"No images found for query: {query} - {e}")
 
     except Exception as e:
         logger.error(f"Image search failed: {e}")
@@ -383,8 +388,9 @@ def collect_media_content_simple_func(
         for i, term in enumerate(terms):
             if "images" in types:
                 for j in range(min(max_items, 2)):
-                    ticker = state_manager.get_next_artifact_ticker(alert_id)
-                    filename = f"evidence_{alert_id}_{ticker:03d}_image_{term.replace(' ', '_')}.jpg"
+                    ticker = state_manager.get_next_artifact_ticker(
+                        investigation_id)
+                    filename = f"evidence_{investigation_id}_{ticker:03d}_image_{term.replace(' ', '_')}.jpg"
 
                     collected_media.append({
                         "type": "image",
@@ -419,7 +425,7 @@ def collect_media_content_simple_func(
 def save_investigation_screenshot_simple_func(
     url: str,
     description: str,
-    alert_id: str = "unknown",
+    investigation_id: str = "unknown",
     capture_type: str = "full_page"
 ) -> dict:
     """Take and save a screenshot of a webpage with enhanced metadata.
@@ -427,15 +433,15 @@ def save_investigation_screenshot_simple_func(
     Args:
         url: URL to screenshot
         description: Description of what the screenshot shows
-        alert_id: Alert ID for naming convention
+        investigation_id: Investigation ID for naming convention
         capture_type: Type of capture (full_page, viewport, element)
 
     Returns:
         Information about the planned screenshot with artifact metadata
     """
     # Get next ticker from state manager
-    ticker = state_manager.get_next_artifact_ticker(alert_id)
-    filename = f"evidence_{alert_id}_{ticker:03d}_screenshot.png"
+    ticker = state_manager.get_next_artifact_ticker(investigation_id)
+    filename = f"evidence_{investigation_id}_{ticker:03d}_screenshot.png"
 
     # Extract domain for better categorization
     try:
@@ -462,6 +468,7 @@ def save_investigation_screenshot_simple_func(
         "ticker": ticker,
         "timestamp": datetime.utcnow().isoformat(),
         "file_size_estimate": "~500KB",
+        "relevance_score": 0.8,  # High relevance for screenshots
         "summary": f"Screenshot planned for {domain}: {description}"
     }
 
@@ -667,7 +674,7 @@ def search_social_media_func(
     time_range: str = "24h",
     limit: int = 10,
     collect_evidence: bool = True,
-    alert_id: str = "unknown"
+    investigation_id: str = "unknown"
 ) -> dict:
     """Search Reddit for relevant posts and discussions.
     Optionally collect evidence (screenshots and media) from results.
@@ -678,7 +685,7 @@ def search_social_media_func(
         time_range: Time range for search (24h, 7d, 30d)
         limit: Maximum number of posts to return
         collect_evidence: Whether to automatically collect screenshots and media
-        alert_id: Alert ID for artifact naming
+        investigation_id: Investigation ID for artifact naming
 
     Returns:
         Social media posts with evidence collection info
@@ -708,7 +715,7 @@ def search_social_media_func(
                 screenshot_info = save_investigation_screenshot_simple_func(
                     url=post["url"],
                     description=f"Screenshot of Reddit post: {post.get('title', 'Unknown')}",
-                    alert_id=alert_id
+                    investigation_id=investigation_id
                 )
                 evidence_collected.append({
                     "type": "screenshot",
@@ -724,7 +731,7 @@ def search_social_media_func(
                 media_info = collect_media_content_simple_func(
                     search_terms=media_terms,
                     content_types="images",
-                    alert_id=alert_id
+                    investigation_id=investigation_id
                 )
                 evidence_collected.append({
                     "type": "media_collection",

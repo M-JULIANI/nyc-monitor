@@ -228,7 +228,7 @@ async def force_artifact_collection(investigation_id: str, location: str):
         media_result = collect_media_content_simple_func(
             search_terms="No Kings protest, Manhattan protest, Trump protest",
             content_types="images",
-            alert_id=investigation_id,
+            investigation_id=investigation_id,
             max_items=3
         )
         print(f"   Media Result: {media_result.get('success', False)}")
@@ -249,7 +249,7 @@ async def force_artifact_collection(investigation_id: str, location: str):
             screenshot_result = save_investigation_screenshot_simple_func(
                 url=url,
                 description=f"News website screenshot from {url}",
-                alert_id=investigation_id
+                investigation_id=investigation_id
             )
             screenshot_results.append(screenshot_result)
             print(

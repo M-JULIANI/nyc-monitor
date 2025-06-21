@@ -28,10 +28,26 @@ from google.auth import default
 logger = logging.getLogger(__name__)
 
 # Configuration - these should be environment variables in production
-GOOGLE_DRIVE_FOLDER_ID = os.getenv(
-    "GOOGLE_DRIVE_FOLDER_ID", "")  # Public folder for reports
-STATUS_TRACKER_TEMPLATE_ID = os.getenv(
-    "STATUS_TRACKER_TEMPLATE_ID", "")  # Template presentation ID
+# NOTE: Load these inside functions to ensure .env is loaded first
+
+
+def _get_environment_config():
+    """Get environment configuration for slides generation."""
+    folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
+    template_id = os.getenv("STATUS_TRACKER_TEMPLATE_ID", "")
+
+    # Debug logging
+    logger.info(f"🔧 Environment variables loaded:")
+    logger.info(
+        f"   GOOGLE_DRIVE_FOLDER_ID: {'✅ Set' if folder_id else '❌ Missing'}")
+    logger.info(
+        f"   STATUS_TRACKER_TEMPLATE_ID: {'✅ Set' if template_id else '❌ Missing'}")
+    if template_id:
+        logger.info(f"   Template ID preview: {template_id[:20]}...")
+    if folder_id:
+        logger.info(f"   Folder ID preview: {folder_id[:20]}...")
+
+    return folder_id, template_id
 
 
 def _get_google_services():
@@ -133,6 +149,9 @@ def create_slides_presentation_func(
         if not drive_service or not slides_service:
             return _create_mock_presentation(investigation_id, title)
 
+        # Get environment configuration
+        GOOGLE_DRIVE_FOLDER_ID, STATUS_TRACKER_TEMPLATE_ID = _get_environment_config()
+
         # Generate presentation title
         if not title:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -219,12 +238,28 @@ def _populate_presentation_with_data(
         from .research_tools import get_investigation_evidence_func
         evidence_data = get_investigation_evidence_func(
             investigation_id, evidence_types)
-        logger.debug(
+        logger.info(
             f"Evidence data retrieved: {len(evidence_data.get('evidence_items', []))} items")
 
         # Get investigation state for additional data
         from ..investigation.state_manager import state_manager
         investigation_state = state_manager.get_investigation(investigation_id)
+
+        # DEBUG: Check investigation state artifacts directly
+        logger.info(
+            f"🔍 DEBUG: Direct investigation state check for {investigation_id}")
+        if investigation_state and hasattr(investigation_state, 'artifacts'):
+            logger.info(
+                f"   Direct artifacts count: {len(investigation_state.artifacts)}")
+            # Show first 5
+            for i, artifact in enumerate(investigation_state.artifacts[:5]):
+                logger.info(
+                    f"   Artifact {i+1}: type={artifact.get('type')}, filename={artifact.get('filename')}")
+        else:
+            logger.warning(f"   No investigation state or artifacts found")
+        logger.info(f"🔍 Evidence data keys: {list(evidence_data.keys())}")
+        logger.info(
+            f"🔍 Evidence summary: {evidence_data.get('evidence_summary', {})}")
 
         if not investigation_state:
             logger.error(
@@ -782,7 +817,7 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
         logger.debug(
             f"   Item {i}: type={item_type}, relevance={relevance:.2f}")
 
-        if relevance > 0.7:  # Only high-relevance items
+        if relevance > 0.5:  # Lowered threshold to include more artifacts
             if item_type in ["image", "screenshot"]:
                 image_items.append(item)
             elif item_type == "map_image":

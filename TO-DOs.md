@@ -22,8 +22,6 @@ Decide which of these are valuable and worth pursuing as we will build an integr
 - [x] twitter
 - [x] 311
 - [ ] yelp
-- [ ] tripadvisor
-- [ ] google trends
 
 ~~## MCP implementations to study~~
 ~~- [ ] [reddit mcp](https://github.com/adhikasp/mcp-reddit)~~
@@ -46,8 +44,8 @@ These are basically the agents. The search one will do most of the work, so mayb
 
 ## Frontend
 - [ ] Chat interface
-- [ ] Map functionality
-    - [ ] filtering by day range
+- [x] Map functionality
+    - [x] filtering by day range
     - [x] filtering by source
     - [x] filtering by severity
 
@@ -66,7 +64,7 @@ These are basically the agents. The search one will do most of the work, so mayb
     - [ ] display link to report, if it exists
     - [ ] display link to agent investigation
 - [ ] ensure twitter collector is actually working?
-- [ ] ensure 'create report' button works for certain (non 311) alerts, and when a report dosnt already exist
+- [ ] ensure 'create report' button works for certain (non 311) alerts, and when a report doesnt already exist
 - [ ] ensure when a report is created, it is linked back to an alert, so taht no dupicate reports can be created for an alert
 - [ ] ensure that a report is findable & clickable from '/reports' tab
     - [ ] once a report is created, a 'reportLink' field should be created in the alert object in firestore.

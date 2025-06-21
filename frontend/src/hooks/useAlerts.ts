@@ -112,6 +112,154 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     }
   }, [limit, hours]);
 
+  // Generate report for an alert using existing investigation endpoint
+  const generateReport = useCallback(async (alertId: string): Promise<{ success: boolean; message: string; investigationId?: string }> => {
+    try {
+      const token = localStorage.getItem('idToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      // Find the alert to get its data
+      const alert = alerts.find(a => a.id === alertId);
+      if (!alert) {
+        throw new Error('Alert not found');
+      }
+
+      // Update alert status to investigating
+      setAlerts(prev => prev.map(a => 
+        a.id === alertId 
+          ? { ...a, reportStatus: 'investigating' as const, status: 'investigating' as const }
+          : a
+      ));
+
+      // Use existing investigation endpoint
+      const investigationRequest = {
+        alert_id: alert.id,
+        severity: alert.severity || 5,
+        event_type: alert.category || 'general',
+        location: `${alert.neighborhood}, ${alert.borough}`.replace('Unknown, ', '').replace(', Unknown', ''),
+        summary: alert.description,
+        timestamp: alert.timestamp,
+        sources: [alert.source]
+      };
+
+      const response = await fetch('/api/investigate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(investigationRequest),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Investigation failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Update alert with investigation info
+      setAlerts(prev => prev.map(a => 
+        a.id === alertId 
+          ? { 
+              ...a, 
+              reportStatus: 'completed' as const,
+              investigationId: result.investigation_id,
+              // The investigation should have generated a report - we need to fetch it
+              reportUrl: result.report_url, // We'll need to add this to the investigation response
+              traceId: result.investigation_id // Use investigation_id as trace identifier
+            }
+          : a
+      ));
+
+      return {
+        success: true,
+        message: 'Investigation completed',
+        investigationId: result.investigation_id
+      };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate report';
+      
+      // Update alert status to failed
+      setAlerts(prev => prev.map(a => 
+        a.id === alertId 
+          ? { ...a, reportStatus: 'failed' as const }
+          : a
+      ));
+
+      return {
+        success: false,
+        message: errorMessage
+      };
+    }
+  }, [alerts]);
+
+  // Fetch agent trace for an alert using existing trace endpoint
+  const fetchAgentTrace = useCallback(async (investigationId: string): Promise<{ success: boolean; trace?: string; message: string }> => {
+    try {
+      const token = localStorage.getItem('idToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch(`/api/investigate/${investigationId}/trace/export`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch trace: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Convert trace data to markdown format
+      const traceMarkdown = formatTraceAsMarkdown(data.trace_data);
+      
+      return {
+        success: true,
+        trace: traceMarkdown,
+        message: 'Trace fetched successfully'
+      };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch trace';
+      return {
+        success: false,
+        message: errorMessage
+      };
+    }
+  }, []);
+
+  // Helper function to format trace data as markdown
+  const formatTraceAsMarkdown = (traceData: any): string => {
+    if (!traceData) return 'No trace data available';
+    
+    try {
+      // Format the trace data as readable markdown
+      let markdown = `# Investigation Trace\n\n`;
+      
+      if (traceData.investigation_id) {
+        markdown += `**Investigation ID:** ${traceData.investigation_id}\n\n`;
+      }
+      
+      if (traceData.approach) {
+        markdown += `**Approach:** ${traceData.approach}\n\n`;
+      }
+      
+      // Format the trace data structure
+      markdown += `## Trace Data\n\n`;
+      markdown += '```json\n';
+      markdown += JSON.stringify(traceData, null, 2);
+      markdown += '\n```\n';
+      
+      return markdown;
+    } catch (err) {
+      return `Error formatting trace data: ${err}`;
+    }
+  };
+
   // Auto-refresh alerts
   useEffect(() => {
     // Initial load
@@ -160,6 +308,8 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     isLoading,
     lastFetch,
     stats: alertStats,
-    refetch: fetchAlerts
+    refetch: fetchAlerts,
+    generateReport,
+    fetchAgentTrace
   };
 };

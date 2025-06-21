@@ -685,3 +685,92 @@ async def get_alert_categories():
         logger.error(f"❌ Error fetching alert categories: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch alert categories: {str(e)}")
+
+
+@alerts_router.get('/agent-traces/{trace_id}')
+async def get_agent_trace(trace_id: str):
+    """
+    Get agent trace from Firestore by trace ID
+
+    Args:
+        trace_id: Firestore document ID for the trace
+
+    Returns:
+        Agent trace data formatted as markdown
+    """
+    try:
+        logger.info(f"📋 Fetching agent trace: {trace_id}")
+
+        # Get Firestore client
+        db = get_db()
+
+        # Fetch trace document
+        trace_doc = db.collection('agent_traces').document(trace_id).get()
+
+        if not trace_doc.exists:
+            raise HTTPException(
+                status_code=404, detail="Agent trace not found")
+
+        trace_data = trace_doc.to_dict()
+
+        # Format trace as markdown
+        trace_markdown = format_trace_as_markdown(trace_data)
+
+        logger.info(f"✅ Retrieved agent trace: {trace_id}")
+        return {
+            'trace_id': trace_id,
+            'investigation_id': trace_data.get('investigation_id'),
+            'trace': trace_markdown,
+            'created_at': trace_data.get('created_at'),
+            'approach': trace_data.get('approach')
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error fetching agent trace: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch agent trace: {str(e)}")
+
+
+def format_trace_as_markdown(trace_data: dict) -> str:
+    """Format trace data as readable markdown.
+
+    Args:
+        trace_data: Firestore trace document data
+
+    Returns:
+        Formatted markdown string
+    """
+    try:
+        markdown = f"# Investigation Trace\n\n"
+
+        if trace_data.get('investigation_id'):
+            markdown += f"**Investigation ID:** {trace_data['investigation_id']}\n\n"
+
+        if trace_data.get('approach'):
+            markdown += f"**Approach:** {trace_data['approach']}\n\n"
+
+        if trace_data.get('created_at'):
+            markdown += f"**Created:** {trace_data['created_at']}\n\n"
+
+        # Format the actual trace data
+        raw_trace = trace_data.get('trace_data', {})
+
+        if raw_trace.get('investigation_id'):
+            markdown += f"## Investigation Details\n\n"
+            markdown += f"- **ID:** {raw_trace.get('investigation_id')}\n"
+            markdown += f"- **Approach:** {raw_trace.get('approach', 'Unknown')}\n"
+            markdown += f"- **Export Time:** {raw_trace.get('exported_at', 'Unknown')}\n\n"
+
+        # Add raw trace data as JSON for detailed inspection
+        markdown += f"## Raw Trace Data\n\n"
+        markdown += "```json\n"
+        markdown += json.dumps(raw_trace, indent=2, default=str)
+        markdown += "\n```\n"
+
+        return markdown
+
+    except Exception as e:
+        logger.error(f"Error formatting trace: {e}")
+        return f"Error formatting trace data: {str(e)}"
