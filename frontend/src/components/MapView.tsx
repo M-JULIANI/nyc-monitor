@@ -179,11 +179,39 @@ const MapView: React.FC = () => {
     }
   };
 
+  const getCategoryIcon = (category: string): string => {
+    switch (category) {
+      case 'infrastructure': return '🔧'; // Wrench for infrastructure
+      case 'emergency': return '🚨'; // Emergency siren
+      case 'transportation': return '🚗'; // Car for transportation
+      case 'events': return '🎪'; // Circus tent for events
+      case 'safety': return '🛡️'; // Shield for safety
+      case 'environment': return '🌿'; // Leaf for environment
+      case 'housing': return '🏠'; // House for housing
+      case 'general': return '📋'; // Clipboard for general
+      default: return '📍'; // Default pin
+    }
+  };
+
   const getBackgroundIconColor = (source: 'reddit' | '311' | 'twitter'): string => {
     switch (source) {
       case 'reddit': return 'bg-orange-400';
       case '311': return 'bg-yellow-400';
       case 'twitter': return 'bg-blue-400';
+      default: return 'bg-gray-400';
+    }
+  };
+
+  const getCategoryBackgroundColor = (category: string): string => {
+    switch (category) {
+      case 'infrastructure': return 'bg-blue-500'; // Blue for infrastructure
+      case 'emergency': return 'bg-red-500'; // Red for emergency
+      case 'transportation': return 'bg-purple-500'; // Purple for transportation
+      case 'events': return 'bg-pink-500'; // Pink for events
+      case 'safety': return 'bg-orange-500'; // Orange for safety
+      case 'environment': return 'bg-green-500'; // Green for environment
+      case 'housing': return 'bg-yellow-500'; // Yellow for housing
+      case 'general': return 'bg-gray-500'; // Gray for general
       default: return 'bg-gray-400';
     }
   };
@@ -337,7 +365,7 @@ const MapView: React.FC = () => {
                 name="viewMode"
                 value="priority"
                 checked={viewMode === 'priority'}
-                onChange={(e) => setViewMode(e.target.value as 'priority' | 'source')}
+                onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
                 className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
                 disabled={!isConnected}
               />
@@ -350,12 +378,25 @@ const MapView: React.FC = () => {
                 name="viewMode"
                 value="source"
                 checked={viewMode === 'source'}
-                onChange={(e) => setViewMode(e.target.value as 'priority' | 'source')}
+                onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
                 className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
                 disabled={!isConnected}
               />
               <span>By Source</span>
               <span className="text-zinc-500">(source icons)</span>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+              <input
+                type="radio"
+                name="viewMode"
+                value="category"
+                checked={viewMode === 'category'}
+                onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
+                className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
+                disabled={!isConnected}
+              />
+              <span>By Category</span>
+              <span className="text-zinc-500">(category icons)</span>
             </label>
           </div>
         </div>
