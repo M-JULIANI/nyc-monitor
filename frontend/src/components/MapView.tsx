@@ -261,7 +261,7 @@ const MapView: React.FC = () => {
         setSelectedAlert(null);
       }
     }
-    // In source mode, clicks are handled by individual markers
+    // In source and category modes, clicks are handled by individual markers
   };
 
   const handleMarkerClick = (alert: Alert) => {
@@ -517,6 +517,28 @@ const MapView: React.FC = () => {
                 }}
               >
                 {getSourceIcon(alert.source)}
+              </div>
+            </Marker>
+          ))}
+
+          {/* Category Mode - HTML Markers */}
+          {viewMode === 'category' && filteredAlerts.map(alert => (
+            <Marker
+              key={alert.id}
+              longitude={alert.coordinates.lng}
+              latitude={alert.coordinates.lat}
+              anchor="center"
+              onClick={() => handleMarkerClick(alert)}
+            >
+              <div
+                className={`cursor-pointer transition-transform hover:scale-110 flex items-center justify-center rounded-full ${getCategoryBackgroundColor(alert.category || 'general')}`}
+                style={{
+                  fontSize: `${getIconSize(alert.priority)}px`,
+                  width: `${getIconSize(alert.priority) + 8}px`,
+                  height: `${getIconSize(alert.priority) + 8}px`,
+                }}
+              >
+                {getCategoryIcon(alert.category || 'general')}
               </div>
             </Marker>
           ))}
