@@ -1,10 +1,11 @@
 """
 NYC 311 Daily Collector Job.
 Collects 311 service requests daily and stores them directly in Firestore.
-Bypasses triage agent due to high volume and structured nature of 311 data.
+Uses triage agent for severity scoring (consistent with monitor alerts).
 """
 from monitor.storage.firestore_manager import FirestoreManager
 from monitor.collectors.nyc_311_collector import NYC311Collector
+from monitor.agents.triage_agent import TriageAgent
 import os
 import asyncio
 import logging
@@ -37,7 +38,7 @@ class NYC311Job:
     """Daily NYC 311 collector job with direct storage and duplicate checking"""
 
     def __init__(self):
-        """Initialize the NYC 311 job with collector and storage"""
+        """Initialize the NYC 311 job with collector, triage agent, and storage"""
         self.start_time = datetime.utcnow()
 
         # Initialize components
@@ -45,6 +46,10 @@ class NYC311Job:
             # Initialize NYC 311 collector
             self.collector = NYC311Collector()
             logger.info("✅ NYC 311 collector initialized successfully")
+
+            # Initialize triage agent for severity scoring
+            self.triage_agent = TriageAgent()
+            logger.info("✅ Triage agent initialized successfully")
 
             # Initialize Firestore storage
             self.storage = FirestoreManager()
@@ -58,12 +63,14 @@ class NYC311Job:
                 'signals_collected': 0,
                 'signals_stored': 0,
                 'duplicates_found': 0,
+                'triage_analysis_time': 0,
                 'errors': [],
                 'collection_duration': 0,
                 'storage_duration': 0,
                 'complaint_type_breakdown': {},
                 'borough_breakdown': {},
-                'agency_breakdown': {}
+                'agency_breakdown': {},
+                'severity_distribution': {}
             }
 
         except Exception as e:
@@ -131,11 +138,26 @@ class NYC311Job:
                     "ℹ️  No new 311 signals to store (all were duplicates)")
                 return self._generate_stats_report()
 
-            # Step 4: Store new signals in Firestore
-            logger.info("💾 PHASE 4: STORING NEW SIGNALS")
+            # Step 4: Run triage analysis for severity scoring
+            logger.info("🧠 PHASE 4: TRIAGE ANALYSIS FOR SEVERITY SCORING")
+            triage_start = datetime.utcnow()
+
+            scored_signals = await self._run_triage_analysis(new_signals)
+
+            triage_end = datetime.utcnow()
+            self.stats['triage_analysis_time'] = (
+                triage_end - triage_start).total_seconds()
+
+            if not scored_signals:
+                logger.warning(
+                    "⚠️  Triage analysis failed - using fallback severity scores")
+                scored_signals = self._apply_fallback_severity(new_signals)
+
+            # Step 5: Store new signals in Firestore
+            logger.info("💾 PHASE 5: STORING NEW SIGNALS")
             storage_start = datetime.utcnow()
 
-            stored_count = await self._store_signals(new_signals)
+            stored_count = await self._store_signals(scored_signals)
 
             storage_end = datetime.utcnow()
             self.stats['storage_duration'] = (
@@ -148,11 +170,15 @@ class NYC311Job:
                 f"   ✅ Signals collected: {self.stats['signals_collected']}")
             logger.info(
                 f"   🔄 Duplicates filtered: {self.stats['duplicates_found']}")
+            logger.info(
+                f"   🧠 Triage analysis time: {self.stats['triage_analysis_time']:.2f}s")
             logger.info(f"   ✅ New signals stored: {stored_count}")
             logger.info(
                 f"   ⏱️  Total execution time: {(datetime.utcnow() - self.start_time).total_seconds():.2f}s")
             logger.info(
                 f"   📊 Collection efficiency: {(stored_count/len(signals)*100):.1f}% new data")
+            logger.info(
+                f"   🎯 Severity distribution: {self.stats.get('severity_distribution', {})}")
 
             if stored_count > 0:
                 logger.info(f"🎯 VERIFICATION LINKS:")
@@ -190,6 +216,7 @@ class NYC311Job:
 
     def _analyze_signal_composition(self, signals: List[Dict]):
         """Analyze the composition of collected signals for reporting"""
+
         for signal in signals:
             metadata = signal.get('metadata', {})
 
@@ -218,6 +245,8 @@ class NYC311Job:
         logger.info(f"📊 Signal composition analysis:")
         logger.info(f"   Top complaint types: {dict(top_complaints)}")
         logger.info(f"   Borough distribution: {dict(top_boroughs)}")
+        logger.info(
+            "   Severity distribution will be calculated after triage analysis")
 
     async def _get_existing_unique_keys(self, days_back: int = 7) -> Set[str]:
         """
@@ -292,10 +321,10 @@ class NYC311Job:
 
     async def _store_signals(self, signals: List[Dict]) -> int:
         """
-        Store NYC 311 signals directly in Firestore
+        Store NYC 311 signals directly in Firestore with AI-calculated severity scores
 
         Args:
-            signals: List of 311 signals to store
+            signals: List of 311 signals with severity scores from triage analysis
 
         Returns:
             Number of signals successfully stored
@@ -313,6 +342,12 @@ class NYC311Job:
                 if not unique_key:
                     unique_key = f"311_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{i}"
                     logger.warning(f"⚠️  Generated fallback ID: {unique_key}")
+
+                # Use pre-calculated severity from triage analysis
+                severity_score = signal.get('severity', 3)
+                priority = signal.get(
+                    'priority') or self._map_severity_to_priority(severity_score)
+                triage_method = signal.get('triage_method', 'unknown')
 
                 # Prepare document data optimized for queries
                 doc_data = {
@@ -335,6 +370,11 @@ class NYC311Job:
                     'signal_category': signal.get('metadata', {}).get('signal_category', ''),
                     'is_emergency': signal.get('metadata', {}).get('is_emergency', False),
                     'is_event': signal.get('metadata', {}).get('is_event', False),
+
+                    # AI Triage results (consistent with monitor alerts)
+                    'severity': severity_score,
+                    'priority': priority,
+                    'triage_method': triage_method,
 
                     # Timestamps
                     'created_at': datetime.utcnow(),
@@ -376,6 +416,101 @@ class NYC311Job:
 
         return stored_count
 
+    def _calculate_311_severity(self, signal: Dict) -> int:
+        """
+        Calculate severity score for 311 signals using rule-based logic
+        Returns score from 1-10 (consistent with monitor alert triage)
+
+        This is much cheaper than AI triage but still provides useful prioritization
+        """
+        try:
+            metadata = signal.get('metadata', {})
+            complaint_type = metadata.get('complaint_type', '').lower()
+            descriptor = metadata.get('descriptor', '').lower()
+            is_emergency = metadata.get('is_emergency', False)
+            is_event = metadata.get('is_event', False)
+            agency = metadata.get('agency_name', '').lower()
+
+            # Start with base score
+            severity = 3  # Default: Low priority
+
+            # Emergency flag override (highest priority)
+            if is_emergency:
+                return 9  # Critical
+
+            # Critical infrastructure and safety issues (8-9)
+            critical_keywords = [
+                'fire', 'explosion', 'gas leak', 'water main break', 'power outage',
+                'building collapse', 'sinkhole', 'bridge', 'tunnel', 'subway',
+                'emergency', 'urgent', 'immediate', 'danger', 'hazard', 'toxic'
+            ]
+
+            if any(keyword in complaint_type or keyword in descriptor for keyword in critical_keywords):
+                severity = max(severity, 8)
+
+            # High priority complaint types (6-7)
+            high_priority_types = [
+                'water system', 'sewer', 'street condition', 'traffic signal',
+                'street light', 'sidewalk condition', 'pothole', 'construction',
+                'blocked driveway', 'illegal parking', 'noise', 'air quality'
+            ]
+
+            if any(hp_type in complaint_type for hp_type in high_priority_types):
+                severity = max(severity, 6)
+
+            # Event-related (can be medium to high depending on type)
+            if is_event:
+                event_keywords = ['parade', 'festival',
+                                  'concert', 'protest', 'march', 'gathering']
+                if any(keyword in complaint_type or keyword in descriptor for keyword in event_keywords):
+                    severity = max(severity, 5)  # Medium priority for events
+
+            # Agency-based adjustments
+            high_priority_agencies = [
+                'fdny', 'fire', 'police', 'nypd', 'emergency']
+            if any(agency_name in agency for agency_name in high_priority_agencies):
+                severity = max(severity, 7)
+
+            # Time-sensitive keywords boost
+            urgent_keywords = ['now', 'currently',
+                               'ongoing', 'active', 'in progress']
+            if any(keyword in descriptor for keyword in urgent_keywords):
+                severity = min(severity + 1, 10)  # Boost by 1, cap at 10
+
+            # Location-based adjustments (high-traffic areas)
+            high_traffic_keywords = [
+                'broadway', 'times square', 'union square', 'penn station',
+                'grand central', 'brooklyn bridge', 'manhattan bridge',
+                'fdr drive', 'west side highway', 'bqe'
+            ]
+
+            if any(keyword in descriptor for keyword in high_traffic_keywords):
+                severity = min(severity + 1, 10)  # Boost by 1
+
+            # Cap severity between 1-10
+            severity = max(1, min(severity, 10))
+
+            return severity
+
+        except Exception as e:
+            logger.warning(f"Error calculating 311 severity: {e}")
+            return 3  # Default to low priority on error
+
+    def _map_severity_to_priority(self, severity: int) -> str:
+        """
+        Map numeric severity to priority string (consistent with monitor alerts)
+        """
+        if severity >= 9:
+            return 'critical'  # 9-10: Critical emergencies
+        elif severity >= 7:
+            return 'high'      # 7-8: High priority
+        elif severity >= 5:
+            return 'medium'    # 5-6: Medium priority
+        elif severity >= 3:
+            return 'low'       # 3-4: Low priority
+        else:
+            return 'low'       # 1-2: Normal activity
+
     async def _store_job_stats(self, stats: Dict):
         """Store job execution statistics"""
         try:
@@ -414,12 +549,14 @@ class NYC311Job:
             # Performance metrics
             'collection_duration_seconds': self.stats['collection_duration'],
             'storage_duration_seconds': self.stats['storage_duration'],
+            'triage_analysis_duration_seconds': self.stats['triage_analysis_time'],
             'efficiency_percent': (self.stats['signals_stored'] / self.stats['signals_collected'] * 100) if self.stats['signals_collected'] > 0 else 0,
 
             # Data composition
             'complaint_type_breakdown': self.stats['complaint_type_breakdown'],
             'borough_breakdown': self.stats['borough_breakdown'],
             'agency_breakdown': self.stats['agency_breakdown'],
+            'severity_distribution': self.stats['severity_distribution'],
 
             # Environment
             'environment': {
@@ -428,6 +565,144 @@ class NYC311Job:
                 'hostname': os.getenv('HOSTNAME', 'unknown')
             }
         }
+
+    async def _run_triage_analysis(self, signals: List[Dict]) -> List[Dict]:
+        """
+        Run triage analysis on 311 signals to assign severity scores
+
+        Args:
+            signals: List of 311 signals to analyze
+
+        Returns:
+            List of signals with severity scores added
+        """
+        try:
+            logger.info(
+                f"🧠 Running AI triage analysis on {len(signals)} 311 signals")
+
+            # Format signals for triage agent (similar to monitor job)
+            signals_for_triage = {
+                'nyc_311': signals,
+                'timestamp': datetime.utcnow().isoformat(),
+                'collection_window': 'daily_311',
+                'signal_count': len(signals)
+            }
+
+            # Run triage analysis
+            triage_results = await self.triage_agent.analyze_signals(signals_for_triage)
+
+            if not triage_results or not triage_results.get('alerts'):
+                logger.warning(
+                    "⚠️  Triage agent returned no alerts for 311 signals")
+                return []
+
+            # Map triage results back to original signals
+            scored_signals = self._map_triage_results_to_signals(
+                signals, triage_results)
+
+            # Log triage summary
+            summary = triage_results.get('summary', 'No summary available')
+            logger.info(f"✅ Triage analysis complete: {summary}")
+
+            # Log severity distribution
+            severity_counts = {}
+            for signal in scored_signals:
+                severity = signal.get('severity', 3)
+                priority = self._map_severity_to_priority(severity)
+                severity_counts[priority] = severity_counts.get(
+                    priority, 0) + 1
+
+            logger.info(f"📊 Severity distribution: {severity_counts}")
+            self.stats['severity_distribution'] = severity_counts
+
+            return scored_signals
+
+        except Exception as e:
+            logger.error(f"❌ Error in 311 triage analysis: {str(e)}")
+            return []
+
+    def _map_triage_results_to_signals(self, original_signals: List[Dict], triage_results: Dict) -> List[Dict]:
+        """
+        Map triage analysis results back to original 311 signals
+
+        Args:
+            original_signals: Original 311 signals
+            triage_results: Results from triage agent
+
+        Returns:
+            Signals with severity scores added
+        """
+        try:
+            alerts = triage_results.get('alerts', [])
+            scored_signals = []
+
+            # Create a mapping from signal content to triage results
+            for signal in original_signals:
+                # Default severity for signals not analyzed
+                severity = 3  # Low priority default
+
+                # Try to match signal with triage results
+                signal_text = f"{signal.get('metadata', {}).get('complaint_type', '')} {signal.get('metadata', {}).get('descriptor', '')}"
+
+                # Find matching alert from triage results
+                for alert in alerts:
+                    alert_desc = alert.get('description', '').lower()
+                    if signal_text.lower() in alert_desc or any(
+                        keyword in signal_text.lower()
+                        for keyword in alert.get('keywords', [])
+                    ):
+                        severity = alert.get('severity', 3)
+                        break
+
+                # Add severity to signal
+                signal_copy = signal.copy()
+                signal_copy['severity'] = severity
+                signal_copy['priority'] = self._map_severity_to_priority(
+                    severity)
+                signal_copy['triage_method'] = 'ai_triage'
+
+                scored_signals.append(signal_copy)
+
+            logger.info(
+                f"✅ Mapped severity scores to {len(scored_signals)} signals")
+            return scored_signals
+
+        except Exception as e:
+            logger.error(f"❌ Error mapping triage results: {str(e)}")
+            return original_signals
+
+    def _apply_fallback_severity(self, signals: List[Dict]) -> List[Dict]:
+        """
+        Apply fallback rule-based severity scoring when AI triage fails
+
+        Args:
+            signals: List of 311 signals
+
+        Returns:
+            Signals with fallback severity scores
+        """
+        logger.info("🔄 Applying fallback rule-based severity scoring")
+
+        scored_signals = []
+        severity_counts = {}
+
+        for signal in signals:
+            # Use the rule-based calculation as fallback
+            severity = self._calculate_311_severity(signal)
+            priority = self._map_severity_to_priority(severity)
+
+            signal_copy = signal.copy()
+            signal_copy['severity'] = severity
+            signal_copy['priority'] = priority
+            signal_copy['triage_method'] = 'rule_based_fallback'
+
+            scored_signals.append(signal_copy)
+            severity_counts[priority] = severity_counts.get(priority, 0) + 1
+
+        logger.info(f"📊 Fallback severity distribution: {severity_counts}")
+        self.stats['severity_distribution'] = severity_counts
+
+        return scored_signals
 
 
 # Signal handlers for graceful shutdown

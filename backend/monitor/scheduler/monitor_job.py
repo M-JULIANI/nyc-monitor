@@ -393,7 +393,13 @@ class MonitorJob:
                     'description': alert.get('description', ''),
                     'latitude': float(alert.get('coordinates', {}).get('lat', 40.7128)),
                     'longitude': float(alert.get('coordinates', {}).get('lng', -74.0060)),
-                    'priority': self._map_severity_to_priority(alert.get('severity', 'medium')),
+
+                    # Store both numeric severity AND text priority
+                    # Numeric 1-10 scale from triage agent
+                    'severity': alert.get('severity', 5),
+                    # Text priority for frontend
+                    'priority': self._map_severity_to_priority(alert.get('severity', 5)),
+
                     'source': self._map_source(alert.get('source', 'reddit')),
                     'status': self._map_status(alert.get('status', 'pending')),
                     'timestamp': datetime.utcnow().isoformat(),
@@ -551,9 +557,23 @@ class MonitorJob:
         except Exception:
             return datetime.utcnow()
 
-    def _map_severity_to_priority(self, severity: str) -> str:
+    def _map_severity_to_priority(self, severity) -> str:
         """Map alert severity to frontend priority"""
-        severity = str(severity).lower() if severity else 'medium'
+        # Handle numeric severity scores from triage agent (1-10 scale)
+        if isinstance(severity, (int, float)):
+            if severity >= 9:
+                return 'critical'  # 9-10: Critical emergencies
+            elif severity >= 7:
+                return 'high'      # 7-8: High priority
+            elif severity >= 5:
+                return 'medium'    # 5-6: Medium priority
+            elif severity >= 3:
+                return 'low'       # 3-4: Low priority
+            else:
+                return 'low'       # 1-2: Normal activity (still low priority)
+
+        # Handle string severity values (fallback for other sources)
+        severity_str = str(severity).lower() if severity else 'medium'
         priority_mapping = {
             'critical': 'critical',
             'high': 'high',
@@ -563,7 +583,7 @@ class MonitorJob:
             'moderate': 'medium',
             'minor': 'low'
         }
-        return priority_mapping.get(severity, 'medium')
+        return priority_mapping.get(severity_str, 'medium')
 
     def _map_source(self, source: str) -> str:
         """Map alert source to frontend source"""

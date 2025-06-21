@@ -253,13 +253,19 @@ async def get_recent_alerts(
         try:
             signals_ref = db.collection('nyc_311_signals')
             signals_query = (signals_ref
-                             .where('created_at', '>=', cutoff_time)
-                             .select(['created_at', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency'])
+                             .where('signal_timestamp', '>=', cutoff_time)
+                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'severity', 'priority'])
                              .limit(signals_limit))
 
             signals_count = 0
             for doc in signals_query.stream():
                 data = doc.to_dict()
+
+                # Use calculated severity from rule-based triage, fallback to emergency logic
+                severity = data.get('severity')
+                if severity is None:
+                    # Fallback for old records without severity
+                    severity = 7 if data.get('is_emergency', False) else 3
 
                 # Ultra-minimal transformation
                 alert = {
@@ -267,8 +273,8 @@ async def get_recent_alerts(
                     'title': f"{data.get('complaint_type', 'NYC 311')}: {(data.get('descriptor', '') or '')[:50]}",
                     'description': data.get('descriptor', ''),
                     'source': '311',
-                    'severity': 7 if data.get('is_emergency', False) else 3,
-                    'date': data.get('created_at', datetime.utcnow()).isoformat() if isinstance(data.get('created_at'), datetime) else str(data.get('created_at', '')),
+                    'severity': severity,
+                    'timestamp': _extract_311_timestamp(data),
                     'coordinates': {
                         'lat': data.get('latitude', 40.7589),
                         'lng': data.get('longitude', -73.9851)

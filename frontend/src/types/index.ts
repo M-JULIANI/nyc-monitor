@@ -1,11 +1,44 @@
+// Priority and Severity Types
+export type AlertPriority = 'critical' | 'high' | 'medium' | 'low';
+export type AlertSource = 'reddit' | '311' | 'twitter' | 'unknown';
+export type AlertStatus = 'new' | 'investigating' | 'resolved' | 'active';
+
+// Severity scale (1-10) that maps to priorities
+export interface SeverityConfig {
+  critical: { min: 9; max: 10; color: '#dc2626'; };
+  high: { min: 7; max: 8; color: '#ea580c'; };
+  medium: { min: 5; max: 6; color: '#d97706'; };
+  low: { min: 1; max: 4; color: '#65a30d'; };
+}
+
+export const SEVERITY_CONFIG: SeverityConfig = {
+  critical: { min: 9, max: 10, color: '#dc2626' },
+  high: { min: 7, max: 8, color: '#ea580c' },
+  medium: { min: 5, max: 6, color: '#d97706' },
+  low: { min: 1, max: 4, color: '#65a30d' }
+};
+
+// Helper function to map severity to priority
+export const severityToPriority = (severity: number): AlertPriority => {
+  if (severity >= 9) return 'critical';
+  if (severity >= 7) return 'high';
+  if (severity >= 5) return 'medium';
+  return 'low';
+};
+
+// Helper function to get priority color
+export const getPriorityColor = (priority: AlertPriority): string => {
+  return SEVERITY_CONFIG[priority].color;
+};
+
 export interface Alert {
   id: string;
   title: string;
   description: string;
-  priority: 'critical' | 'high' | 'medium' | 'low';
-  source: 'reddit' | '311' | 'twitter' | 'unknown';
+  priority: AlertPriority;
+  source: AlertSource;
   timestamp: string;
-  status: 'new' | 'investigating' | 'resolved' | 'active';
+  status: AlertStatus;
   neighborhood: string;
   borough: string;
   
@@ -68,18 +101,18 @@ export interface LoginResponse {
 }
 
 export interface AlertFilters {
-  priority?: Alert['priority'];
-  source?: Alert['source'];
-  status?: Alert['status'];
+  priority?: AlertPriority;
+  source?: AlertSource;
+  status?: AlertStatus;
   timeRange?: '1h' | '24h' | '7d' | '30d';
   borough?: string;
 }
 
 export interface AlertStats {
   total: number;
-  byPriority: Record<Alert['priority'], number>;
-  byStatus: Record<Alert['status'], number>;
-  bySource: Record<Alert['source'], number>;
+  byPriority: Record<AlertPriority, number>;
+  byStatus: Record<AlertStatus, number>;
+  bySource: Record<AlertSource, number>;
   byBorough: Record<string, number>;
 }
 
@@ -90,7 +123,7 @@ export interface Report {
   type: string;
   borough: string;
   status: 'completed' | 'in_progress' | 'draft';
-  priority: Alert['priority'];
+  priority: AlertPriority;
   author: string;
   createdAt: string;
   driveLink?: string;
