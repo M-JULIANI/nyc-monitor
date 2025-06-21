@@ -5,6 +5,7 @@ import { Alert } from '../types';
 interface UseAlertsOptions {
   pollInterval?: number; // How often to refresh data
   limit?: number; // Max number of alerts to load
+  hours?: number; // How many hours back to fetch
 }
 
 // Function to normalize alert objects
@@ -72,7 +73,8 @@ const normalizeAlert = (rawAlert: any): Alert => {
 export const useAlerts = (options: UseAlertsOptions = {}) => {
   const { 
     pollInterval = 1800000, // 30 minutes
-    limit = 2000 // High limit for map display
+    limit = 2000, // High limit for map display
+    hours = 72 // Default to 24 hours if not provided
   } = options;
   
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -86,7 +88,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetch(`/api/alerts/recent?limit=${limit}&hours=24`);
+      const response = await fetch(`/api/alerts/recent?limit=${limit}&hours=${hours}`);
       
       if (!response.ok) {
         throw new Error(`Failed to fetch alerts: ${response.status}`);
@@ -105,7 +107,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       setIsLoading(false);
       console.error('Error fetching alerts:', err);
     }
-  }, [limit]);
+  }, [limit, hours]);
 
   // Auto-refresh alerts
   useEffect(() => {

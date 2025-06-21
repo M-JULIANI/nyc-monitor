@@ -54,8 +54,10 @@ These are basically the agents. The search one will do most of the work, so mayb
 ## Critical path
 - [x] ensure 311 daily collector works
 - [ ] fix basic auth: should be able to login via google oauth, and it should kick you out if you leave and ask you to login again
-- [ ] ensure map filters work
-    - [ ] include twitter, reddit, 311 icons
+- [x] ensure map filters work
+    - [x] include twitter, reddit, 311 icons
+    - [x] add time slider to filter items
+    - [ ] ensure different priorities are being populated correctly
 - [ ] ensure 'create report' button works for certain (non 311) alerts, and when a report dosnt already exist
 - [ ] ensure when a report is created, it is linked back to an alert, so taht no dupicate reports can be created for an alert
 - [ ] ensure that a report is findable & clickable from '/reports' tab

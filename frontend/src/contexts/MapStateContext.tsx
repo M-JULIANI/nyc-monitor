@@ -4,11 +4,24 @@ interface ViewportState {
     longitude: number;
     latitude: number;
     zoom: number;
-  } 
+} 
+
+interface FilterState {
+  priority: string;
+  source: string;
+  status: string;
+  timeRangeHours: number; // Hours back from now (1-168 for 7 days)
+}
+
+type ViewMode = 'priority' | 'source';
 
 interface MapStateContextType {
   viewport: ViewportState;
   setViewport: (viewport: ViewportState) => void;
+  filter: FilterState;
+  setFilter: (filter: FilterState | ((prev: FilterState) => FilterState)) => void;
+  viewMode: ViewMode;
+  setViewMode: (viewMode: ViewMode) => void;
 }
 
 const MapStateContext = createContext<MapStateContextType | undefined>(undefined);
@@ -25,8 +38,26 @@ export const MapStateProvider: React.FC<MapStateProviderProps> = ({ children }) 
     zoom: 10
   });
 
+  // Filter state
+  const [filter, setFilter] = useState<FilterState>({
+    priority: 'all',
+    source: 'all',
+    status: 'all',
+    timeRangeHours: 72 // Default to last 72 hours to show 311 data
+  });
+
+  // View mode state
+  const [viewMode, setViewMode] = useState<ViewMode>('priority');
+
   return (
-    <MapStateContext.Provider value={{ viewport, setViewport }}>
+    <MapStateContext.Provider value={{ 
+      viewport, 
+      setViewport, 
+      filter, 
+      setFilter, 
+      viewMode, 
+      setViewMode 
+    }}>
       {children}
     </MapStateContext.Provider>
   );

@@ -94,7 +94,7 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
             'source': '311',
             'priority': 'high' if signal.get('is_emergency', False) else 'medium',
             'status': signal.get('status', 'Open'),
-            'timestamp': signal.get('created_at', datetime.utcnow()).isoformat() if isinstance(signal.get('created_at'), datetime) else signal.get('created_at', ''),
+            'timestamp': _extract_311_timestamp(signal),
             'neighborhood': signal.get('borough', 'Unknown'),
             'borough': signal.get('borough', 'Unknown'),
             'coordinates': {
@@ -196,8 +196,7 @@ async def get_recent_alerts(
         try:
             alerts_ref = db.collection('nyc_monitor_alerts')
             monitor_query = (alerts_ref
-                             .where('created_at', '>=', cutoff_time)
-                             .select(['created_at', 'title', 'description', 'priority', 'latitude', 'longitude', 'original_alert'])
+                             .where('event_date', '>=', cutoff_time)
                              .limit(monitor_limit))
 
             for doc in monitor_query.stream():
@@ -227,10 +226,10 @@ async def get_recent_alerts(
                     # Now shows the actual source: reddit, twitter, etc.
                     'source': real_source,
                     'severity': _get_severity_from_priority(data.get('priority', 'medium')),
-                    'date': data.get('created_at', datetime.utcnow()).isoformat() if isinstance(data.get('created_at'), datetime) else str(data.get('created_at', '')),
+                    'timestamp': _extract_monitor_timestamp(data),
                     'coordinates': {
-                        'lat': data.get('latitude', 40.7589),
-                        'lng': data.get('longitude', -73.9851)
+                        'lat': data.get('original_alert', {}).get('latitude', 40.7589),
+                        'lng': data.get('original_alert', {}).get('longitude', -73.9851)
                     }
                 }
                 all_alerts.append(alert)
@@ -254,7 +253,7 @@ async def get_recent_alerts(
             signals_ref = db.collection('nyc_311_signals')
             signals_query = (signals_ref
                              .where('signal_timestamp', '>=', cutoff_time)
-                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'severity', 'priority'])
+                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency'])
                              .limit(signals_limit))
 
             signals_count = 0
@@ -421,6 +420,103 @@ def _get_severity_from_priority(priority: str) -> int:
     return priority_map.get(priority.lower(), 5)
 
 
+def _extract_311_timestamp(data: dict) -> str:
+    """
+    Extract timestamp for 311 alerts with fallback logic
+    Handles format: "Jun 18, 2025, 12:11:00.000 PM"
+    1. Try signal_timestamp first
+    2. Fall back to created_at
+    3. Final fallback to current time
+    """
+    try:
+        # First try signal_timestamp
+        signal_timestamp = data.get('signal_timestamp')
+        if signal_timestamp:
+            if isinstance(signal_timestamp, datetime):
+                return signal_timestamp.isoformat()
+            elif isinstance(signal_timestamp, str) and signal_timestamp.strip():
+                try:
+                    # Handle the specific format: "Jun 18, 2025, 12:11:00.000 PM"
+                    if 'AM' in signal_timestamp or 'PM' in signal_timestamp:
+                        parsed = datetime.strptime(
+                            signal_timestamp, "%b %d, %Y, %I:%M:%S.%f %p")
+                        return parsed.isoformat()
+                    else:
+                        # Try standard ISO format parsing
+                        parsed = datetime.fromisoformat(
+                            signal_timestamp.replace('Z', '+00:00'))
+                        return parsed.isoformat()
+                except:
+                    # If parsing fails, continue to fallback
+                    pass
+
+        # Fall back to created_at
+        created_at = data.get('created_at')
+        if created_at:
+            if isinstance(created_at, datetime):
+                return created_at.isoformat()
+            elif isinstance(created_at, str) and created_at.strip():
+                try:
+                    parsed = datetime.fromisoformat(
+                        created_at.replace('Z', '+00:00'))
+                    return parsed.isoformat()
+                except:
+                    return created_at
+
+        # Final fallback to current time
+        return datetime.utcnow().isoformat()
+
+    except Exception as e:
+        logger.warning(f"Error extracting 311 timestamp: {e}")
+        return datetime.utcnow().isoformat()
+
+
+def _extract_monitor_timestamp(data: dict) -> str:
+    """
+    Extract timestamp for monitor alerts from original_alert
+    Tries multiple timestamp fields in order of preference
+    """
+    try:
+        original_alert = data.get('original_alert', {})
+
+        # Try timestamp first (likely the original Reddit post timestamp)
+        timestamp = original_alert.get('timestamp')
+        if timestamp:
+            if isinstance(timestamp, datetime):
+                return timestamp.isoformat()
+            elif isinstance(timestamp, str) and timestamp.strip():
+                return timestamp
+
+        # Try event_date_str (date format like "2025-06-14")
+        event_date_str = original_alert.get('event_date_str')
+        if event_date_str and event_date_str.strip():
+            return event_date_str
+
+        # Try time_created as another fallback
+        time_created = original_alert.get('time_created')
+        if time_created:
+            if isinstance(time_created, datetime):
+                return time_created.isoformat()
+            elif isinstance(time_created, str) and time_created.strip():
+                return time_created
+
+        # Also try some other potential timestamp fields
+        for field in ['created_at', 'date_created', 'event_date']:
+            value = original_alert.get(field)
+            if value:
+                if isinstance(value, datetime):
+                    return value.isoformat()
+                elif isinstance(value, str) and value.strip():
+                    return value
+
+        # Final fallback to current time
+        return datetime.utcnow().isoformat()
+
+    except Exception as e:
+        logger.warning(f"Error extracting monitor timestamp: {e}")
+        return datetime.utcnow().isoformat()
+
+
 @alerts_router.get('/cache/info')
 async def get_cache_info():
     """Get information about current cache state"""
@@ -497,7 +593,7 @@ async def get_alert_stats(
         try:
             monitor_ref = db.collection('nyc_monitor_alerts')
             monitor_docs = monitor_ref.where(
-                'created_at', '>=', cutoff_time).stream()
+                'event_date', '>=', cutoff_time).stream()
             stats['monitor_alerts'] = sum(1 for _ in monitor_docs)
         except Exception as e:
             logger.error(f"Error counting monitor alerts: {e}")
@@ -506,7 +602,7 @@ async def get_alert_stats(
         try:
             signals_ref = db.collection('nyc_311_signals')
             signals_docs = signals_ref.where(
-                'created_at', '>=', cutoff_time).stream()
+                'signal_timestamp', '>=', cutoff_time).stream()
             stats['nyc_311_signals'] = sum(1 for _ in signals_docs)
         except Exception as e:
             logger.error(f"Error counting 311 signals: {e}")
