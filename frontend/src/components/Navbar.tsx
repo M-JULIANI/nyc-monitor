@@ -1,8 +1,10 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout, user } = useAuth();
 
   const navLinkClass = (path: string) =>
     `px-4 py-2 rounded text-sm font-medium transition-colors duration-200 ${
@@ -25,20 +27,21 @@ const Navbar = () => {
       </button>
       <div className="flex items-center gap-2">
         <button
-          onClick={() => navigate('/home')}
-          className={navLinkClass('/home')}
+          onClick={() => navigate('/')}
+          className={navLinkClass('/')}
         >
           Home
         </button>
+        {user?.role === 'admin' && (
         <button
-          onClick={() => navigate('/testing')}
-          className={navLinkClass('/testing')}
+          onClick={() => navigate('/admin')}
+          className={navLinkClass('/admin')}
         >
-          Testing
-        </button>
+          Admin
+        </button>)}
         <button
           onClick={() => {
-            localStorage.clear();
+            logout();
             navigate('/login');
           }}
           className="ml-4 px-4 py-2 rounded bg-red-600 text-white font-semibold text-sm hover:bg-red-700 transition-colors duration-200"

@@ -23,7 +23,13 @@ const App: React.FC = () => (
               </Layout>
             </ProtectedRoute>
           } />
-          <Route path="/" element={<Layout><Home /></Layout>} />
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Layout>
+                <Home />
+              </Layout>
+            </ProtectedRoute>
+          } />
           {/* Optionally, redirect all unknown routes to / */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

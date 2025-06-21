@@ -190,10 +190,11 @@ const MapView: React.FC = () => {
 
   const getIconSize = (priority: string): number => {
     switch (priority) {
-      case 'critical': return 24;
-      case 'high': return 20;
-      case 'medium': return 16;
-      default: return 20;
+      case 'critical': return 18;
+      case 'high': return 12;
+      case 'medium': return 8;
+      case 'low': return 4;
+      default: return 8;
     }
   };
 
