@@ -197,14 +197,6 @@ const MapView: React.FC = () => {
     }
   };
 
-  const getPriorityColor = (priority: string): string => {
-    switch (priority) {
-      case 'critical': return '#dc2626';
-      case 'high': return '#ea580c';
-      case 'medium': return '#d97706';
-      default: return '#65a30d';
-    }
-  };
 
   // Create GeoJSON for alert points (only used in priority mode)
   const alertsGeoJSON: GeoJSON.FeatureCollection = {
