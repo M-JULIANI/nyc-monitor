@@ -99,20 +99,7 @@ const MapView: React.FC = () => {
       // Time range filter - API sends 'date' field, not 'timestamp'
       const alertTime = new Date(alert.timestamp);
       const now = new Date();
-      const hoursAgo = (now.getTime() - alertTime.getTime()) / (1000 * 60 * 60);
-      
-      // Debug logging for first few alerts
-      if (alerts.indexOf(alert) < 3) {
-        console.log(`Alert ${alert.id}:`, {
-          date: alert.timestamp,
-          alertTime: alertTime.toISOString(),
-          now: now.toISOString(),
-          hoursAgo: hoursAgo.toFixed(2),
-          timeRangeHours: filter.timeRangeHours,
-          willShow: hoursAgo <= filter.timeRangeHours
-        });
-      }
-      
+      const hoursAgo = (now.getTime() - alertTime.getTime()) / (1000 * 60 * 60);      
       if (hoursAgo > filter.timeRangeHours) return false;
       
       return true;
@@ -268,6 +255,10 @@ const MapView: React.FC = () => {
     if (!isConnected) return;
     setSelectedAlert(alert);
   };
+
+  useEffect(() => { 
+    console.log('selectedAlert', selectedAlert);
+  }, [selectedAlert]);  
 
   return (
     <div className="relative w-full h-full">
