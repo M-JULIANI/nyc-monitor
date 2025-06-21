@@ -99,20 +99,7 @@ const MapView: React.FC = () => {
       // Time range filter - API sends 'date' field, not 'timestamp'
       const alertTime = new Date(alert.timestamp);
       const now = new Date();
-      const hoursAgo = (now.getTime() - alertTime.getTime()) / (1000 * 60 * 60);
-      
-      // Debug logging for first few alerts
-      if (alerts.indexOf(alert) < 3) {
-        console.log(`Alert ${alert.id}:`, {
-          date: alert.timestamp,
-          alertTime: alertTime.toISOString(),
-          now: now.toISOString(),
-          hoursAgo: hoursAgo.toFixed(2),
-          timeRangeHours: filter.timeRangeHours,
-          willShow: hoursAgo <= filter.timeRangeHours
-        });
-      }
-      
+      const hoursAgo = (now.getTime() - alertTime.getTime()) / (1000 * 60 * 60);      
       if (hoursAgo > filter.timeRangeHours) return false;
       
       return true;
@@ -268,6 +255,10 @@ const MapView: React.FC = () => {
     if (!isConnected) return;
     setSelectedAlert(alert);
   };
+
+  useEffect(() => { 
+    console.log('selectedAlert', selectedAlert);
+  }, [selectedAlert]);  
 
   return (
     <div className="relative w-full h-full">
@@ -555,26 +546,74 @@ const MapView: React.FC = () => {
               className="max-w-[320px]"
             >
               <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white shadow-xl">
-                <h4 className={`text-base font-semibold mb-2 flex items-center gap-2 text-white`}>
-                  <span>{getSourceIcon(selectedAlert.source)}</span>
-                  <span>{selectedAlert.title}</span>
-                </h4>
-                <p className="text-sm text-zinc-300 mb-2">
+                {/* Header */}
+                <div className="flex items-start gap-3 mb-3">
+                  <span className="text-xl">{getSourceIcon(selectedAlert.source)}</span>
+                  <div className="flex-1">
+                    <h4 className="text-base font-semibold text-white leading-tight">
+                      {selectedAlert.title}
+                    </h4>
+                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                      selectedAlert.priority === 'critical' ? 'bg-red-500 text-white' :
+                      selectedAlert.priority === 'high' ? 'bg-orange-500 text-white' :
+                      selectedAlert.priority === 'medium' ? 'bg-yellow-500 text-black' :
+                      'bg-green-500 text-white'
+                    }`}>
+                      {selectedAlert.priority.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <p className="text-sm text-zinc-300 mb-4 leading-relaxed">
                   {selectedAlert.description}
                 </p>
-                <div className="flex justify-between items-center text-xs text-zinc-300 mb-1">
-                  <span>
-                    📍 {selectedAlert.neighborhood}, {selectedAlert.borough}
-                  </span>
-                  <span className={`priority-badge priority-${selectedAlert.priority}`}>{selectedAlert.priority}</span>
+
+                {/* Key-Value Pairs */}
+                <div className="space-y-2 mb-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Location</span>
+                    <span className="text-sm text-white text-right">
+                      {[
+                        selectedAlert.neighborhood !== 'Unknown' ? selectedAlert.neighborhood : null,
+                        selectedAlert.borough !== 'Unknown' ? selectedAlert.borough : null
+                      ].filter(Boolean).join(', ') || 'Location not specified'}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Category</span>
+                    <span className="text-sm text-white capitalize flex items-center gap-1">
+                      <span>{getCategoryIcon(selectedAlert.category || 'general')}</span>
+                      {selectedAlert.category || 'General'}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Status</span>
+                    <span className="text-sm text-white capitalize">
+                      {selectedAlert.status}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Source</span>
+                    <span className="text-sm text-white capitalize">
+                      {selectedAlert.source}
+                    </span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Time</span>
+                    <span className="text-sm text-white">
+                      {new Date(selectedAlert.timestamp).toLocaleString()}
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-2 pt-2 border-t border-zinc-700 text-xs text-zinc-300">
-                  Status: <strong className="text-white">{selectedAlert.status}</strong> | 
-                  Source: <strong className="text-white">{selectedAlert.source}</strong> | 
-                  {new Date(selectedAlert.timestamp).toLocaleString()}
-                </div>
+
+                {/* Action Button */}
                 <button
-                  className="btn btn-primary w-full mt-3 text-xs"
+                  className="btn btn-primary w-full text-sm"
                   onClick={() => {
                     alert('Generate Report feature coming soon!');
                   }}
