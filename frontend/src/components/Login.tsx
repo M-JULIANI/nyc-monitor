@@ -9,7 +9,7 @@ const Login: React.FC = () => {
   const { login } = useAuth();
 
   // Get the redirect path from location state or default to home
-  const from = (location.state as any)?.from?.pathname || '/home';
+  const from = (location.state as any)?.from?.pathname || '/';
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-800 p-4">
