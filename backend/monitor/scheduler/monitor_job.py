@@ -391,8 +391,10 @@ class MonitorJob:
                     'id': alert_id,  # Use our generated ID
                     'title': alert.get('title', 'Untitled Alert'),
                     'description': alert.get('description', ''),
-                    'latitude': float(alert.get('coordinates', {}).get('lat', 40.7128)),
-                    'longitude': float(alert.get('coordinates', {}).get('lng', -74.0060)),
+
+                    # Safely handle coordinates with None checks
+                    'latitude': self._safe_float_conversion(alert.get('coordinates', {}).get('lat'), 40.7128),
+                    'longitude': self._safe_float_conversion(alert.get('coordinates', {}).get('lng'), -74.0060),
 
                     # Store both numeric severity AND text priority
                     # Numeric 1-10 scale from triage agent
@@ -656,6 +658,15 @@ class MonitorJob:
             return coordinates['borough']
 
         return 'Unknown'
+
+    def _safe_float_conversion(self, value, default):
+        """Safely convert value to float or return default if conversion fails"""
+        try:
+            if value is None:
+                return default
+            return float(value)
+        except (ValueError, TypeError):
+            return default
 
     def _generate_stats_report(self) -> Dict:
         """Generate comprehensive execution statistics report for monitor_runs collection"""
