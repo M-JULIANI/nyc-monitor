@@ -1,4 +1,5 @@
 import React from 'react';
+import { AlertPriority } from '../types';
 
 interface ReportCardProps {
   title: string;
@@ -6,7 +7,7 @@ interface ReportCardProps {
   type: string;
   borough: string;
   status: string;
-  priority: string;
+  priority: AlertPriority;
   author: string;
   createdAt: string;
   driveLink?: string;

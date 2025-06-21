@@ -1,5 +1,6 @@
 import React from 'react';
 import ReportCard from './ReportCard';
+import { AlertPriority } from '../types';
 
 const Reports: React.FC = () => {
   // Sample report data
@@ -13,7 +14,7 @@ const Reports: React.FC = () => {
       createdAt: '2024-01-15T09:30:00Z',
       author: 'AI Agent - Infrastructure',
       driveLink: 'https://docs.google.com/presentation/d/1ABC...',
-      priority: 'high',
+      priority: 'high' as AlertPriority,
       borough: 'Brooklyn'
     },
     {
@@ -24,7 +25,7 @@ const Reports: React.FC = () => {
       status: 'in_progress',
       createdAt: '2024-01-15T08:15:00Z',
       author: 'AI Agent - Traffic',
-      priority: 'medium',
+      priority: 'medium' as AlertPriority,
       borough: 'Manhattan'
     },
     {
@@ -36,7 +37,7 @@ const Reports: React.FC = () => {
       createdAt: '2024-01-14T16:45:00Z',
       author: 'AI Agent - Emergency',
       driveLink: 'https://docs.google.com/presentation/d/2DEF...',
-      priority: 'critical',
+      priority: 'critical' as AlertPriority,
       borough: 'All Boroughs'
     }
   ];

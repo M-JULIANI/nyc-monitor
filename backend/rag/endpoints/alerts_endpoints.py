@@ -260,13 +260,19 @@ async def get_recent_alerts(
             for doc in signals_query.stream():
                 data = doc.to_dict()
 
+                # Use calculated severity from rule-based triage, fallback to emergency logic
+                severity = data.get('severity')
+                if severity is None:
+                    # Fallback for old records without severity
+                    severity = 7 if data.get('is_emergency', False) else 3
+
                 # Ultra-minimal transformation
                 alert = {
                     'id': doc.id,
                     'title': f"{data.get('complaint_type', 'NYC 311')}: {(data.get('descriptor', '') or '')[:50]}",
                     'description': data.get('descriptor', ''),
                     'source': '311',
-                    'severity': 7 if data.get('is_emergency', False) else 3,
+                    'severity': severity,
                     'timestamp': _extract_311_timestamp(data),
                     'coordinates': {
                         'lat': data.get('latitude', 40.7589),

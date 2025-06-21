@@ -391,9 +391,17 @@ class MonitorJob:
                     'id': alert_id,  # Use our generated ID
                     'title': alert.get('title', 'Untitled Alert'),
                     'description': alert.get('description', ''),
-                    'latitude': float(alert.get('coordinates', {}).get('lat', 40.7128)),
-                    'longitude': float(alert.get('coordinates', {}).get('lng', -74.0060)),
-                    'priority': self._map_severity_to_priority(alert.get('severity', 'medium')),
+
+                    # Safely handle coordinates with None checks
+                    'latitude': self._safe_float_conversion(alert.get('coordinates', {}).get('lat'), 40.7128),
+                    'longitude': self._safe_float_conversion(alert.get('coordinates', {}).get('lng'), -74.0060),
+
+                    # Store both numeric severity AND text priority
+                    # Numeric 1-10 scale from triage agent
+                    'severity': alert.get('severity', 5),
+                    # Text priority for frontend
+                    'priority': self._map_severity_to_priority(alert.get('severity', 5)),
+
                     'source': self._map_source(alert.get('source', 'reddit')),
                     'status': self._map_status(alert.get('status', 'pending')),
                     'timestamp': datetime.utcnow().isoformat(),
@@ -551,9 +559,23 @@ class MonitorJob:
         except Exception:
             return datetime.utcnow()
 
-    def _map_severity_to_priority(self, severity: str) -> str:
+    def _map_severity_to_priority(self, severity) -> str:
         """Map alert severity to frontend priority"""
-        severity = str(severity).lower() if severity else 'medium'
+        # Handle numeric severity scores from triage agent (1-10 scale)
+        if isinstance(severity, (int, float)):
+            if severity >= 9:
+                return 'critical'  # 9-10: Critical emergencies
+            elif severity >= 7:
+                return 'high'      # 7-8: High priority
+            elif severity >= 5:
+                return 'medium'    # 5-6: Medium priority
+            elif severity >= 3:
+                return 'low'       # 3-4: Low priority
+            else:
+                return 'low'       # 1-2: Normal activity (still low priority)
+
+        # Handle string severity values (fallback for other sources)
+        severity_str = str(severity).lower() if severity else 'medium'
         priority_mapping = {
             'critical': 'critical',
             'high': 'high',
@@ -563,7 +585,7 @@ class MonitorJob:
             'moderate': 'medium',
             'minor': 'low'
         }
-        return priority_mapping.get(severity, 'medium')
+        return priority_mapping.get(severity_str, 'medium')
 
     def _map_source(self, source: str) -> str:
         """Map alert source to frontend source"""
@@ -636,6 +658,15 @@ class MonitorJob:
             return coordinates['borough']
 
         return 'Unknown'
+
+    def _safe_float_conversion(self, value, default):
+        """Safely convert value to float or return default if conversion fails"""
+        try:
+            if value is None:
+                return default
+            return float(value)
+        except (ValueError, TypeError):
+            return default
 
     def _generate_stats_report(self) -> Dict:
         """Generate comprehensive execution statistics report for monitor_runs collection"""
