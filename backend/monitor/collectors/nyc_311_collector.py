@@ -11,6 +11,7 @@ import logging
 from collections import defaultdict
 
 from .base_collector import BaseCollector
+from ..types.alert_categories import categorize_311_complaint, get_alert_type_info
 
 logger = logging.getLogger(__name__)
 
@@ -384,6 +385,10 @@ class NYC311Collector(BaseCollector):
             keyword_analysis = self._analyze_keywords(
                 complaint_type, descriptor)
 
+            # Use the new categorization system
+            categorized_type = categorize_311_complaint(complaint_type)
+            alert_type_info = get_alert_type_info(categorized_type)
+
             # Determine priority level based on complaint type and keywords
             is_emergency = (complaint_type in self.emergency_complaint_types or
                             any(keyword.upper() in descriptor.upper() for keyword in self.emergency_keywords))
@@ -395,8 +400,8 @@ class NYC311Collector(BaseCollector):
                 'content': f"311 Request: {complaint_type}\nDescription: {descriptor}\nBorough: {borough}\nAgency: {agency_name}\nStatus: {status}",
                 # Generic 311 portal URL
                 'url': f"https://portal.311.nyc.gov/article/?kanumber=KA-01010",
-                # Priority scoring
-                'score': 5 + (5 if is_emergency else 0) + (3 if is_event else 0),
+                # Priority scoring based on alert type
+                'score': alert_type_info.default_severity + (2 if is_emergency else 0),
                 'comments': 0,  # 311 doesn't have comments
                 'shares': 0,    # 311 doesn't have shares
                 'created_at': created_at,

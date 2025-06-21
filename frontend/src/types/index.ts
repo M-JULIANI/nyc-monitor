@@ -63,6 +63,9 @@ export interface Alert {
   estimated_attendance?: string;
   severity?: number;
   
+  // Categorization fields (simplified to just main category)
+  category?: string;
+  
   // Additional metadata
   keywords?: string[];
   signals?: string[];

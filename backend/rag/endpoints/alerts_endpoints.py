@@ -1,3 +1,4 @@
+from monitor.types.alert_categories import get_categories_summary, ALERT_TYPES, categorize_311_complaint, get_alert_type_info, normalize_category, get_main_categories
 from fastapi import APIRouter, HTTPException, Query
 from sse_starlette.sse import EventSourceResponse
 from google.cloud import firestore
@@ -6,8 +7,14 @@ import asyncio
 from datetime import datetime, timedelta
 import json
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import time
+
+# Import the new categorization system
+import sys
+import os
+backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, backend_dir)
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +121,9 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
             'keywords': [signal.get('complaint_type', '')],
             'signals': ['311'],
             'url': f"https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+
+            # Simplified categorization - just the main category
+            'category': normalize_category(signal.get('category', 'general')),
 
             # NYC 311 specific metadata
             'complaint_type': signal.get('complaint_type', ''),
@@ -230,7 +240,9 @@ async def get_recent_alerts(
                     'coordinates': {
                         'lat': data.get('original_alert', {}).get('latitude', 40.7589),
                         'lng': data.get('original_alert', {}).get('longitude', -73.9851)
-                    }
+                    },
+                    # Simplified categorization - just the main category
+                    'category': normalize_category(data.get('category', 'general')),
                 }
                 all_alerts.append(alert)
 
@@ -253,7 +265,7 @@ async def get_recent_alerts(
             signals_ref = db.collection('nyc_311_signals')
             signals_query = (signals_ref
                              .where('signal_timestamp', '>=', cutoff_time)
-                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency'])
+                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category'])
                              .limit(signals_limit))
 
             signals_count = 0
@@ -266,10 +278,22 @@ async def get_recent_alerts(
                     # Fallback for old records without severity
                     severity = 7 if data.get('is_emergency', False) else 3
 
+                # Get categorization (may be stored in DB or need to calculate)
+                complaint_type = data.get('complaint_type', '')
+
+                # Get the main category (simplified approach)
+                category = data.get('category')
+                if not category:
+                    # Calculate from event_type if available, otherwise from complaint_type
+                    event_type = data.get(
+                        'event_type') or categorize_311_complaint(complaint_type)
+                    alert_type_info = get_alert_type_info(event_type)
+                    category = alert_type_info.category.value
+
                 # Ultra-minimal transformation
                 alert = {
                     'id': doc.id,
-                    'title': f"{data.get('complaint_type', 'NYC 311')}: {(data.get('descriptor', '') or '')[:50]}",
+                    'title': f"{complaint_type}: {(data.get('descriptor', '') or '')[:50]}",
                     'description': data.get('descriptor', ''),
                     'source': '311',
                     'severity': severity,
@@ -277,7 +301,9 @@ async def get_recent_alerts(
                     'coordinates': {
                         'lat': data.get('latitude', 40.7589),
                         'lng': data.get('longitude', -73.9851)
-                    }
+                    },
+                    # Simplified categorization - just the main category
+                    'category': normalize_category(category),
                 }
                 all_alerts.append(alert)
                 signals_count += 1
@@ -618,3 +644,38 @@ async def get_alert_stats(
     except Exception as e:
         logger.error(f"Error generating stats: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate stats")
+
+
+@alerts_router.get('/categories')
+async def get_alert_categories():
+    """
+    Get all available alert categories and types with metadata for frontend use
+
+    Returns:
+        Dictionary with categorized alert types including descriptions
+    """
+    try:
+        logger.info("📋 Fetching alert categories and types")
+
+        # Get the categories summary from our categorization system
+        categories = get_categories_summary()
+
+        # Add additional metadata for frontend
+        response = {
+            'categories': categories,
+            # Simplified list for frontend filtering
+            'main_categories': get_main_categories(),
+            'total_categories': len(categories),
+            'total_alert_types': len(ALERT_TYPES),
+            'timestamp': datetime.utcnow().isoformat(),
+            'version': '1.0'
+        }
+
+        logger.info(
+            f"✅ Returned {len(categories)} categories with {len(ALERT_TYPES)} alert types")
+        return response
+
+    except Exception as e:
+        logger.error(f"❌ Error fetching alert categories: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch alert categories: {str(e)}")

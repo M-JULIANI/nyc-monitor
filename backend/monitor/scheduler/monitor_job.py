@@ -8,6 +8,11 @@ from monitor.collectors.hackernews_collector import HackerNewsCollector
 from monitor.collectors.twitter_collector import TwitterCollector
 from monitor.agents.triage_agent import TriageAgent
 from monitor.storage.firestore_manager import FirestoreManager
+from monitor.types.alert_categories import (
+    categorize_monitor_event,
+    get_alert_type_info,
+    AlertCategory
+)
 import os
 import asyncio
 import logging
@@ -385,6 +390,17 @@ class MonitorJob:
                 # Extract event date from alert title or use current date as fallback
                 event_date = self._extract_event_date_from_alert(alert)
 
+                # Use the new categorization system
+                event_type_from_alert = alert.get('event_type', 'general')
+                categorized_event_type = categorize_monitor_event(
+                    event_type_from_alert,
+                    alert.get('title', ''),
+                    alert.get('description', '')
+                )
+
+                # Get alert type information for metadata
+                alert_type_info = get_alert_type_info(categorized_event_type)
+
                 # Enhance alert with additional metadata and frontend-compatible format
                 enhanced_alert = {
                     # Frontend-expected fields (no transformation needed)
@@ -398,15 +414,20 @@ class MonitorJob:
 
                     # Store both numeric severity AND text priority
                     # Numeric 1-10 scale from triage agent
-                    'severity': alert.get('severity', 5),
+                    'severity': alert.get('severity', alert_type_info.default_severity),
                     # Text priority for frontend
-                    'priority': self._map_severity_to_priority(alert.get('severity', 5)),
+                    'priority': self._map_severity_to_priority(alert.get('severity', alert_type_info.default_severity)),
 
                     'source': self._map_source(alert.get('source', 'reddit')),
                     'status': self._map_status(alert.get('status', 'pending')),
                     'timestamp': datetime.utcnow().isoformat(),
                     'neighborhood': self._extract_neighborhood(alert),
                     'borough': self._extract_borough(alert),
+
+                    # Enhanced categorization fields
+                    'event_type': categorized_event_type,  # Normalized event type
+                    'category': alert_type_info.category.value,  # Alert category
+                    'alert_type_name': alert_type_info.name,  # Human-readable name
 
                     # Additional metadata for backend use
                     'created_at': datetime.utcnow(),

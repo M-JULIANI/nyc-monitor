@@ -13,7 +13,7 @@ interface FilterState {
   timeRangeHours: number; // Hours back from now (1-168 for 7 days)
 }
 
-type ViewMode = 'priority' | 'source';
+type ViewMode = 'priority' | 'source' | 'category';
 
 interface MapStateContextType {
   viewport: ViewportState;

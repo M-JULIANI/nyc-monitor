@@ -173,8 +173,9 @@ class TriageAgent:
 } for alert in recent_alerts_summary[:10]], indent=2, default=str)}
 """
 
+        # Enhanced triage prompt with specific categorization requirements
         prompt = f"""
-You are a NYC monitoring triage agent. Analyze these data signals and assign severity scores (1-10).
+You are a NYC monitoring triage agent. Analyze these data signals and assign SPECIFIC event types and categories instead of generic "general" classifications.
 
 **Current Time**: {current_time}
 
@@ -183,6 +184,30 @@ You are a NYC monitoring triage agent. Analyze these data signals and assign sev
 {recent_alerts_snippet}
 
 **Raw Data**: {raw_data_snippet}...
+
+**CRITICAL REQUIREMENT - SPECIFIC CATEGORIZATION**: 
+You MUST categorize each alert with specific event types. DO NOT use "general" unless absolutely no other category fits.
+
+**AVAILABLE EVENT TYPES** (choose the most specific one):
+
+**INFRASTRUCTURE**: water_system, power_outage, elevator, gas_leak, plumbing
+**EMERGENCY**: fire, medical_emergency, structural_emergency, hazmat  
+**TRANSPORTATION**: traffic_incident, transit_disruption, parking_violation, street_closure
+**EVENTS**: parade, festival, concert, protest, filming
+**SAFETY**: crime, building_safety, public_safety
+**ENVIRONMENT**: noise_complaint, air_quality, sanitation, water_quality
+**HOUSING**: heat_hot_water, housing_violation
+
+**CATEGORIZATION GUIDELINES**:
+1. **Water issues** → "water_system" (hydrants, leaks, water main breaks)
+2. **Power/electrical** → "power_outage" 
+3. **Building emergencies** → "structural_emergency" or "building_safety"
+4. **Traffic/roads** → "traffic_incident" or "street_closure"
+5. **Public events** → "parade", "festival", "concert", "protest"
+6. **Crime/safety** → "crime", "public_safety"
+7. **Noise issues** → "noise_complaint"
+8. **Environmental** → "air_quality", "sanitation"
+9. **311 emergency types** → match to appropriate emergency category
 
 **DUPLICATE DETECTION REQUIREMENTS**:
 1. **Check Recent Alerts**: Before creating new alerts, compare against recent alerts from the last 6 hours
@@ -274,8 +299,8 @@ Only create alerts if you can identify SPECIFIC locations with actionable geogra
       "event_date": "2025-06-01",
       "area": "Specific Area - Street/Venue Description",
       "severity": 8,
-      "category": "event",
-      "event_type": "parade",
+      "category": "infrastructure",
+      "event_type": "water_system",
       "signals": ["reddit", "twitter", "311"],
       "description": "Detailed description with specific streets, times, and transportation impacts. Cross-referenced across multiple sources.",
       "keywords": ["example", "keywords"],
@@ -342,6 +367,7 @@ IMPORTANT:
 - ONLY create alerts with specific, actionable location information
 - Include "specific_streets", "cross_streets", "venue_address", and "coordinates" fields when possible
 - Use descriptive titles WITHOUT date prefixes - dates go in separate "event_date" field
+- Use SPECIFIC event_type from the list above - NO "general" unless absolutely necessary
 - If no locationally-specific alerts can be created, use an empty alerts array: "alerts": []
 """
         return prompt
