@@ -63,6 +63,9 @@ const normalizeAlert = (rawAlert: any): Alert => {
     estimated_attendance: originalData.estimated_attendance || rawAlert.estimated_attendance || '',
     severity: originalData.severity || rawAlert.severity || 0,
     
+    // Categorization fields (simplified to just main category)
+    category: rawAlert.category || original.category || 'general',
+    
     // Additional data
     keywords: originalData.keywords || rawAlert.keywords || [],
     signals: originalData.signals || rawAlert.signals || [],
