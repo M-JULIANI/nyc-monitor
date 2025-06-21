@@ -59,10 +59,10 @@ These are basically the agents. The search one will do most of the work, so mayb
     - [x] add time slider to filter items
     - [x] ensure different priorities are being populated correctly
 - [ ] alert cards on map
-    - [ ] display category
-    - [ ] display status
-    - [ ] display source
-    - [ ] display location
+    - [x] display category
+    - [x] display status
+    - [x] display source
+    - [x] display location
     - [ ] display link to report, if it exists
     - [ ] display link to agent investigation
 - [ ] ensure twitter collector is actually working?

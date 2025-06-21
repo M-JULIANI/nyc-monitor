@@ -102,8 +102,8 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
             'priority': 'high' if signal.get('is_emergency', False) else 'medium',
             'status': signal.get('status', 'Open'),
             'timestamp': _extract_311_timestamp(signal),
-            'neighborhood': signal.get('borough', 'Unknown'),
-            'borough': signal.get('borough', 'Unknown'),
+            'neighborhood': signal.get('full_signal_data', {}).get('metadata', {}).get('incident_zip', signal.get('incident_zip', 'Unknown')),
+            'borough': signal.get('full_signal_data', {}).get('metadata', {}).get('borough', signal.get('borough', 'Unknown')),
             'coordinates': {
                 'lat': signal.get('latitude') or 40.7589,
                 'lng': signal.get('longitude') or -73.9851
@@ -241,6 +241,9 @@ async def get_recent_alerts(
                         'lat': data.get('original_alert', {}).get('latitude', 40.7589),
                         'lng': data.get('original_alert', {}).get('longitude', -73.9851)
                     },
+                    # Extract neighborhood and borough from original_alert
+                    'neighborhood': data.get('original_alert', {}).get('neighborhood', 'Unknown'),
+                    'borough': data.get('original_alert', {}).get('borough', 'Unknown'),
                     # Simplified categorization - just the main category
                     'category': normalize_category(data.get('category', 'general')),
                 }
@@ -265,7 +268,7 @@ async def get_recent_alerts(
             signals_ref = db.collection('nyc_311_signals')
             signals_query = (signals_ref
                              .where('signal_timestamp', '>=', cutoff_time)
-                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category'])
+                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category', 'full_signal_data', 'incident_zip', 'borough'])
                              .limit(signals_limit))
 
             signals_count = 0
@@ -302,6 +305,9 @@ async def get_recent_alerts(
                         'lat': data.get('latitude', 40.7589),
                         'lng': data.get('longitude', -73.9851)
                     },
+                    # Extract neighborhood and borough from full_signal_data.metadata
+                    'neighborhood': data.get('full_signal_data', {}).get('metadata', {}).get('incident_zip', data.get('incident_zip', 'Unknown')),
+                    'borough': data.get('full_signal_data', {}).get('metadata', {}).get('borough', data.get('borough', 'Unknown')),
                     # Simplified categorization - just the main category
                     'category': normalize_category(category),
                 }
