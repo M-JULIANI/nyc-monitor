@@ -343,21 +343,6 @@ CLOUD_RUN_BACKEND_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-backend
 deploy: deploy-api deploy-web deploy-monitor
 	@echo "Deployment completed"
 
-deploy-vertex-ai: check-gcloud
-	@echo "Deploying backend to Vertex AI..."
-	@if [ -f "backend/deployment/deploy.py" ]; then \
-		cd backend && \
-		GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64="$(GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64)" \
-		GOOGLE_CUSTOM_SEARCH_API_KEY="$(GOOGLE_CUSTOM_SEARCH_API_KEY)" \
-		GOOGLE_CUSTOM_SEARCH_ENGINE_ID="$(GOOGLE_CUSTOM_SEARCH_ENGINE_ID)" \
-		GOOGLE_MAPS_API_KEY="$(GOOGLE_MAPS_API_KEY)" \
-		NYC_311_APP_TOKEN="$(NYC_311_APP_TOKEN)" \
-		poetry run python deployment/deploy.py; \
-	else \
-		echo "Error: backend/deployment/deploy.py not found"; \
-		exit 1; \
-	fi
-
 deploy-api: check-docker check-gcloud
 	@echo "Deploying FastAPI backend to Cloud Run..."
 	@if [ -z "$(GOOGLE_CLIENT_ID)" ]; then \
@@ -719,7 +704,6 @@ help:
 	@echo "  make build-monitor - Build monitor system image"
 	@echo "  make deploy           - Deploy all services (backend, frontend, monitor)"
 	@echo "  make deploy-api   - Deploy fastapi backend"
-	@echo "  make deploy-vertex-ai   - Deploy backend agent to Vertex AI"
 	@echo "  make deploy-web  - Deploy frontend container"
 	@echo ""
 	@echo "NYC Monitor System Commands:"
