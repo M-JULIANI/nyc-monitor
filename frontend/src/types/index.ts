@@ -70,6 +70,11 @@ export interface Alert {
   keywords?: string[];
   signals?: string[];
   url?: string;
+  
+  // Investigation & Report fields
+  reportUrl?: string;     // URL to generated Google Slides report
+  traceId?: string;       // ID to fetch agent trace from Firestore
+  investigationId?: string; // ID of the investigation that was run
 }
 
 export interface User {

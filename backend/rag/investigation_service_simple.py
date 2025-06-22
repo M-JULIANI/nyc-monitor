@@ -43,95 +43,187 @@ class SimpleInvestigationService:
 
     async def investigate_alert(self, alert_data: AlertData) -> tuple[str, str]:
         """
-        Simple investigation using direct model calls (no ADK deployment needed)
-
-        Returns:
-            Tuple of (investigation_results_string, investigation_id)
+        Execute investigation using the minimal working agent approach.
+        This provides the best of both worlds: proven workflow + web search.
         """
         try:
             # Create investigation state
             investigation_state = state_manager.create_investigation(
                 alert_data)
             logger.info(
-                f"Created investigation {investigation_state.investigation_id}")
+                f"🚀 Simple investigation created: {investigation_state.investigation_id}")
 
             # Initialize distributed tracing
             trace_id = investigation_state.investigation_id
             tracer.start_trace(
                 trace_id=trace_id,
-                operation_name=f"simple_investigate_alert:{alert_data.event_type}",
+                operation_name=f"investigate_alert_simple:{alert_data.event_type}",
                 metadata={
                     "alert_id": alert_data.alert_id,
                     "event_type": alert_data.event_type,
                     "location": alert_data.location,
                     "severity": alert_data.severity,
                     "investigation_id": investigation_state.investigation_id,
-                    "approach": "simple_model_direct"
+                    "approach": "simple_minimal_working_agent"
                 }
             )
 
             # Start progress tracking
             progress_tracker.start_investigation(
                 investigation_state.investigation_id)
+
+            # Use the minimal working agent for actual artifact collection
+            from .agents.minimal_working_agent import execute_minimal_investigation
+
+            logger.info(
+                f"🤖 Executing minimal working agent for investigation {investigation_state.investigation_id}")
+
+            # Prepare investigation data for the minimal agent
+            investigation_data = {
+                "investigation_id": investigation_state.investigation_id,
+                "alert_data": {
+                    "alert_id": alert_data.alert_id,
+                    "event_type": alert_data.event_type,
+                    "location": alert_data.location,
+                    "severity": alert_data.severity,
+                    "summary": alert_data.summary,
+                    "sources": alert_data.sources,
+                    "timestamp": alert_data.timestamp.isoformat() if hasattr(alert_data.timestamp, 'isoformat') else str(alert_data.timestamp)
+                }
+            }
+
+            # Execute the minimal working agent
+            agent_result = await execute_minimal_investigation(investigation_data)
+
+            logger.info(
+                f"🎯 Minimal working agent completed for investigation {investigation_state.investigation_id}")
+
+            # Update investigation state with results
+            if agent_result.get("success"):
+                state_manager.update_investigation(investigation_state.investigation_id, {
+                    "iteration_count": investigation_state.iteration_count + 1,
+                    "findings": investigation_state.findings + [
+                        f"Minimal working agent completed successfully",
+                        f"Generated {agent_result.get('maps_generated', 0)} maps",
+                        f"Collected {agent_result.get('images_collected', 0)} images",
+                        f"Total artifacts: {agent_result.get('total_artifacts', 0)}"
+                    ],
+                    "confidence_score": 0.9,
+                    "is_complete": True
+                })
+
+                # Mark progress as completed
+                progress_tracker.complete_investigation(
+                    investigation_state.investigation_id,
+                    "Investigation completed successfully via minimal working agent"
+                )
+
+                investigation_summary = f"""Investigation Results for Alert {alert_data.alert_id}:
+
+Event: {alert_data.event_type} at {alert_data.location}
+Severity: {alert_data.severity}/10
+Status: Investigation Complete (Simple + Minimal Working Agent)
+Investigation ID: {investigation_state.investigation_id}
+
+🎯 Minimal Working Agent Results:
+✅ Workflow Status: {agent_result.get('workflow_status', 'unknown')}
+✅ Maps Generated: {agent_result.get('maps_generated', 0)} satellite maps
+✅ Images Collected: {agent_result.get('images_collected', 0)} images
+✅ Screenshots: {agent_result.get('screenshots_collected', 0)} web search screenshots
+✅ Total Artifacts: {agent_result.get('total_artifacts', 0)}
+
+📋 Artifact Breakdown:
+{agent_result.get('artifact_breakdown', {})}
+
+📝 Summary: {agent_result.get('summary', 'Investigation completed')}
+
+🔗 Agent Response: {agent_result.get('agent_response', 'No detailed response')[:500]}...
+
+Investigation completed successfully via Simple + Minimal Working Agent approach."""
+
+                return (investigation_summary, investigation_state.investigation_id)
+
+            else:
+                # Agent failed, fall back to model-only approach
+                logger.warning(
+                    f"⚠️ Minimal working agent failed, falling back to model-only approach")
+
+                # Fall back to the original model-based investigation
+                return await self._execute_model_investigation(alert_data, investigation_state)
+
+        except Exception as e:
+            logger.error(f"❌ Simple investigation failed: {e}")
+            return (f"Investigation failed for alert {alert_data.alert_id}: {str(e)}", "")
+
+    async def _execute_model_investigation(self, alert_data: AlertData, investigation_state):
+        """
+        Fallback method: Execute investigation using direct model calls (original approach).
+        Used when the minimal working agent fails.
+        """
+        try:
+            logger.info(
+                f"🔄 Using fallback model investigation for {investigation_state.investigation_id}")
+
+            # Update progress
             progress_tracker.add_progress(
                 investigation_id=investigation_state.investigation_id,
                 status=ProgressStatus.AGENT_ACTIVE,
-                active_agent="simple_investigation_model",
-                message="Starting direct model investigation"
+                active_agent="simple_model",
+                message="Fallback to direct model investigation"
             )
 
-            # Create investigation prompt (comprehensive but single-call)
-            investigation_prompt = self._create_investigation_prompt(
+            # Initialize Vertex AI if not already done
+            if not hasattr(self, 'vertex_ai_initialized'):
+                await self._initialize_vertex_ai()
+
+            # Create investigation prompt
+            prompt = self._create_investigation_prompt(
                 alert_data, investigation_state)
 
-            # Execute investigation via direct model call
+            # Call Vertex AI model
+            model = GenerativeModel(self.model_name)
+
             logger.info(
-                f"Starting model investigation for alert {alert_data.alert_id}")
+                f"📤 Calling Vertex AI model for investigation {investigation_state.investigation_id}")
+            response = await model.generate_content_async(prompt)
 
-            try:
-                # Single model call for investigation
-                response = self.model.generate_content(investigation_prompt)
+            # Parse response
+            investigation_result = self._parse_investigation_response(
+                response.text)
 
-                if response and response.text:
-                    # Parse structured response
-                    investigation_result = self._parse_investigation_response(
-                        response.text)
+            # Update investigation state
+            state_manager.update_investigation(investigation_state.investigation_id, {
+                "iteration_count": investigation_state.iteration_count + 1,
+                "findings": investigation_result.get("findings", ["Model investigation completed"]),
+                "confidence_score": investigation_result.get("confidence_score", 0.7),
+                "is_complete": True
+            })
 
-                    # Update investigation state with results
-                    state_manager.update_investigation(investigation_state.investigation_id, {
-                        "iteration_count": 1,
-                        "findings": investigation_result.get("findings", []),
-                        "confidence_score": investigation_result.get("confidence_score", 0.7),
-                        "is_complete": True
-                    })
+            # Mark progress as completed
+            progress_tracker.complete_investigation(
+                investigation_state.investigation_id,
+                "Investigation completed via fallback model approach"
+            )
 
-                    # Complete progress tracking
-                    progress_tracker.complete_investigation(
-                        investigation_state.investigation_id,
-                        "Simple investigation completed"
-                    )
+            # Format results
+            formatted_results = self._format_investigation_results(
+                alert_data, investigation_state, investigation_result)
 
-                    # Return formatted results
-                    return self._format_investigation_results(alert_data, investigation_state, investigation_result), investigation_state.investigation_id
-
-                else:
-                    raise Exception("Empty response from model")
-
-            except Exception as model_error:
-                logger.error(f"Model investigation failed: {model_error}")
-
-                # Mark progress as error
-                progress_tracker.error_investigation(
-                    investigation_state.investigation_id,
-                    str(model_error)
-                )
-
-                # Return fallback response
-                return self._create_fallback_response(alert_data, investigation_state, str(model_error)), investigation_state.investigation_id
+            return (formatted_results, investigation_state.investigation_id)
 
         except Exception as e:
-            logger.error(f"Error during simple investigation: {e}")
-            return f"Investigation failed for alert {alert_data.alert_id}: {str(e)}", ""
+            logger.error(f"❌ Fallback model investigation failed: {e}")
+
+            # Mark progress as error
+            progress_tracker.error_investigation(
+                investigation_state.investigation_id,
+                str(e)
+            )
+
+            # Create fallback response
+            fallback_response = self._create_fallback_response(
+                alert_data, investigation_state, str(e))
+            return (fallback_response, investigation_state.investigation_id)
 
     def _create_investigation_prompt(self, alert_data: AlertData, investigation_state) -> str:
         """Create comprehensive investigation prompt for single model call"""

@@ -22,6 +22,7 @@ from ..tools.map_tools import (
     generate_investigation_timeline
 )
 from ..prompts.research import return_research_instructions
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,42 @@ def create_research_agent(
         model=model,
         name=name,
         instruction=return_research_instructions(),
-        tools=tools
+        tools=tools,
+        before_agent_callback=_research_agent_auto_execute_callback,
+        generate_content_config=types.GenerateContentConfig(temperature=0.01),
     )
 
     logger.info(f"Created Research Agent '{name}' with {len(tools)} tools")
     return agent
+
+# Add callback function for auto-execution
+
+
+def _research_agent_auto_execute_callback(callback_context):
+    """Auto-execute mandatory artifact collection when research agent is activated."""
+    logger.info("🚨 RESEARCH AGENT ACTIVATED - AUTO-EXECUTING MANDATORY TOOLS")
+
+    # Extract context from the callback
+    investigation_id = "unknown"
+    location = "Washington Square Park, Manhattan"  # Default for testing
+
+    # Try to extract from session state
+    if hasattr(callback_context, 'state') and callback_context.state:
+        investigation_id = callback_context.state.get(
+            "investigation_id", investigation_id)
+        location = callback_context.state.get("location", location)
+
+    logger.info(
+        f"🎯 Auto-executing with investigation_id={investigation_id}, location={location}")
+
+    # Set a flag in the agent context to trigger auto-execution
+    if hasattr(callback_context, '_invocation_context') and callback_context._invocation_context:
+        agent = callback_context._invocation_context.agent
+        if hasattr(agent, '_auto_execute_context'):
+            agent._auto_execute_context = {
+                "investigation_id": investigation_id,
+                "location": location,
+                "trigger_auto_execute": True
+            }
+
+    return None

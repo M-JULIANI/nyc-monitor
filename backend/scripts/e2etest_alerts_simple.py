@@ -26,13 +26,13 @@ def test_server_health():
         if response.status_code == 200:
             print("✅ Server is running")
             print(f"   Response: {response.json()}")
-            return True
+            assert True
         else:
             print(f"❌ Server health check failed: {response.status_code}")
-            return False
+            assert False, f"Server health check failed: {response.status_code}"
     except Exception as e:
         print(f"❌ Server is not running: {e}")
-        return False
+        assert False, f"Server is not running: {e}"
 
 
 def test_recent_endpoint():
@@ -48,14 +48,14 @@ def test_recent_endpoint():
         if response.status_code != 200:
             print(f"❌ Recent endpoint failed: {response.status_code}")
             print(f"Response text: {response.text}")
-            return False
+            assert False, f"Recent endpoint failed: {response.status_code}"
 
         try:
             data = response.json()
         except json.JSONDecodeError as e:
             print(f"❌ Invalid JSON response: {e}")
             print(f"Response text: {response.text}")
-            return False
+            assert False, f"Invalid JSON response: {e}"
 
         print(f"✅ Recent endpoint successful")
         print(
@@ -82,11 +82,11 @@ def test_recent_endpoint():
         else:
             print(f"⚠️  Unexpected response structure: {data}")
 
-        return True
+        assert True
 
     except Exception as e:
         print(f"❌ Recent endpoint test failed: {e}")
-        return False
+        assert False, f"Recent endpoint test failed: {e}"
 
 
 def test_recent_with_limit():
@@ -101,7 +101,7 @@ def test_recent_with_limit():
             print(
                 f"❌ Recent endpoint with limit failed: {response.status_code}")
             print(f"Response: {response.text}")
-            return False
+            assert False, f"Recent endpoint with limit failed: {response.status_code}"
 
         data = response.json()
         alerts = data.get('alerts', [])
@@ -114,11 +114,11 @@ def test_recent_with_limit():
             print(
                 f"⚠️  Limit not respected: got {len(alerts)}, expected max 3")
 
-        return True
+        assert True
 
     except Exception as e:
         print(f"❌ Recent endpoint with limit test failed: {e}")
-        return False
+        assert False, f"Recent endpoint with limit test failed: {e}"
 
 
 def test_stream_endpoint_basic():
@@ -143,15 +143,15 @@ def test_stream_endpoint_basic():
             else:
                 print(f"   - Content-type: {content_type}")
 
-            return True
+            assert True
         else:
             print(f"❌ Stream endpoint failed: {response.status_code}")
             print(f"Response: {response.text}")
-            return False
+            assert False, f"Stream endpoint failed: {response.status_code}"
 
     except Exception as e:
         print(f"❌ Stream endpoint test failed: {e}")
-        return False
+        assert False, f"Stream endpoint test failed: {e}"
 
 
 def main():

@@ -6,6 +6,7 @@ from rag.investigation.tracing import get_distributed_tracer, TraceEventType
 import asyncio
 import sys
 import os
+from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -79,13 +80,13 @@ def test_basic_tracing():
         print(
             f"   {i+1}. [{event['timestamp']}] {event['type']}: {event.get('operation', event.get('message_type', 'N/A'))}")
 
+    assert trace_id is not None
     return trace_id
 
 
 async def test_investigation_with_tracing():
     """Test tracing with a mock investigation."""
-    from rag.investigation_service import investigate_alert
-    from datetime import datetime
+    from rag.investigation_service_simple import investigate_alert_simple as investigate_alert
 
     # Create a test alert
     alert_data = AlertData(
@@ -94,7 +95,7 @@ async def test_investigation_with_tracing():
         location="Brooklyn Bridge",
         severity=7,
         summary="Test investigation for tracing",
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         sources=["test_system"]
     )
 

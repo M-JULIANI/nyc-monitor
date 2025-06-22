@@ -47,7 +47,7 @@ export const MapStateProvider: React.FC<MapStateProviderProps> = ({ children }) 
   });
 
   // View mode state
-  const [viewMode, setViewMode] = useState<ViewMode>('priority');
+  const [viewMode, setViewMode] = useState<ViewMode>('category');
 
   return (
     <MapStateContext.Provider value={{ 

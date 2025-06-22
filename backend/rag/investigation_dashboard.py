@@ -12,6 +12,8 @@ from typing import Dict, List, Any
 from dataclasses import dataclass, asdict
 from rag.investigation.state_manager import state_manager
 import logging
+from rag.investigation_service_simple import investigate_alert_simple as investigate_alert
+from rag.investigation.progress_tracker import progress_tracker
 
 # Configure logging to capture everything
 logging.basicConfig(level=logging.DEBUG,
@@ -253,22 +255,21 @@ def setup_dashboard_logging():
         logger.addHandler(dashboard_handler)
 
 
-async def run_investigation_with_dashboard(test_alert):
-    """Run an investigation with dashboard monitoring"""
-    from rag.investigation_service import investigate_alert
+async def run_investigation_with_dashboard(alert_data):
+    """Run investigation with full dashboard monitoring"""
+    investigation_result, investigation_id = await investigate_alert(alert_data)
 
     # Set up dashboard logging
     setup_dashboard_logging()
 
     # Start monitoring
-    investigation_id = f"DASH-{int(time.time())}"
     dashboard.start_monitoring(investigation_id)
 
     try:
         # Run investigation
         dashboard.log_event(
             'agent_start', 'Investigation Service', message="Starting investigation")
-        result, actual_investigation_id = await investigate_alert(test_alert)
+        result, actual_investigation_id = await investigate_alert(alert_data)
 
         # Update with actual ID
         investigation_id = actual_investigation_id

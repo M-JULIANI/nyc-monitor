@@ -24,7 +24,7 @@ MAPS_DEFAULT_MAPTYPE = "roadmap"
 
 def generate_location_map_func(
     location: str,
-    alert_id: str = "unknown",
+    investigation_id: str = "unknown",
     zoom_level: int = 16,
     map_type: str = "satellite",
     include_pin: bool = True,
@@ -34,7 +34,7 @@ def generate_location_map_func(
 
     Args:
         location: Address or coordinates to map (e.g., "Washington Square Park, Manhattan")
-        alert_id: Alert ID for artifact naming
+        investigation_id: Investigation ID for artifact naming
         zoom_level: Map zoom level (1-20, default: 16)
         map_type: Map type (roadmap, satellite, hybrid, terrain)
         include_pin: Whether to include a red pin marker
@@ -44,11 +44,18 @@ def generate_location_map_func(
         Map generation result with artifact metadata
     """
     try:
-        logger.info(f"🗺️ Generating map for location: {location}")
+        logger.info(f"🗺️ GENERATE_LOCATION_MAP - Starting")
+        logger.info(f"   📍 Location: {location}")
+        logger.info(f"   🆔 Investigation ID: {investigation_id}")
+        logger.info(f"   🔍 Zoom Level: {zoom_level}")
+        logger.info(f"   🗺️ Map Type: {map_type}")
+        logger.info(f"   📌 Include Pin: {include_pin}")
+        logger.info(f"   📐 Size: {size}")
 
         # Use the new artifact manager to generate and save the map
+        logger.info(f"🔧 Calling artifact_manager.generate_google_maps_image...")
         result = artifact_manager.generate_google_maps_image(
-            investigation_id=alert_id,
+            investigation_id=investigation_id,
             location=location,
             zoom_level=zoom_level,
             map_type=map_type,
@@ -56,62 +63,91 @@ def generate_location_map_func(
             size=size
         )
 
+        logger.info(f"📤 Artifact manager response:")
+        logger.info(f"   Success: {result.get('success', False)}")
+        logger.info(f"   Filename: {result.get('filename', 'N/A')}")
+        logger.info(f"   GCS URL: {result.get('gcs_url', 'N/A')[:100]}...")
+
         if result["success"]:
             # Add to investigation artifacts
-            investigation_state = state_manager.get_investigation(alert_id)
-            artifact_info = None
+            investigation_state = state_manager.get_investigation(
+                investigation_id)
+
             if investigation_state:
+                logger.info(f"🎯 Adding artifact to investigation state...")
+
+                # Create MINIMAL artifact info to prevent context overflow
                 artifact_info = {
                     "type": "map_image",
                     "filename": result["filename"],
-                    "gcs_path": result["gcs_path"],
-                    "gcs_url": result["gcs_url"],
-                    "public_url": result["public_url"],
-                    "signed_url": result["signed_url"],
                     "location": location,
-                    "description": f"Satellite map of {location} with location pin",
-                    "source": "google_maps_static_api",
-                    "map_type": map_type,
-                    "zoom_level": zoom_level,
-                    "size": size,
-                    "content_type": result["content_type"],
-                    "size_bytes": result["size_bytes"],
-                    "ticker": state_manager.get_next_artifact_ticker(alert_id),
-                    "timestamp": result["created_at"],
-                    "relevance_score": 0.9,  # Maps are highly relevant
-                    "metadata": result.get("map_metadata", {}),
-                    "saved_to_gcs": True  # Mark as saved to GCS
+                    "description": f"Map of {location}",
+                    "saved_to_gcs": True,
+                    "relevance_score": 0.9,
+                    "timestamp": result.get("created_at", datetime.utcnow().isoformat())
                 }
 
-                investigation_state.artifacts.append(artifact_info)
-                logger.info(
-                    f"✅ Added map artifact to investigation: {result['filename']}")
+                # Only include essential URLs - not all the metadata
+                if result.get("gcs_url"):
+                    artifact_info["gcs_url"] = result["gcs_url"]
+                if result.get("signed_url"):
+                    artifact_info["signed_url"] = result["signed_url"]
 
-            return {
+                investigation_state.artifacts.append(artifact_info)
+
+                logger.info(f"✅ Added minimal map artifact to investigation")
+                logger.info(
+                    f"   Total artifacts now: {len(investigation_state.artifacts)}")
+            else:
+                logger.warning(
+                    f"❌ Investigation state not found for ID: {investigation_id}")
+
+            # Return VERY CONCISE response to prevent 400 error
+            concise_response = {
                 "success": True,
                 "type": "map_image",
                 "filename": result["filename"],
                 "location": location,
-                "gcs_url": result["gcs_url"],
-                # Use this for Google Slides
-                "signed_url": result["signed_url"],
-                "artifact_info": artifact_info,
-                "source": "google_maps_static_api",
-                "image_size": result["size_bytes"],
-                "summary": f"Generated and saved Google Maps image for {location} with pin marker"
+                "summary": f"✅ Map generated for {location}"
             }
+
+            logger.info(f"📤 RETURNING CONCISE RESPONSE:")
+            logger.info(
+                f"   Response size: {len(str(concise_response))} characters")
+            logger.debug(f"   Response content: {concise_response}")
+
+            return concise_response
+
         else:
-            return result  # Return the error from artifact_manager
+            error_response = {
+                "success": False,
+                "error": result.get("error", "Unknown error"),
+                "location": location,
+                "summary": f"Failed to generate map for {location}"
+            }
+
+            logger.error(f"❌ Map generation failed: {error_response}")
+            return error_response
 
     except Exception as e:
-        logger.error(f"Map generation failed for location '{location}': {e}")
-        return {
+        logger.error(f"❌ GENERATE_LOCATION_MAP - Exception occurred:")
+        logger.error(f"   Error: {str(e)}")
+        logger.error(f"   Error type: {type(e)}")
+        logger.exception("Full exception details:")
+
+        error_response = {
             "success": False,
             "error": f"Map generation failed: {str(e)}",
             "location": location,
-            "alert_id": alert_id,
+            "investigation_id": investigation_id,
             "summary": f"Failed to generate map for {location}"
         }
+
+        logger.error(f"📤 RETURNING ERROR RESPONSE:")
+        logger.error(
+            f"   Response size: {len(str(error_response))} characters")
+
+        return error_response
 
 
 def _generate_google_static_map(
@@ -121,7 +157,7 @@ def _generate_google_static_map(
     include_pin: bool,
     size: str,
     filename: str,
-    alert_id: str
+    investigation_id: str
 ) -> dict:
     """Generate map using Google Maps Static API."""
     try:
@@ -167,14 +203,14 @@ def _generate_google_static_map(
             "api_url": map_url,
             "planned_artifact": True,
             "mime_type": "image/png",
-            "ticker": state_manager.get_next_artifact_ticker(alert_id),
+            "ticker": state_manager.get_next_artifact_ticker(investigation_id),
             "timestamp": datetime.utcnow().isoformat(),
             "relevance_score": 0.9,  # Maps are highly relevant
             "file_size_estimate": f"~{len(response.content)} bytes"
         }
 
         # Add to investigation artifacts
-        investigation_state = state_manager.get_investigation(alert_id)
+        investigation_state = state_manager.get_investigation(investigation_id)
         if investigation_state:
             investigation_state.artifacts.append(artifact_info)
             logger.info(f"✅ Added map artifact to investigation: {filename}")
@@ -215,7 +251,7 @@ def _generate_osm_map(
     include_pin: bool,
     size: str,
     filename: str,
-    alert_id: str
+    investigation_id: str
 ) -> dict:
     """Generate map using OpenStreetMap-based services as fallback."""
     try:
@@ -223,7 +259,7 @@ def _generate_osm_map(
         # Or use a simple tile-based approach
 
         # For now, create a mock map artifact that would work
-        ticker = state_manager.get_next_artifact_ticker(alert_id)
+        ticker = state_manager.get_next_artifact_ticker(investigation_id)
 
         # Try to geocode the location using a free service
         coordinates = _geocode_location(location)
@@ -246,7 +282,7 @@ def _generate_osm_map(
         }
 
         # Add to investigation artifacts
-        investigation_state = state_manager.get_investigation(alert_id)
+        investigation_state = state_manager.get_investigation(investigation_id)
         if investigation_state:
             investigation_state.artifacts.append(artifact_info)
             logger.info(

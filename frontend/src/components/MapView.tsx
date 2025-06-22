@@ -5,6 +5,7 @@ import { Alert } from '../types';
 import { useAlerts } from '../contexts/AlertsContext';
 import { useMapState } from '../contexts/MapStateContext';
 import Spinner from './Spinner';
+import AgentTraceModal from './AgentTraceModal';
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA';
 
@@ -47,10 +48,17 @@ const sliderStyles = `
 
 const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
-  const { alerts, error, isLoading } = useAlerts();
+  //const markerClickedRef = useRef(false);
+  const { alerts, error, isLoading, generateReport, refetchAlert } = useAlerts();
   const isConnected = !isLoading;
   const { viewport, setViewport, filter, setFilter, viewMode, setViewMode } = useMapState();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [selectedAlertLoading, setSelectedAlertLoading] = useState(false);
+  const [traceModal, setTraceModal] = useState<{ isOpen: boolean; traceId: string; alertTitle: string }>({
+    isOpen: false,
+    traceId: '',
+    alertTitle: ''
+  });
   
   // Track if we should auto-fit to alerts (only on first load or filter changes)
   const [shouldAutoFit, setShouldAutoFit] = useState(true);
@@ -84,7 +92,7 @@ const MapView: React.FC = () => {
 
   // Filter alerts based on current filter settings
   const filteredAlerts = useMemo(() => {
-    console.log('Filtering with timeRangeHours:', filter.timeRangeHours);
+    //console.log('Filtering with timeRangeHours:', filter.timeRangeHours);
     
     const filtered = alerts.filter(alert => {
       // Priority filter
@@ -105,7 +113,7 @@ const MapView: React.FC = () => {
       return true;
     });
     
-    console.log(`Filtered from ${alerts.length} to ${filtered.length} alerts`);
+    //console.log(`Filtered from ${alerts.length} to ${filtered.length} alerts`);
     return filtered;
   }, [alerts, filter]);
 
@@ -233,32 +241,134 @@ const MapView: React.FC = () => {
     }))
   };
 
-  const handleMapClick = (event: any) => {
-    // Disable interactions when not connected
+  const handleMarkerClick = (alert: Alert) => {
+    console.log('🖱️ MARKER CLICKED! Alert ID:', alert.id);
+    console.log('🖱️ isConnected:', isConnected);
+   // console.log('🖱️ Alert object:', alert);
+    
+    if (!isConnected) {
+      console.log('🖱️ Not connected, returning early');
+      return;
+    }
+    
+    console.log('🖱️ Calling handleAlertSelection...');
+    handleAlertSelection(alert);
+  };
+
+  const handleAlertSelection = (alert: Alert) => {
+    console.log('🎯 HANDLE ALERT SELECTION CALLED! Alert ID:', alert.id);
+    
+    // Step 1: Set the alert immediately for instant popup
+    console.log('🎯 Setting selectedAlert to:', alert);
+    setSelectedAlert(alert);
+    
+    // Step 2: Set loading state 
+    console.log('🎯 Setting loading state to true');
+    setSelectedAlertLoading(true);
+    
+    // Step 3: Start refetch in background (non-blocking)
+    console.log('🎯 Starting background refetch...');
+    setTimeout(() => {
+      console.log('🔄 Refetching alert data for:', alert.id);
+      
+      refetchAlert(alert.id)
+        .then(result => {
+          console.log('📥 Refetch completed for:', alert.id, result);
+          if (result.success && result.alert) {
+            console.log('✅ Updating with fresh data');
+            setSelectedAlert(result.alert);
+          } else {
+            console.warn('⚠️ Refetch failed, keeping cached data');
+          }
+        })
+        .catch(err => {
+          console.warn('⚠️ Refetch error, keeping cached data:', err);
+        })
+        .finally(() => {
+          console.log('🏁 Clearing loading state');
+          setSelectedAlertLoading(false);
+        });
+    }, 50); // Small delay to ensure UI updates first
+  };
+
+  const handleGenerateReport = async (alert: Alert) => {
     if (!isConnected) return;
     
-    // In priority mode, handle clicks on circle features
-    if (viewMode === 'priority') {
-      const features = event.features;
-      if (features && features.length > 0) {
-        const clickedAlertId = features[0].properties.id;
-        const alert = alerts.find(a => a.id === clickedAlertId);
-        setSelectedAlert(alert || null);
+    try {
+      const result = await generateReport(alert.id);
+      if (result.success) {
+        console.log('Report generation started:', result.investigationId);
+        // The UI will update automatically via polling
       } else {
-        setSelectedAlert(null);
+        window.alert(`Failed to generate report: ${result.message}`);
       }
+    } catch (err) {
+      console.error('Error generating report:', err);
+      window.alert('Failed to generate report');
     }
-    // In source and category modes, clicks are handled by individual markers
   };
 
-  const handleMarkerClick = (alert: Alert) => {
-    if (!isConnected) return;
-    setSelectedAlert(alert);
+  const handleViewTrace = (alert: Alert) => {
+    if (alert.traceId) {
+      setTraceModal({
+        isOpen: true,
+        traceId: alert.traceId,
+        alertTitle: alert.title
+      });
+    }
   };
 
-  useEffect(() => { 
-    console.log('selectedAlert', selectedAlert);
-  }, [selectedAlert]);  
+  const getReportButtonContent = (alert: Alert) => {
+    if (alert.status === 'investigating') {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+          <span>Investigating...</span>
+        </div>
+      );
+    }
+    
+    // Only show "View Report" if BOTH status is resolved AND reportUrl exists
+    if (alert.status === 'resolved' && alert.reportUrl) {
+      return 'View Report';
+    }
+    
+    // Default to "Generate Report" for all other cases
+    return 'Generate Report';
+  };
+
+  const handleReportButtonClick = async (alert: Alert) => {
+    // Enhanced status checking with double-click prevention
+    console.log(`Report button clicked for alert ${alert.id}:`, {
+      status: alert.status,
+      reportUrl: alert.reportUrl,
+      investigationId: alert.investigationId,
+      traceId: alert.traceId
+    });
+
+    if (alert.status === 'investigating') {
+      // Do nothing - investigation in progress, button should be disabled
+      console.log(`Investigation in progress for alert ${alert.id}, button click ignored`);
+      return;
+    }
+    
+    // STRICT CHECK: Only open report if BOTH conditions are true
+    if (alert.status === 'resolved' && alert.reportUrl) {
+      // Open report in new tab
+      console.log(`Opening existing report for alert ${alert.id}: ${alert.reportUrl}`);
+      window.open(alert.reportUrl, '_blank');
+      return; // Early return to prevent fallback
+    }
+    
+    // Generate new report for all other cases
+    console.log(`Generating new report for alert ${alert.id} - Status: ${alert.status}, ReportUrl: ${alert.reportUrl}`);
+    await handleGenerateReport(alert);
+  };
+
+  const isInvestigationDisabled = (alert: Alert) => {
+    // Button should be disabled when investigating or when not connected
+    return !isConnected || alert.status === 'investigating';
+  };
 
   return (
     <div className="relative w-full h-full">
@@ -354,14 +464,14 @@ const MapView: React.FC = () => {
               <input
                 type="radio"
                 name="viewMode"
-                value="priority"
-                checked={viewMode === 'priority'}
+                value="category"
+                checked={viewMode === 'category'}
                 onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
                 className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
                 disabled={!isConnected}
               />
-              <span>By Priority</span>
-              <span className="text-zinc-500">(colored circles)</span>
+              <span>By Category</span>
+              <span className="text-zinc-500">(category icons)</span>
             </label>
             <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
               <input
@@ -380,14 +490,14 @@ const MapView: React.FC = () => {
               <input
                 type="radio"
                 name="viewMode"
-                value="category"
-                checked={viewMode === 'category'}
+                value="priority"
+                checked={viewMode === 'priority'}
                 onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
                 className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
                 disabled={!isConnected}
               />
-              <span>By Category</span>
-              <span className="text-zinc-500">(category icons)</span>
+              <span>By Priority</span>
+              <span className="text-zinc-500">(colored circles)</span>
             </label>
           </div>
         </div>
@@ -444,6 +554,8 @@ const MapView: React.FC = () => {
         </div>
       </div>
 
+
+
       <div className={`w-full h-full ${!isConnected ? 'grayscale opacity-50' : ''}`}>
         <Map
           ref={mapRef}
@@ -452,7 +564,6 @@ const MapView: React.FC = () => {
           style={{ width: '100%', height: '100%' }}
           mapStyle="mapbox://styles/mapbox/dark-v11"
           interactiveLayerIds={viewMode === 'priority' ? ['alert-points'] : []}
-          onClick={handleMapClick}
           interactive={isConnected}
           dragPan={isConnected}
           dragRotate={isConnected}
@@ -540,12 +651,26 @@ const MapView: React.FC = () => {
               longitude={selectedAlert.coordinates.lng}
               latitude={selectedAlert.coordinates.lat}
               anchor="bottom"
-              onClose={() => setSelectedAlert(null)}
+              onClose={() => {
+                console.log('❌ Closing popup');
+                setSelectedAlert(null);
+                setSelectedAlertLoading(false);
+              }}
               closeButton={true}
               closeOnClick={false}
-              className="max-w-[320px]"
+              className="max-w-[360px]"
             >
-              <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white shadow-xl">
+              <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white shadow-xl relative">
+                {/* Loading Spinner Overlay */}
+                {selectedAlertLoading && (
+                  <div className="absolute inset-0 bg-zinc-800/50 backdrop-blur-[1px] rounded-xl flex items-center justify-center z-10">
+                    <div className="flex flex-col items-center gap-2 bg-zinc-900/90 px-4 py-3 rounded-lg">
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent"></div>
+                      <span className="text-xs text-zinc-200 font-medium">Updating...</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Header */}
                 <div className="flex items-start gap-3 mb-3">
                   <span className="text-xl">{getSourceIcon(selectedAlert.source)}</span>
@@ -611,20 +736,47 @@ const MapView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Action Button */}
-                <button
-                  className="btn btn-primary w-full text-sm"
-                  onClick={() => {
-                    alert('Generate Report feature coming soon!');
-                  }}
-                >
-                  Generate Report
-                </button>
+                {/* Action Buttons */}
+                <div className="space-y-2">
+                  {/* Generate/View Report Button - always show unless disabled */}
+                  <button
+                    className={`btn w-full text-sm ${
+                      isInvestigationDisabled(selectedAlert)
+                        ? 'bg-yellow-600 cursor-not-allowed text-white' 
+                        : selectedAlert.status === 'resolved' && selectedAlert.reportUrl
+                        ? 'btn-success'
+                        : 'btn-primary'
+                    }`}
+                    onClick={() => handleReportButtonClick(selectedAlert)}
+                    disabled={isInvestigationDisabled(selectedAlert)}
+                  >
+                    {getReportButtonContent(selectedAlert)}
+                  </button>
+
+                  {/* View Trace Button - only show if traceId exists */}
+                  {selectedAlert.traceId && (
+                    <button
+                      className="btn btn-secondary w-full text-sm"
+                      onClick={() => handleViewTrace(selectedAlert)}
+                      disabled={!isConnected}
+                    >
+                      View Investigation Trace
+                    </button>
+                  )}
+                </div>
               </div>
             </Popup>
           )}
         </Map>
       </div>
+
+      {/* Agent Trace Modal */}
+      <AgentTraceModal
+        isOpen={traceModal.isOpen}
+        onClose={() => setTraceModal({ isOpen: false, traceId: '', alertTitle: '' })}
+        traceId={traceModal.traceId}
+        alertTitle={traceModal.alertTitle}
+      />
     </div>
   );
 };

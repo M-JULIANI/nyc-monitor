@@ -22,8 +22,6 @@ Decide which of these are valuable and worth pursuing as we will build an integr
 - [x] twitter
 - [x] 311
 - [ ] yelp
-- [ ] tripadvisor
-- [ ] google trends
 
 ~~## MCP implementations to study~~
 ~~- [ ] [reddit mcp](https://github.com/adhikasp/mcp-reddit)~~
@@ -46,8 +44,8 @@ These are basically the agents. The search one will do most of the work, so mayb
 
 ## Frontend
 - [ ] Chat interface
-- [ ] Map functionality
-    - [ ] filtering by day range
+- [x] Map functionality
+    - [x] filtering by day range
     - [x] filtering by source
     - [x] filtering by severity
 
@@ -58,16 +56,17 @@ These are basically the agents. The search one will do most of the work, so mayb
     - [x] include twitter, reddit, 311 icons
     - [x] add time slider to filter items
     - [x] ensure different priorities are being populated correctly
-- [ ] alert cards on map
+- [x] alert cards on map
     - [x] display category
     - [x] display status
     - [x] display source
     - [x] display location
-    - [ ] display link to report, if it exists
-    - [ ] display link to agent investigation
+    - [x] display link to report, if it exists
+    - [x] display link to agent investigation
 - [ ] ensure twitter collector is actually working?
-- [ ] ensure 'create report' button works for certain (non 311) alerts, and when a report dosnt already exist
-- [ ] ensure when a report is created, it is linked back to an alert, so taht no dupicate reports can be created for an alert
+- [x] ensure 'create report' button works for certain (non 311) alerts, and when a report doesnt already exist
+- [x] ensure when a report is created, it is linked back to an alert, so that no duppicate reports can be created for an alert
+- [ ] when a report is created, have it persist to the alert card, not just an in session persistence
 - [ ] ensure that a report is findable & clickable from '/reports' tab
     - [ ] once a report is created, a 'reportLink' field should be created in the alert object in firestore.
 - [ ] save the investigation logs in a structured, readable way. markdown? ideally we can render store these in firestore, and have them relate to an alret, similar to how reports are linked to alerts
