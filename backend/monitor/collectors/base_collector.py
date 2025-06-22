@@ -22,16 +22,18 @@ class BaseCollector(ABC):
 
         # Infrastructure emergencies
         'power outage', 'blackout', 'gas leak', 'water main break',
-        'subway shutdown', 'bridge closed', 'road closure',
+        'subway shutdown', 'bridge closed', 'road closure', 'construction',
+        'water outage', 'steam pipe', 'sinkhole', 'flooding',
 
         # Health/safety emergencies
         'outbreak', 'contamination', 'air quality alert', 'heat emergency',
+        'noise complaint', 'building collapse', 'elevator stuck',
 
         # Major public events and crowd gatherings
         'parade', 'festival', 'pride', 'concert', 'marathon', 'protest',
         'rally', 'demonstration', 'march', 'celebration', 'block party',
         'street fair', 'outdoor event', 'large crowd', 'street closure',
-        'event permit', 'public gathering', 'street festival',
+        'event permit', 'public gathering', 'street festival', 'filming',
 
         # Seasonal/Annual NYC events
         'halloween parade', 'thanksgiving parade', 'new year', 'fourth of july',
@@ -41,10 +43,31 @@ class BaseCollector(ABC):
         # Sports and entertainment events
         'yankees game', 'mets game', 'knicks game', 'rangers game', 'nets game',
         'madison square garden', 'yankee stadium', 'citi field', 'barclays center',
-        'big concert', 'broadway opening', 'fashion week',
+        'big concert', 'broadway opening', 'fashion week', 'comic con',
 
         # Tech/startup events (for HackerNews relevance)
-        'tech meetup', 'startup event', 'hackathon', 'tech conference'
+        'tech meetup', 'startup event', 'hackathon', 'tech conference',
+
+        # 311 and city services related
+        'heat and hot water', 'illegal parking', 'sidewalk repair', 'pothole',
+        'tree down', 'street light out', 'graffiti removal', 'rodent problem',
+        'sanitation', 'recycling', 'snow removal', 'ice removal',
+
+        # Transportation issues
+        'mta', 'subway delay', 'bus breakdown', 'traffic accident', 'fender bender',
+        'road work', 'lane closure', 'detour', 'alternate route',
+
+        # Weather-related
+        'storm warning', 'severe weather', 'high winds', 'heavy rain',
+        'snow storm', 'ice storm', 'extreme heat', 'cold weather',
+
+        # Community safety
+        'break in', 'burglary', 'theft', 'vandalism', 'suspicious activity',
+        'drug activity', 'harassment', 'assault', 'robbery',
+
+        # Quality of life issues
+        'loud music', 'construction noise', 'barking dog', 'smoking',
+        'illegal dumping', 'blocked driveway', 'double parking'
     ]
 
     def __init__(self, source_name: str):

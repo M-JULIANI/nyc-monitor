@@ -43,7 +43,7 @@ const Reports: React.FC = () => {
   ];
 
   return (
-    <div className="w-full h-full p-4 md:p-8 bg-zinc-600 text-text-primary overflow-y-auto">
+    <div className="w-full h-full p-4 md:p-8 bg-zinc-900 text-text-primary overflow-y-auto">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-text-primary m-0">

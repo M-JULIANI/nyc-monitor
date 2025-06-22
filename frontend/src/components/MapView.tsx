@@ -54,6 +54,7 @@ const MapView: React.FC = () => {
   const { viewport, setViewport, filter, setFilter, viewMode, setViewMode } = useMapState();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [selectedAlertLoading, setSelectedAlertLoading] = useState(false);
+  const [isFilterCollapsed, setIsFilterCollapsed] = useState(false);
   const [traceModal, setTraceModal] = useState<{ isOpen: boolean; traceId: string; alertTitle: string }>({
     isOpen: false,
     traceId: '',
@@ -261,6 +262,34 @@ const MapView: React.FC = () => {
     // Step 1: Set the alert immediately for instant popup
     console.log('🎯 Setting selectedAlert to:', alert);
     setSelectedAlert(alert);
+
+    // Step 1.5: Fly to center the marker on the map
+    if (mapRef.current) {
+      console.log('🗺️ Flying to marker coordinates:', alert.coordinates);
+      mapRef.current.flyTo({
+        center: [alert.coordinates.lng, alert.coordinates.lat],
+        duration: 800, // Smooth 800ms animation
+        essential: true // This animation is essential and will not be interrupted
+      });
+      
+      // Update viewport state after flyTo completes
+      setTimeout(() => {
+        if (mapRef.current) {
+          const newViewState = mapRef.current.getMap().getCenter();
+          const newZoom = mapRef.current.getMap().getZoom();
+          setViewport({
+            longitude: newViewState.lng,
+            latitude: newViewState.lat,
+            zoom: newZoom
+          });
+        }
+      }, 850); // Wait slightly longer than the animation duration
+    }
+
+    if(alert.source === "311") {
+      console.log('🎯 311 alert, returning early');
+      return;
+    }
     
     // Step 2: Set loading state 
     console.log('🎯 Setting loading state to true');
@@ -396,112 +425,204 @@ const MapView: React.FC = () => {
         </>
       )}
 
-      {/* Filter Controls */}
-      <div className={`absolute top-4 left-4 z-10 bg-zinc-800 p-4 rounded-lg text-white min-w-[200px] ${!isConnected ? 'opacity-50 pointer-events-none' : ''}`}>
-        <h3 className="text-sm font-semibold mb-4 text-white">
-          Filters
-        </h3>
-        
-        <div className="mb-2">
-          <label className="block text-xs mb-1 text-zinc-300">
-            Priority
-          </label>
-          <select 
-            value={filter.priority}
-            onChange={(e) => setFilter(prev => ({ ...prev, priority: e.target.value }))}
-            className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-sm"
-            disabled={!isConnected}
-          >
-            <option value="all">All</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
+      {/* Hamburger Menu Button - Always visible */}
+      <button
+        onClick={() => setIsFilterCollapsed(!isFilterCollapsed)}
+        className={`absolute top-4 left-4 z-20 bg-zinc-800/95 backdrop-blur-sm p-3 rounded-lg text-white hover:bg-zinc-700 transition-all duration-300 ease-in-out ${!isConnected ? 'opacity-50 pointer-events-none' : ''}`}
+        disabled={!isConnected}
+      >
+        <div className="flex flex-col space-y-1">
+          <div className="w-5 h-0.5 bg-white"></div>
+          <div className="w-5 h-0.5 bg-white"></div>
+          <div className="w-5 h-0.5 bg-white"></div>
         </div>
+      </button>
 
-        <div className="mb-2">
-          <label className="block text-xs mb-1 text-zinc-300">
-            Source
-          </label>
-          <select 
-            value={filter.source}
-            onChange={(e) => setFilter(prev => ({ ...prev, source: e.target.value }))}
-            className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-sm"
-            disabled={!isConnected}
-          >
-            <option value="all">All Sources</option>
-            <option value="reddit">Reddit</option>
-            <option value="311">311</option>
-            <option value="twitter">Twitter</option>
-          </select>
-        </div>
+      {/* Filter Controls - Collapsible */}
+      {!isFilterCollapsed && (
+        <div className={`absolute top-16 left-4 z-10 bg-zinc-800/95 backdrop-blur-sm p-4 rounded-lg text-white min-w-[200px] max-w-[280px] transition-all duration-300 ease-in-out ${!isConnected ? 'opacity-50 pointer-events-none' : ''}`}>
+          <h3 className="text-xs font-semibold mb-2 text-zinc-300">
+            Filters
+          </h3>
+          
+          <div className="mb-2">
+            <label className="block text-xs mb-1 text-zinc-300">
+              Priority
+            </label>
+            <select 
+              value={filter.priority}
+              onChange={(e) => setFilter(prev => ({ ...prev, priority: e.target.value }))}
+              className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-xs"
+              disabled={!isConnected}
+            >
+              <option value="all">All</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
 
-        <div className="mb-4">
-          <label className="block text-xs mb-1 text-zinc-300">
-            Status
-          </label>
-          <select 
-            value={filter.status}
-            onChange={(e) => setFilter(prev => ({ ...prev, status: e.target.value }))}
-            className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-sm"
-            disabled={!isConnected}
-          >
-            <option value="all">All Status</option>
-            <option value="new">New</option>
-            <option value="investigating">Investigating</option>
-            <option value="resolved">Resolved</option>
-          </select>
-        </div>
+          <div className="mb-2">
+            <label className="block text-xs mb-1 text-zinc-300">
+              Source
+            </label>
+            <select 
+              value={filter.source}
+              onChange={(e) => setFilter(prev => ({ ...prev, source: e.target.value }))}
+              className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-xs"
+              disabled={!isConnected}
+            >
+              <option value="all">All Sources</option>
+              <option value="reddit">Reddit</option>
+              <option value="311">311</option>
+              <option value="twitter">Twitter</option>
+            </select>
+          </div>
 
-        {/* View Mode Toggles */}
-        <div className="border-t border-zinc-700 pt-3">
-          <h4 className="text-xs font-semibold mb-2 text-zinc-300">
-            View Mode
-          </h4>
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-              <input
-                type="radio"
-                name="viewMode"
-                value="category"
-                checked={viewMode === 'category'}
-                onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
-                className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
-                disabled={!isConnected}
-              />
-              <span>By Category</span>
-              <span className="text-zinc-500">(category icons)</span>
+          <div className="mb-4">
+            <label className="block text-xs mb-1 text-zinc-300">
+              Status
             </label>
-            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-              <input
-                type="radio"
-                name="viewMode"
-                value="source"
-                checked={viewMode === 'source'}
-                onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
-                className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
-                disabled={!isConnected}
-              />
-              <span>By Source</span>
-              <span className="text-zinc-500">(source icons)</span>
-            </label>
-            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-              <input
-                type="radio"
-                name="viewMode"
-                value="priority"
-                checked={viewMode === 'priority'}
-                onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
-                className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
-                disabled={!isConnected}
-              />
-              <span>By Priority</span>
-              <span className="text-zinc-500">(colored circles)</span>
-            </label>
+            <select 
+              value={filter.status}
+              onChange={(e) => setFilter(prev => ({ ...prev, status: e.target.value }))}
+              className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-xs"
+              disabled={!isConnected}
+            >
+              <option value="all">All Status</option>
+              <option value="new">New</option>
+              <option value="investigating">Investigating</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
+
+          {/* View Mode Toggles */}
+          <div className="border-t border-zinc-700 pt-3 mb-4">
+            <h4 className="text-xs font-semibold mb-2 text-zinc-300">
+              View Mode
+            </h4>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="viewMode"
+                  value="category"
+                  checked={viewMode === 'category'}
+                  onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
+                  className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
+                  disabled={!isConnected}
+                />
+                <span>By Category</span>
+                <span className="text-zinc-500 hidden sm:inline">(category icons)</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="viewMode"
+                  value="source"
+                  checked={viewMode === 'source'}
+                  onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
+                  className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
+                  disabled={!isConnected}
+                />
+                <span>By Source</span>
+                <span className="text-zinc-500 hidden sm:inline">(source icons)</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="viewMode"
+                  value="priority"
+                  checked={viewMode === 'priority'}
+                  onChange={(e) => setViewMode(e.target.value as 'priority' | 'source' | 'category')}
+                  className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
+                  disabled={!isConnected}
+                />
+                <span>By Priority</span>
+                <span className="text-zinc-500 hidden sm:inline">(colored circles)</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="border-t border-zinc-700 pt-3">
+            <h4 className="text-xs font-semibold mb-2 text-zinc-300">
+              Legend
+            </h4>
+            
+            {/* Priority Mode Legend */}
+            {viewMode === 'priority' && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                  <span>Critical</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-3 h-3 rounded-full bg-orange-600"></div>
+                  <span>High</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-3 h-3 rounded-full bg-yellow-600"></div>
+                  <span>Medium</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-3 h-3 rounded-full bg-green-600"></div>
+                  <span>Low</span>
+                </div>
+              </div>
+            )}
+
+            {/* Source Mode Legend */}
+            {viewMode === 'source' && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-orange-400 flex items-center justify-center text-xs">👽</div>
+                  <span>Reddit</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-yellow-400 flex items-center justify-center text-xs">📞</div>
+                  <span>311</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-blue-400 flex items-center justify-center text-xs">🐦</div>
+                  <span>Twitter</span>
+                </div>
+              </div>
+            )}
+
+            {/* Category Mode Legend */}
+            {viewMode === 'category' && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center text-xs">🔧</div>
+                  <span>Infrastructure</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-xs">🚨</div>
+                  <span>Emergency</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-purple-500 flex items-center justify-center text-xs">🚗</div>
+                  <span>Transportation</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-pink-500 flex items-center justify-center text-xs">🎪</div>
+                  <span>Events</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center text-xs">🛡️</div>
+                  <span>Safety</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center text-xs">🌿</div>
+                  <span>Environment</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Alert Count */}
       <div className={`absolute top-4 right-4 z-10 bg-zinc-800/95 px-4 py-2 rounded-lg text-white text-sm ${!isConnected ? 'opacity-50' : ''}`}>
@@ -511,19 +632,19 @@ const MapView: React.FC = () => {
         )}
       </div>
 
-      {/* Time Range Slider */}
-      <div className={`absolute bottom-6 left-1/2 transform -translate-x-1/2 z-10 bg-zinc-800/95 px-6 py-4 rounded-lg text-white min-w-[400px] ${!isConnected ? 'opacity-50 pointer-events-none' : ''}`}>
-        <div className="text-center mb-3">
+      {/* Time Range Slider - Responsive */}
+      <div className={`absolute bottom-6 left-1/2 transform -translate-x-1/2 z-10 bg-zinc-800/95 backdrop-blur-sm px-3 sm:px-6 py-3 sm:py-4 rounded-lg text-white w-[90%] sm:w-auto sm:min-w-[400px] max-w-[500px] ${!isConnected ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className="text-center mb-2 sm:mb-3">
           <h4 className="text-xs font-semibold text-zinc-300 mb-1">Time Filter</h4>
         </div>
         
         <div className="relative">
-          {/* Hour markers - flipped so recent times are on right */}
-          <div className="flex justify-between text-xs text-zinc-400 mb-2 px-1">
+          {/* Hour markers - responsive sizing */}
+          <div className="flex justify-between text-[10px] sm:text-xs text-zinc-400 mb-1 sm:mb-2 px-1">
             <span>-7d</span>
-            <span>-5d</span>
+            <span className="hidden sm:inline">-5d</span>
             <span>-3d</span>
-            <span>-1d</span>
+            <span className="hidden sm:inline">-1d</span>
             <span>-12h</span>
             <span>-1h</span>
           </div>
@@ -540,12 +661,12 @@ const MapView: React.FC = () => {
             disabled={!isConnected}
           />
           
-          {/* Current value indicator */}
+          {/* Current value indicator - responsive text */}
           <div className="text-center">
-            <h3 className="text-xs font-semibold mt-4 text-white">
+            <h3 className="text-xs font-semibold mt-3 sm:mt-4 text-white">
               Last {filter.timeRangeHours} hour{filter.timeRangeHours !== 1 ? 's' : ''}
               {filter.timeRangeHours >= 24 && (
-                <span className="text-zinc-400 ml-1">
+                <span className="text-zinc-400 ml-1 hidden sm:inline">
                   ({Math.round(filter.timeRangeHours / 24 * 10) / 10} day{filter.timeRangeHours >= 48 ? 's' : ''})
                 </span>
               )}
@@ -737,7 +858,8 @@ const MapView: React.FC = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="space-y-2">
+                {selectedAlert.source !== "311" && (
+                  <div className="space-y-2">
                   {/* Generate/View Report Button - always show unless disabled */}
                   <button
                     className={`btn w-full text-sm ${
@@ -764,6 +886,7 @@ const MapView: React.FC = () => {
                     </button>
                   )}
                 </div>
+                )}
               </div>
             </Popup>
           )}
