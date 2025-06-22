@@ -817,7 +817,8 @@ def _create_evidence_image_requests(evidence_data, slides_service, presentation_
         logger.debug(
             f"   Item {i}: type={item_type}, relevance={relevance:.2f}")
 
-        if relevance > 0.5:  # Lowered threshold to include more artifacts
+        # Include artifacts with any relevance score >= 0 (was > 0.5)
+        if relevance >= 0:  # Much more permissive to include all collected artifacts
             if item_type in ["image", "screenshot"]:
                 image_items.append(item)
             elif item_type == "map_image":

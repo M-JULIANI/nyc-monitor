@@ -16,6 +16,7 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.runners import Runner
 from google.adk.tools.tool_context import ToolContext
 from google.adk.tools.base_tool import BaseTool
+from google.adk.tools import FunctionTool
 
 # Import the 5 specialized agents
 from .agents.research_agent import create_research_agent
@@ -28,12 +29,19 @@ from .investigation.state_manager import AlertData, state_manager, Investigation
 from .investigation.progress_tracker import progress_tracker, ProgressStatus
 from .investigation.tracing import get_distributed_tracer
 from .investigation.workflow import WorkflowManager
-from .tools.coordination_tools import update_alert_status, manage_investigation_state
+from .tools.coordination_tools import (
+    update_alert_status,
+    manage_investigation_state,
+    call_research_agent_tool,
+    call_data_agent_tool,
+    call_analysis_agent_tool,
+    call_report_agent_tool
+)
 
 logger = logging.getLogger(__name__)
 tracer = get_distributed_tracer()
 workflow_manager = WorkflowManager()
-date_today = date.today()
+date_today = datetime.now().strftime("%Y-%m-%d")
 
 # Define callback functions (not methods) as required by ADK
 
@@ -154,6 +162,7 @@ class AtlasRootAgent:
                 tools=[
                     update_alert_status,
                     manage_investigation_state,
+                    # Remove coordination tools - let ADK handle sub-agent transfers
                 ],
                 sub_agents=[
                     # All 5 agents as direct sub-agents (ADK idiomatic)
@@ -182,69 +191,67 @@ class AtlasRootAgent:
 You are the Root Agent for the NYC Atlas investigation system.
 Today's date: {date_today}
 
-Your role is to coordinate a 5-agent investigation workflow for NYC alerts and incidents.
+Your role is to coordinate a 5-agent investigation workflow for NYC alerts and incidents using ADK's transfer_to_agent mechanism.
 
-**YOUR DIRECT SUB-AGENTS:**
-- **Research Agent**: External data collection (web search, social media, APIs, screenshots)  
-- **Data Agent**: Internal knowledge & BigQuery datasets (census, crime, permits, housing)
-- **Analysis Agent**: Pattern recognition & cross-domain synthesis
-- **Report Agent**: Validation & professional report generation (including Google Slides)
+**🚨 CRITICAL INVESTIGATION PROTOCOL 🚨**
 
-**🚨 CRITICAL SUCCESS CRITERIA - INVESTIGATION CANNOT BE COMPLETE WITHOUT:**
-1. **MINIMUM 2 LOCATION MAPS** generated via generate_location_map tool
-2. **MINIMUM 5 IMAGES** collected via collect_media_content tool
-3. **MINIMUM 3 SCREENSHOTS** captured via save_investigation_screenshot tool
-4. **TIMELINE CHART** created via generate_investigation_timeline tool
+**STEP 1: MANDATORY ARTIFACT COLLECTION**
+When you receive an investigation request, you MUST:
 
-**MANDATORY STEP-BY-STEP PROTOCOL:**
+1. **IMMEDIATELY transfer to research_agent** using transfer_to_agent with this EXACT message:
 
-**STEP 1 - ARTIFACT COLLECTION (NON-NEGOTIABLE):**
-Transfer to Research Agent with this EXACT instruction:
-"MANDATORY ARTIFACT COLLECTION - You must execute these specific tools in order:
+"🚨 MANDATORY ARTIFACT COLLECTION REQUIRED 🚨
 
-1. EXECUTE generate_location_map with location='[LOCATION]', zoom_level=16, map_type='satellite'
-2. EXECUTE generate_location_map with location='[LOCATION]', zoom_level=12, map_type='satellite'  
-3. EXECUTE collect_media_content with search_terms='[EVENT_TYPE], [LOCATION]', content_types='images', max_items=8
-4. EXECUTE save_investigation_screenshot with url='https://www.ny1.com', description='NY1 news screenshot'
-5. EXECUTE save_investigation_screenshot with url='https://www.pix11.com', description='PIX11 news screenshot'
-6. EXECUTE save_investigation_screenshot with url='https://www.abc7ny.com', description='ABC7 news screenshot'
-7. EXECUTE generate_investigation_timeline with investigation_id='[INVESTIGATION_ID]'
+Investigation Details:
+- Investigation ID: [investigation_id]
+- Location: [location] 
+- Event Type: [event_type]
+- Alert ID: [alert_id]
 
-DO NOT return control to me until you have successfully executed ALL 7 tools above. 
-Confirm each tool execution with its results before proceeding to the next.
-If any tool fails, retry it once before continuing.
-Report back with: 'ARTIFACT COLLECTION COMPLETE - Generated X maps, collected Y images, captured Z screenshots, created timeline.'"
+CRITICAL REQUIREMENTS:
+- You MUST make actual FUNCTION CALLS, not text descriptions
+- Execute ALL required tools in sequence
+- Replace [investigation_id], [location], [event_type], [alert_id] with actual values
+- Confirm each function call with: '✅ Called [function_name]: [result]'
+- End with: 'ARTIFACT COLLECTION COMPLETE - Generated maps, collected images, captured screenshots, created timeline.'
 
-**STEP 2 - DATA COLLECTION:**
-Only after Research Agent confirms artifact collection, transfer to Data Agent for internal data gathering.
+MANDATORY TOOL EXECUTION SEQUENCE:
+1. generate_location_map(investigation_id='[investigation_id]', location='[location]', zoom_level=16, map_type='normal')
+2. generate_location_map(investigation_id='[investigation_id]', location='[location]', zoom_level=12, map_type='satellite') 
+3. collect_media_content(search_terms='[location] [event_type]', content_types='images', investigation_id='[investigation_id]', max_items=5)
+4. save_investigation_screenshot(url='https://www.google.com/search?q=[location]+[event_type]', description='Google search results', investigation_id='[investigation_id]')
+5. generate_investigation_timeline(investigation_id='[investigation_id]', include_evidence_points=True, chart_type='timeline')
 
-**STEP 3 - SYNTHESIS:**
-Transfer to Analysis Agent for pattern recognition and confidence scoring.
+Execute each tool immediately. DO NOT return control until all tools are executed and artifacts are collected."
 
-**STEP 4 - REPORTING:**
-Transfer to Report Agent for Google Slides creation using collected artifacts.
+**STEP 2: COORDINATE REMAINING AGENTS** (Only after Step 1 complete)
+- transfer_to_agent: data_agent for internal data analysis
+- transfer_to_agent: analysis_agent for pattern recognition  
+- transfer_to_agent: report_agent for final presentation generation
 
-**VERIFICATION REQUIREMENTS:**
-- Before proceeding to Step 2, verify Research Agent has called all 7 required tools
-- Before proceeding to Step 3, verify Data Agent has gathered internal context
-- Before proceeding to Step 4, verify Analysis Agent has calculated confidence scores
-- Investigation is NOT complete until Report Agent has created Google Slides with artifacts
+**AGENT TRANSFER EXAMPLES:**
 
-**COORDINATION STRATEGY:**
-- Be DIRECTIVE and SPECIFIC about tool execution requirements
-- Do not accept vague responses - require confirmation of specific tool calls
-- If an agent returns without completing required tools, redirect them with specific instructions
-- Track progress through state management system
-- Use progress tracking for real-time frontend updates
+```
+# Step 1: Research Agent for artifact collection
+transfer_to_agent(agent_name="research_agent")
 
-**QUALITY GATES:**
-✅ Reconnaissance: Research Agent confirms "ARTIFACT COLLECTION COMPLETE" with counts
-✅ Data: Data Agent provides internal context and historical patterns
-✅ Analysis: Analysis Agent calculates confidence score and identifies patterns
-✅ Reporting: Report Agent creates Google Slides with embedded artifacts
+# Step 2: Data Agent for internal analysis  
+transfer_to_agent(agent_name="data_agent")
 
-The investigation cannot proceed to the next step until the current step's quality gate is satisfied.
-Focus on ensuring comprehensive evidence collection through explicit tool execution verification.
+# Step 3: Analysis Agent for synthesis
+transfer_to_agent(agent_name="analysis_agent")
+
+# Step 4: Report Agent for deliverables
+transfer_to_agent(agent_name="report_agent")
+```
+
+**SUCCESS CRITERIA:**
+- Research Agent executes 5+ actual function calls
+- Artifacts are saved to investigation state with GCS URLs
+- Each subsequent agent receives proper context and data
+- Final presentation includes all collected artifacts
+
+Your coordination ensures comprehensive investigation through proper ADK agent transfers and tool execution.
 """
 
     async def investigate(self, investigation_prompt: str, context: Dict[str, Any] = None) -> str:
@@ -277,26 +284,62 @@ Focus on ensuring comprehensive evidence collection through explicit tool execut
                     }
                 )
 
-            # Create ADK callback context with investigation metadata
-            callback_context = CallbackContext(
-                session_data={
-                    **investigation_context,
-                    "root_agent": self.agent_name,
-                    "investigation_start_time": datetime.utcnow().isoformat()
-                }
-            )
-
-            # Execute the root agent with direct sub-agent coordination
+            # Execute the root agent using proper ADK Runner pattern
             logger.info(
                 f"Starting ADK investigation via root agent (5-agent direct)")
 
-            result = await self.agent.execute(
-                prompt=investigation_prompt,
-                context=callback_context
+            # Create ADK Runner and session service for proper execution
+            from google.adk.sessions import InMemorySessionService
+            from google.genai import types
+
+            session_service = InMemorySessionService()
+            runner = Runner(
+                agent=self.agent,
+                app_name="atlas_investigation",
+                session_service=session_service
             )
 
+            # Create session for this investigation
+            session_id = investigation_context.get(
+                "investigation_id", f"investigation_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            user_id = f"atlas_user_{session_id}"
+
+            # Set investigation context in session state
+            if hasattr(session_service, '_sessions'):
+                session_service._sessions[session_id] = {
+                    "id": session_id,
+                    "user_id": user_id,
+                    "state": investigation_context,
+                    "created_at": datetime.now()
+                }
+
+            # Convert prompt to proper ADK Content format
+            content = types.Content(
+                role='user',
+                parts=[types.Part(text=investigation_prompt)]
+            )
+
+            # Execute via ADK Runner (proper way)
+            logger.info(f"Executing ADK runner with session_id={session_id}")
+
+            investigation_result = ""
+            investigation_generator = runner.run_async(
+                session_id=session_id,
+                user_id=user_id,
+                new_message=content
+            )
+
+            # Collect results from async generator
+            async for result in investigation_generator:
+                if hasattr(result, 'text'):
+                    investigation_result += result.text
+                elif isinstance(result, str):
+                    investigation_result += result
+                else:
+                    investigation_result += str(result)
+
             logger.info("ADK investigation completed via root agent")
-            return result
+            return investigation_result
 
         except Exception as e:
             logger.error(f"Root agent investigation failed: {e}")
@@ -375,7 +418,19 @@ async def adk_investigate(prompt: str, context: CallbackContext = None) -> str:
     ADK-compatible entry point for investigations.
     This is what gets called when the agent is deployed to Vertex AI.
     """
-    context_dict = context.session_data if context else {}
+    # Extract context dictionary from CallbackContext properly
+    context_dict = {}
+    if context:
+        # CallbackContext has a state attribute, not session_data
+        if hasattr(context, 'state') and context.state:
+            context_dict = context.state
+        # Also check for session-related attributes
+        elif hasattr(context, '_session_data'):
+            context_dict = context._session_data
+        # Fallback to empty dict if no context available
+        else:
+            context_dict = {}
+
     return await root_agent_instance.investigate(prompt, context_dict)
 
 # Export the instance for deployment (consumers should access .agent when needed)
