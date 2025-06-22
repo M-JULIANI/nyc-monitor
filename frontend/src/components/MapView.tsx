@@ -262,6 +262,29 @@ const MapView: React.FC = () => {
     console.log('🎯 Setting selectedAlert to:', alert);
     setSelectedAlert(alert);
 
+    // Step 1.5: Fly to center the marker on the map
+    if (mapRef.current) {
+      console.log('🗺️ Flying to marker coordinates:', alert.coordinates);
+      mapRef.current.flyTo({
+        center: [alert.coordinates.lng, alert.coordinates.lat],
+        duration: 800, // Smooth 800ms animation
+        essential: true // This animation is essential and will not be interrupted
+      });
+      
+      // Update viewport state after flyTo completes
+      setTimeout(() => {
+        if (mapRef.current) {
+          const newViewState = mapRef.current.getMap().getCenter();
+          const newZoom = mapRef.current.getMap().getZoom();
+          setViewport({
+            longitude: newViewState.lng,
+            latitude: newViewState.lat,
+            zoom: newZoom
+          });
+        }
+      }, 850); // Wait slightly longer than the animation duration
+    }
+
     if(alert.source === "311") {
       console.log('🎯 311 alert, returning early');
       return;

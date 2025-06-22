@@ -168,6 +168,76 @@ class MonitorJob:
                     f"🔍 Filtered out {len(alerts) - len(real_alerts)} system alerts")
                 alerts = real_alerts
 
+            # 🚨 NEW: Filter out duplicate alerts before storing
+            non_duplicate_alerts = []
+            duplicate_count = 0
+            duplicates_detected = triage_results.get('duplicates_detected', [])
+
+            for alert in alerts:
+                is_duplicate = alert.get('is_duplicate', False)
+
+                # Additional check: Allow alerts if they have significantly new information
+                # even if marked as duplicate by triage agent
+                if is_duplicate:
+                    new_info = alert.get('new_information', '')
+                    duplicate_reason = alert.get('duplicate_reason', '')
+
+                    # Allow through if there's substantial new information
+                    has_substantial_new_info = (
+                        new_info and
+                        len(new_info) > 20 and
+                        'none' not in new_info.lower() and
+                        'no new' not in new_info.lower()
+                    )
+
+                    # Allow through if it's been more than 2 hours since similar alert
+                    should_allow_time_based = False
+                    if recent_alerts:
+                        similar_alerts = [ra for ra in recent_alerts
+                                          if ra.get('title', '').lower() in alert.get('title', '').lower()
+                                          or alert.get('title', '').lower() in ra.get('title', '').lower()]
+                        if similar_alerts:
+                            newest_similar = max(similar_alerts,
+                                                 key=lambda x: x.get('created_at', datetime.min))
+                            time_since = datetime.utcnow() - newest_similar.get('created_at', datetime.utcnow())
+                            should_allow_time_based = time_since.total_seconds() > 7200  # 2 hours
+
+                    # Override duplicate detection in certain cases
+                    if has_substantial_new_info or should_allow_time_based:
+                        logger.info(
+                            f"🔄 DUPLICATE OVERRIDE: Allowing alert with new info/time gap: '{alert.get('title', 'Unknown')}'")
+                        if has_substantial_new_info:
+                            logger.info(
+                                f"   Reason: Substantial new information - {new_info[:100]}...")
+                        if should_allow_time_based:
+                            logger.info(
+                                f"   Reason: Time-based override (>2 hours since similar alert)")
+                        non_duplicate_alerts.append(alert)
+                    else:
+                        duplicate_count += 1
+                        duplicate_of = alert.get('duplicate_of', 'unknown')
+                        logger.info(
+                            f"🔄 DUPLICATE FILTERED: '{alert.get('title', 'Unknown')}' - duplicate of {duplicate_of} ({duplicate_reason})")
+                else:
+                    non_duplicate_alerts.append(alert)
+
+            if duplicate_count > 0:
+                logger.info(
+                    f"🚨 DUPLICATE DETECTION: Filtered out {duplicate_count} duplicate alerts")
+                logger.info(f"   Original alerts from triage: {len(alerts)}")
+                logger.info(
+                    f"   Non-duplicate alerts to store: {len(non_duplicate_alerts)}")
+
+                # Log duplicate detection summary
+                if duplicates_detected:
+                    logger.info(
+                        f"   Duplicates detected by triage agent: {len(duplicates_detected)}")
+                    for dup in duplicates_detected[:5]:  # Show first 5
+                        logger.info(
+                            f"     - {dup.get('reason', 'No reason')} (action: {dup.get('action', 'unknown')})")
+
+            alerts = non_duplicate_alerts
+
             if not alerts:
                 logger.info(
                     "ℹ️  No actionable alerts after filtering - normal operation")
