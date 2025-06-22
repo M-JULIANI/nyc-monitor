@@ -441,7 +441,7 @@ const MapView: React.FC = () => {
       {/* Filter Controls - Collapsible */}
       {!isFilterCollapsed && (
         <div className={`absolute top-16 left-4 z-10 bg-zinc-800/95 backdrop-blur-sm p-4 rounded-lg text-white min-w-[200px] max-w-[280px] transition-all duration-300 ease-in-out ${!isConnected ? 'opacity-50 pointer-events-none' : ''}`}>
-          <h3 className="text-sm font-semibold mb-4 text-white">
+          <h3 className="text-xs font-semibold mb-2 text-zinc-300">
             Filters
           </h3>
           
@@ -452,7 +452,7 @@ const MapView: React.FC = () => {
             <select 
               value={filter.priority}
               onChange={(e) => setFilter(prev => ({ ...prev, priority: e.target.value }))}
-              className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-sm"
+              className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-xs"
               disabled={!isConnected}
             >
               <option value="all">All</option>
@@ -470,7 +470,7 @@ const MapView: React.FC = () => {
             <select 
               value={filter.source}
               onChange={(e) => setFilter(prev => ({ ...prev, source: e.target.value }))}
-              className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-sm"
+              className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-xs"
               disabled={!isConnected}
             >
               <option value="all">All Sources</option>
@@ -487,7 +487,7 @@ const MapView: React.FC = () => {
             <select 
               value={filter.status}
               onChange={(e) => setFilter(prev => ({ ...prev, status: e.target.value }))}
-              className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-sm"
+              className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-xs"
               disabled={!isConnected}
             >
               <option value="all">All Status</option>
@@ -498,7 +498,7 @@ const MapView: React.FC = () => {
           </div>
 
           {/* View Mode Toggles */}
-          <div className="border-t border-zinc-700 pt-3">
+          <div className="border-t border-zinc-700 pt-3 mb-4">
             <h4 className="text-xs font-semibold mb-2 text-zinc-300">
               View Mode
             </h4>
@@ -543,6 +543,83 @@ const MapView: React.FC = () => {
                 <span className="text-zinc-500 hidden sm:inline">(colored circles)</span>
               </label>
             </div>
+          </div>
+
+          {/* Legend */}
+          <div className="border-t border-zinc-700 pt-3">
+            <h4 className="text-xs font-semibold mb-2 text-zinc-300">
+              Legend
+            </h4>
+            
+            {/* Priority Mode Legend */}
+            {viewMode === 'priority' && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-3 h-3 rounded-full bg-red-600"></div>
+                  <span>Critical</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-3 h-3 rounded-full bg-orange-600"></div>
+                  <span>High</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-3 h-3 rounded-full bg-yellow-600"></div>
+                  <span>Medium</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-3 h-3 rounded-full bg-green-600"></div>
+                  <span>Low</span>
+                </div>
+              </div>
+            )}
+
+            {/* Source Mode Legend */}
+            {viewMode === 'source' && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-orange-400 flex items-center justify-center text-xs">👽</div>
+                  <span>Reddit</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-yellow-400 flex items-center justify-center text-xs">📞</div>
+                  <span>311</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-blue-400 flex items-center justify-center text-xs">🐦</div>
+                  <span>Twitter</span>
+                </div>
+              </div>
+            )}
+
+            {/* Category Mode Legend */}
+            {viewMode === 'category' && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center text-xs">🔧</div>
+                  <span>Infrastructure</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center text-xs">🚨</div>
+                  <span>Emergency</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-purple-500 flex items-center justify-center text-xs">🚗</div>
+                  <span>Transportation</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-pink-500 flex items-center justify-center text-xs">🎪</div>
+                  <span>Events</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center text-xs">🛡️</div>
+                  <span>Safety</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-zinc-300">
+                  <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center text-xs">🌿</div>
+                  <span>Environment</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
