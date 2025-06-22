@@ -239,6 +239,27 @@ def web_search_func(
         # Limit to max_results
         search_results = search_results[:max_results]
 
+        # ENHANCED: Store search insights in investigation findings for presentation synthesis
+        try:
+            investigation_state = state_manager.get_investigation(
+                investigation_id)
+            if investigation_state and search_results:
+                # Analyze search results to extract key insights
+                insights = _analyze_search_results_for_insights(
+                    query, search_results)
+
+                # Store insights in agent findings for presentation generation
+                agent_name = f"web_search_{query.replace(' ', '_')[:20]}"
+                if not hasattr(investigation_state, 'agent_findings'):
+                    investigation_state.agent_findings = {}
+                investigation_state.agent_findings[agent_name] = insights
+
+                logger.info(
+                    f"💡 Stored {len(insights)} web search insights for query: {query}")
+
+        except Exception as e:
+            logger.warning(f"Failed to store search insights: {e}")
+
         # Create summary
         summary = f"Found {len(search_results)} results for query: {query}"
         if search_results:
@@ -274,6 +295,209 @@ def web_search_func(
             "evidence_collected": [],
             "summary": f"Web search failed for query: {query}"
         }
+
+
+def _analyze_search_results_for_insights(query: str, search_results: list) -> list:
+    """Analyze search results to extract meaningful insights about the incident."""
+    insights = []
+
+    try:
+        # Combine all search result text for analysis
+        all_text = ""
+        titles = []
+        snippets = []
+        sources = []
+
+        for result in search_results[:5]:  # Analyze top 5 results
+            title = result.get("title", "").lower()
+            snippet = result.get("snippet", "").lower()
+            url = result.get("url", "")
+
+            titles.append(title)
+            snippets.append(snippet)
+            sources.append(url)
+            all_text += f" {title} {snippet}"
+
+        combined_text = all_text.lower()
+
+        # Enhanced extraction of specific incident details
+
+        # 1. SCALE AND PARTICIPATION ANALYSIS
+        if "tens of thousands" in combined_text or "50,000" in combined_text or "massive" in combined_text:
+            insights.append(
+                "Large-scale demonstration with tens of thousands of participants documented")
+        elif "thousands" in combined_text and ("protesters" in combined_text or "demonstrators" in combined_text or "march" in combined_text):
+            if "several thousand" in combined_text or "multiple thousand" in combined_text:
+                insights.append(
+                    "Multi-thousand participant demonstration confirmed by multiple sources")
+            else:
+                insights.append(
+                    "Significant demonstration with thousands of participants documented")
+        elif "hundreds" in combined_text and ("protesters" in combined_text or "people" in combined_text):
+            insights.append(
+                "Medium-scale demonstration with hundreds of participants")
+        elif "dozen" in combined_text or "small group" in combined_text:
+            insights.append(
+                "Small-scale demonstration with limited participation")
+
+        # 2. BEHAVIORAL AND SAFETY ANALYSIS
+        if "peaceful" in combined_text and "no arrests" in combined_text:
+            insights.append(
+                "Peaceful demonstration with no arrests or incidents reported")
+        elif "arrests" in combined_text:
+            # Extract specific arrest numbers if mentioned
+            import re
+            arrest_match = re.search(r'(\d+)\s+arrest', combined_text)
+            if arrest_match:
+                num_arrests = arrest_match.group(1)
+                insights.append(
+                    f"Law enforcement made {num_arrests} arrests during the incident")
+            else:
+                insights.append(
+                    "Multiple arrests reported during demonstration")
+        elif "violent" in combined_text or "clash" in combined_text or "scuffle" in combined_text:
+            insights.append(
+                "Physical confrontations or violent incidents documented")
+        elif "tense" in combined_text or "heated" in combined_text:
+            insights.append(
+                "Elevated tensions but no major incidents reported")
+
+        # 3. GEOGRAPHIC AND LOGISTICAL ANALYSIS
+        if "blocked" in combined_text and ("street" in combined_text or "road" in combined_text or "traffic" in combined_text):
+            insights.append(
+                "Significant traffic disruption with streets/roads blocked")
+        if "subway" in combined_text and ("closed" in combined_text or "delayed" in combined_text):
+            insights.append(
+                "Public transportation impacted with subway disruptions")
+        if "manhattan" in combined_text and "route" in combined_text:
+            insights.append(
+                "Organized march route documented across Manhattan")
+
+        # Extract specific locations mentioned
+        locations = []
+        if "bryant park" in combined_text:
+            locations.append("Bryant Park")
+        if "times square" in combined_text:
+            locations.append("Times Square")
+        if "union square" in combined_text:
+            locations.append("Union Square")
+        if "washington square" in combined_text:
+            locations.append("Washington Square")
+        if "madison square" in combined_text:
+            locations.append("Madison Square")
+
+        if len(locations) >= 2:
+            insights.append(
+                f"Multi-location demonstration spanning {', '.join(locations[:3])}")
+        elif len(locations) == 1:
+            insights.append(f"Demonstration centered at {locations[0]}")
+
+        # 4. TEMPORAL AND CONTEXTUAL ANALYSIS
+        # Extract timing information
+        time_context = []
+        if any(month in combined_text for month in ["january", "february", "march", "april", "may", "june"]):
+            if "2024" in combined_text:
+                time_context.append("2024")
+        if "weekend" in combined_text:
+            time_context.append("weekend timing")
+        if "evening" in combined_text or "night" in combined_text:
+            time_context.append("evening/night event")
+        if "morning" in combined_text:
+            time_context.append("morning event")
+
+        if time_context:
+            insights.append(f"Event timing: {', '.join(time_context)}")
+
+        # 5. THEMATIC AND POLITICAL ANALYSIS
+        themes = []
+        if "climate" in combined_text:
+            themes.append("climate activism")
+        if "trump" in combined_text:
+            themes.append("political opposition")
+        if "gaza" in combined_text or "palestine" in combined_text:
+            themes.append("Gaza/Palestine solidarity")
+        if "ukraine" in combined_text:
+            themes.append("Ukraine support")
+        if "abortion" in combined_text or "reproductive" in combined_text:
+            themes.append("reproductive rights")
+        if "police" in combined_text and ("brutality" in combined_text or "reform" in combined_text):
+            themes.append("police reform")
+        if "housing" in combined_text or "rent" in combined_text:
+            themes.append("housing rights")
+
+        if themes:
+            insights.append(f"Primary themes: {', '.join(themes[:3])}")
+
+        # 6. MEDIA COVERAGE ANALYSIS
+        credible_sources = []
+        for url in sources:
+            if "nytimes.com" in url:
+                credible_sources.append("New York Times")
+            elif "cnn.com" in url:
+                credible_sources.append("CNN")
+            elif "washingtonpost.com" in url:
+                credible_sources.append("Washington Post")
+            elif "reuters.com" in url:
+                credible_sources.append("Reuters")
+            elif "ap.org" in url or "apnews.com" in url:
+                credible_sources.append("Associated Press")
+            elif "nbcnews.com" in url:
+                credible_sources.append("NBC News")
+            elif "gothamist.com" in url:
+                credible_sources.append("Gothamist")
+            elif "ny1.com" in url:
+                credible_sources.append("NY1")
+
+        if len(credible_sources) >= 3:
+            insights.append(
+                f"Extensive news coverage from {', '.join(credible_sources[:3])} and others")
+        elif len(credible_sources) >= 1:
+            insights.append(
+                f"News coverage documented by {', '.join(credible_sources)}")
+
+        # 7. OFFICIAL RESPONSE ANALYSIS
+        if "mayor" in combined_text and ("statement" in combined_text or "response" in combined_text):
+            insights.append(
+                "Official mayoral statement or response documented")
+        if "nypd" in combined_text or "police commissioner" in combined_text:
+            insights.append("NYPD official response or statement noted")
+        if "emergency" in combined_text and "services" in combined_text:
+            insights.append("Emergency services involvement documented")
+
+        # 8. IMPACT AND CONSEQUENCES ANALYSIS
+        if "business" in combined_text and ("closed" in combined_text or "impact" in combined_text):
+            insights.append("Local business operations affected")
+        if "school" in combined_text and ("closed" in combined_text or "dismissal" in combined_text):
+            insights.append("Educational institutions impacted")
+        if "hospital" in combined_text or "medical" in combined_text:
+            insights.append("Medical/healthcare response documented")
+
+        # 9. WEATHER AND CONDITIONS
+        if "rain" in combined_text or "weather" in combined_text:
+            if "despite" in combined_text:
+                insights.append(
+                    "Demonstration continued despite adverse weather conditions")
+            else:
+                insights.append("Weather conditions noted as factor in event")
+
+        # If no specific insights found, create basic ones
+        if not insights and search_results:
+            insights.append(
+                f"Web search yielded {len(search_results)} relevant results for '{query}'")
+            if any("news" in r.get("url", "") for r in search_results):
+                insights.append(
+                    "Multiple news sources documented this incident")
+
+    except Exception as e:
+        logger.warning(f"Error analyzing search results: {e}")
+        insights = [f"Web search completed for query: {query}"]
+
+    # Ensure we have at least one insight and limit to most relevant
+    if not insights:
+        insights = [f"Web search analysis completed for query: {query}"]
+
+    # Return up to 8 most specific insights, prioritizing factual content
+    return insights[:8]
 
 
 def collect_media_content_simple_func(
@@ -815,7 +1039,8 @@ async def _real_reddit_search(query: str, location: Optional[str], time_range: s
                             created_at = created_at.replace(
                                 tzinfo=timezone.utc)
                         elif not hasattr(created_at, 'tzinfo'):
-                            created_at = datetime.now(timezone.utc).replace(tzinfo=timezone.utc)
+                            created_at = datetime.now(
+                                timezone.utc).replace(tzinfo=timezone.utc)
 
                         # Skip if too old
                         if created_at < cutoff_time:

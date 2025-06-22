@@ -80,6 +80,11 @@ async def start_investigation(
 
         logger.info(f"AlertData object created: {alert_data}")
 
+        # Validate and enhance alert data to prevent "Unknown" issues
+        validated_alert_data = _validate_and_enhance_alert_data(alert_data)
+        logger.info(
+            f"Validated AlertData: location='{validated_alert_data.location}', event_type='{validated_alert_data.event_type}'")
+
         # Update alert status to investigating in Firestore
         logger.info(
             f"🔄 Updating alert {alert_request.alert_id} status to investigating in Firestore")
@@ -99,7 +104,7 @@ async def start_investigation(
         # Choose investigation approach based on configuration
         logger.info("Using simple direct model investigation approach")
         try:
-            investigation_result, investigation_id = await investigate_alert_simple(alert_data)
+            investigation_result, investigation_id = await investigate_alert_simple(validated_alert_data)
         except Exception as simple_error:
             logger.error(
                 f"Simple investigation failed: {simple_error}", exc_info=True)
@@ -708,3 +713,149 @@ async def test_alert_update(
             "alert_id": alert_id,
             "error": str(e)
         }
+
+
+def _validate_and_enhance_alert_data(alert_data: AlertData) -> AlertData:
+    """
+    Validate and enhance alert data to prevent generic "Unknown" values
+    and ensure better data quality for investigation.
+
+    Args:
+        alert_data: Original alert data
+
+    Returns:
+        Enhanced and validated alert data
+    """
+    try:
+        # Enhanced location processing
+        location = alert_data.location.strip() if alert_data.location else "Unknown Location"
+
+        # If location is generic, try to extract from summary
+        if location.lower() in ["unknown", "unknown location", "n/a", "na", ""]:
+            if alert_data.summary:
+                location = _extract_location_from_summary(alert_data.summary)
+                logger.info(f"🔍 Extracted location from summary: '{location}'")
+
+        # Enhanced event type processing
+        event_type = alert_data.event_type.strip() if alert_data.event_type else "incident"
+
+        # If event type is generic, try to extract from summary
+        if event_type.lower() in ["unknown", "incident", "event", "n/a", "na", ""]:
+            if alert_data.summary:
+                event_type = _extract_event_type_from_summary(
+                    alert_data.summary)
+                logger.info(
+                    f"🔍 Extracted event type from summary: '{event_type}'")
+
+        # Enhanced summary processing
+        summary = alert_data.summary if alert_data.summary else f"{event_type} reported at {location}"
+
+        # Ensure minimum summary quality
+        if len(summary.strip()) < 20:
+            summary = f"Investigation requested for {event_type} incident at {location}. {summary}".strip(
+            )
+
+        # Enhanced timestamp processing
+        timestamp = alert_data.timestamp
+        if not timestamp:
+            timestamp = datetime.utcnow().isoformat()
+
+        # Create enhanced alert data
+        enhanced_alert_data = AlertData(
+            alert_id=alert_data.alert_id,
+            # Ensure severity is 1-10
+            severity=max(1, min(10, alert_data.severity)),
+            event_type=event_type,
+            location=location,
+            summary=summary,
+            timestamp=timestamp,
+            sources=alert_data.sources if alert_data.sources else []
+        )
+
+        logger.info(
+            f"✅ Enhanced alert data: {enhanced_alert_data.location} / {enhanced_alert_data.event_type}")
+        return enhanced_alert_data
+
+    except Exception as e:
+        logger.warning(f"⚠️ Alert data validation failed: {e}")
+        return alert_data  # Return original if validation fails
+
+
+def _extract_location_from_summary(summary: str) -> str:
+    """Extract location information from alert summary."""
+    try:
+        summary_lower = summary.lower()
+
+        # NYC-specific location patterns
+        nyc_locations = [
+            "manhattan", "brooklyn", "queens", "bronx", "staten island",
+            "times square", "union square", "bryant park", "central park",
+            "madison square", "washington square", "prospect park",
+            "williamsburg", "dumbo", "soho", "tribeca", "chelsea",
+            "east village", "west village", "upper east side", "upper west side",
+            "midtown", "downtown", "uptown", "financial district"
+        ]
+
+        # Look for NYC locations
+        for location in nyc_locations:
+            if location in summary_lower:
+                return location.title()
+
+        # Look for street patterns
+        import re
+
+        # Pattern for "123 Main Street" or "Main Street"
+        street_pattern = r'(\d+\s+)?([A-Z][a-z]+\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd))'
+        street_match = re.search(street_pattern, summary)
+        if street_match:
+            return street_match.group(0)
+
+        # Pattern for "at [Location]" or "in [Location]"
+        location_pattern = r'(?:at|in|near)\s+([A-Z][A-Za-z\s]+(?:Park|Square|Center|Plaza|Building))'
+        location_match = re.search(location_pattern, summary)
+        if location_match:
+            return location_match.group(1).strip()
+
+        # Default to NYC if no specific location found
+        return "New York City"
+
+    except Exception as e:
+        logger.warning(f"Location extraction failed: {e}")
+        return "New York City"
+
+
+def _extract_event_type_from_summary(summary: str) -> str:
+    """Extract event type from alert summary."""
+    try:
+        summary_lower = summary.lower()
+
+        # Event type patterns (order matters - more specific first)
+        event_patterns = [
+            ("protest", ["protest", "demonstration", "march", "rally"]),
+            ("fire", ["fire", "blaze", "burning", "smoke"]),
+            ("traffic_incident", ["accident",
+             "collision", "crash", "traffic"]),
+            ("emergency", ["emergency", "urgent", "critical", "ambulance"]),
+            ("construction", ["construction",
+             "building", "excavation", "roadwork"]),
+            ("weather", ["storm", "flooding", "snow", "hurricane", "tornado"]),
+            ("crime", ["robbery", "theft", "assault", "shooting", "stabbing"]),
+            ("public_safety", ["evacuation",
+             "shelter", "lockdown", "security"]),
+            ("infrastructure", [
+             "outage", "blackout", "water", "gas", "power"]),
+            ("social_gathering", ["concert",
+             "festival", "celebration", "gathering"])
+        ]
+
+        # Check for specific event types
+        for event_type, keywords in event_patterns:
+            if any(keyword in summary_lower for keyword in keywords):
+                return event_type
+
+        # Default to general incident
+        return "incident"
+
+    except Exception as e:
+        logger.warning(f"Event type extraction failed: {e}")
+        return "incident"
