@@ -26,7 +26,7 @@ async def test_minimal_agent_integration():
 
     try:
         # Import the investigation service
-        from rag.investigation_service import investigate_alert
+        from rag.investigation_service_simple import investigate_alert_simple as investigate_alert
         from rag.investigation.state_manager import AlertData
 
         # Create test alert data

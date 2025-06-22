@@ -86,7 +86,7 @@ def test_basic_tracing():
 
 async def test_investigation_with_tracing():
     """Test tracing with a mock investigation."""
-    from rag.investigation_service import investigate_alert
+    from rag.investigation_service_simple import investigate_alert_simple as investigate_alert
 
     # Create a test alert
     alert_data = AlertData(

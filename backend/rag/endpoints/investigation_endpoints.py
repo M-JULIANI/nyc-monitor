@@ -14,13 +14,11 @@ import asyncio
 import logging
 from google.cloud import firestore
 
-from ..investigation_service import investigate_alert as investigate_alert_adk
 from ..investigation_service_simple import investigate_alert_simple
 from ..investigation.state_manager import AlertData, state_manager
 from ..investigation.progress_tracker import progress_tracker
 from ..investigation.tracing import get_distributed_tracer
 from ..auth import verify_google_token
-from ..config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +30,6 @@ limiter = Limiter(key_func=get_remote_address)
 
 # Get tracing service
 tracer = get_distributed_tracer()
-
-
-# Configuration for investigation approach
-# config.INVESTIGATION_APPROACH = os.getenv(
-#     "config.INVESTIGATION_APPROACH", "simple")  # "simple" or "adk"
 
 
 class AlertRequest(BaseModel):
@@ -69,13 +62,9 @@ async def start_investigation(
     Supports both simple (direct model) and complex (ADK) approaches.
     """
     try:
-        # Use central configuration
-        config = get_config()
-
         logger.info(f"Investigation endpoint called by user: {user}")
         logger.info(
             f"Starting investigation for alert {alert_request.alert_id}")
-        logger.info(f"Investigation approach: {config.INVESTIGATION_APPROACH}")
         logger.info(f"Alert details: {alert_request}")
 
         # Create AlertData object
@@ -108,22 +97,13 @@ async def start_investigation(
                 f"⚠️ Could not update alert status to investigating: {e}")
 
         # Choose investigation approach based on configuration
-        if config.INVESTIGATION_APPROACH == "adk":
-            logger.info("Using ADK multi-agent investigation approach")
-            try:
-                investigation_result, investigation_id = await investigate_alert_adk(alert_data)
-            except Exception as adk_error:
-                logger.error(
-                    f"ADK investigation failed: {adk_error}", exc_info=True)
-                raise
-        else:
-            logger.info("Using simple direct model investigation approach")
-            try:
-                investigation_result, investigation_id = await investigate_alert_simple(alert_data)
-            except Exception as simple_error:
-                logger.error(
-                    f"Simple investigation failed: {simple_error}", exc_info=True)
-                raise
+        logger.info("Using simple direct model investigation approach")
+        try:
+            investigation_result, investigation_id = await investigate_alert_simple(alert_data)
+        except Exception as simple_error:
+            logger.error(
+                f"Simple investigation failed: {simple_error}", exc_info=True)
+            raise
 
         logger.info(
             f"Investigation completed. Result length: {len(investigation_result) if investigation_result else 0}")
@@ -294,7 +274,6 @@ async def get_investigation_progress(
 ):
     """Get the current progress of an investigation"""
     try:
-        config = get_config()
         progress = progress_tracker.get_progress(investigation_id)
         if not progress:
             raise HTTPException(
@@ -303,7 +282,6 @@ async def get_investigation_progress(
         return {
             "investigation_id": investigation_id,
             "progress": progress,
-            "approach": config.INVESTIGATION_APPROACH
         }
 
     except HTTPException:
@@ -323,7 +301,7 @@ async def stream_investigation_progress(
         """Generate Server-Sent Events for progress updates"""
         try:
             # Send initial connection
-            yield f"data: {{'status': 'connected', 'investigation_id': '{investigation_id}', 'approach': '{config.INVESTIGATION_APPROACH}'}}\n\n"
+            yield f"data: {{'status': 'connected', 'investigation_id': '{investigation_id}'}}\n\n"
 
             # Stream progress updates
             last_update_count = 0
@@ -383,7 +361,6 @@ async def get_trace_summary(
         return {
             "investigation_id": investigation_id,
             "trace_summary": summary,
-            "approach": config.INVESTIGATION_APPROACH
         }
 
     except HTTPException:
@@ -409,7 +386,6 @@ async def get_trace_timeline(
         return {
             "investigation_id": investigation_id,
             "timeline": timeline,
-            "approach": config.INVESTIGATION_APPROACH
         }
 
     except HTTPException:
@@ -426,7 +402,6 @@ async def export_trace_data(
 ):
     """Export complete trace data"""
     try:
-        config = get_config()
         trace_data = tracer.export_trace(investigation_id)
 
         if not trace_data:
@@ -435,7 +410,6 @@ async def export_trace_data(
         return {
             "investigation_id": investigation_id,
             "trace_data": trace_data,
-            "approach": config.INVESTIGATION_APPROACH,
             "exported_at": datetime.utcnow().isoformat()
         }
 
@@ -462,7 +436,6 @@ async def get_agent_message_flow(
         return {
             "investigation_id": investigation_id,
             "agent_message_flow": agent_flow,
-            "approach": config.INVESTIGATION_APPROACH
         }
 
     except HTTPException:
@@ -478,7 +451,7 @@ async def get_agent_message_flow(
 async def get_investigation_config(user=Depends(verify_google_token)):
     """Get current investigation system configuration"""
     return {
-        "investigation_approach": config.INVESTIGATION_APPROACH,
+        "investigation_approach": "simple",
         "approaches_available": ["simple", "adk"],
         "simple_approach": {
             "description": "Direct model calls, no deployment required",
@@ -494,7 +467,7 @@ async def get_investigation_config(user=Depends(verify_google_token)):
             "distributed_tracing": True,
             "progress_tracking": True,
             "state_management": True,
-            "multi_agent": config.INVESTIGATION_APPROACH == "adk"
+            "multi_agent": False
         }
     }
 
@@ -526,7 +499,6 @@ def save_agent_trace_to_firestore(investigation_id: str) -> str:
             # Convert to JSON-serializable format
             'trace_data': json.loads(json.dumps(trace_data, default=str)),
             'created_at': datetime.utcnow(),
-            'approach': get_config().INVESTIGATION_APPROACH
         }
 
         # Save to Firestore

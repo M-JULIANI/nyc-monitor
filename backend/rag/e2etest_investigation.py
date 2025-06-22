@@ -11,7 +11,7 @@ import logging
 import json
 import asyncio
 from rag.investigation.state_manager import AlertData, state_manager
-from rag.investigation_service import investigate_alert
+from rag.investigation_service_simple import investigate_alert_simple as investigate_alert
 import os
 from dotenv import load_dotenv
 

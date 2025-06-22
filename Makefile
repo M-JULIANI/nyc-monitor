@@ -340,7 +340,7 @@ CLOUD_RUN_REGION ?= $(GOOGLE_CLOUD_LOCATION)
 CLOUD_RUN_BACKEND_SERVICE_NAME ?= $(DOCKER_IMAGE_PREFIX)-backend
 
 # Deployment
-deploy: deploy-api deploy-vertex-ai deploy-web deploy-monitor
+deploy: deploy-api deploy-web deploy-monitor
 	@echo "Deployment completed"
 
 deploy-vertex-ai: check-gcloud
