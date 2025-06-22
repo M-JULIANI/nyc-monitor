@@ -48,7 +48,7 @@ const sliderStyles = `
 
 const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
-  const markerClickedRef = useRef(false);
+  //const markerClickedRef = useRef(false);
   const { alerts, error, isLoading, generateReport, refetchAlert } = useAlerts();
   const isConnected = !isLoading;
   const { viewport, setViewport, filter, setFilter, viewMode, setViewMode } = useMapState();
@@ -92,7 +92,7 @@ const MapView: React.FC = () => {
 
   // Filter alerts based on current filter settings
   const filteredAlerts = useMemo(() => {
-    console.log('Filtering with timeRangeHours:', filter.timeRangeHours);
+    //console.log('Filtering with timeRangeHours:', filter.timeRangeHours);
     
     const filtered = alerts.filter(alert => {
       // Priority filter
@@ -113,7 +113,7 @@ const MapView: React.FC = () => {
       return true;
     });
     
-    console.log(`Filtered from ${alerts.length} to ${filtered.length} alerts`);
+    //console.log(`Filtered from ${alerts.length} to ${filtered.length} alerts`);
     return filtered;
   }, [alerts, filter]);
 
@@ -241,16 +241,10 @@ const MapView: React.FC = () => {
     }))
   };
 
-  const handleMapClick = (event: any) => {
-    // COMPLETELY DISABLED FOR SIMPLICITY
-    console.log('🗺️ Map click - DISABLED');
-    return;
-  };
-
   const handleMarkerClick = (alert: Alert) => {
     console.log('🖱️ MARKER CLICKED! Alert ID:', alert.id);
     console.log('🖱️ isConnected:', isConnected);
-    console.log('🖱️ Alert object:', alert);
+   // console.log('🖱️ Alert object:', alert);
     
     if (!isConnected) {
       console.log('🖱️ Not connected, returning early');
@@ -296,14 +290,6 @@ const MapView: React.FC = () => {
         });
     }, 50); // Small delay to ensure UI updates first
   };
-
-  useEffect(() => { 
-    console.log('selectedAlert', selectedAlert);
-  }, [selectedAlert]);
-
-  useEffect(() => {
-    console.log('🔄 selectedAlertLoading changed to:', selectedAlertLoading);
-  }, [selectedAlertLoading]);
 
   const handleGenerateReport = async (alert: Alert) => {
     if (!isConnected) return;
@@ -578,7 +564,6 @@ const MapView: React.FC = () => {
           style={{ width: '100%', height: '100%' }}
           mapStyle="mapbox://styles/mapbox/dark-v11"
           interactiveLayerIds={viewMode === 'priority' ? ['alert-points'] : []}
-          onClick={handleMapClick}
           interactive={isConnected}
           dragPan={isConnected}
           dragRotate={isConnected}
