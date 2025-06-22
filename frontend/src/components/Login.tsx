@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,6 +7,7 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Get the redirect path from location state or default to home
   const from = (location.state as any)?.from?.pathname || '/';
@@ -22,28 +23,38 @@ const Login: React.FC = () => {
         </p>
         
         <div className="flex justify-center">
-          <GoogleLogin
-            onSuccess={async (credentialResponse) => {
-              const token = credentialResponse.credential;
-              if (token) {
-                try {
-                  await login(token);
-                  navigate(from, { replace: true });
-                } catch (error) {
-                  console.error('Login failed:', error);
-                  // You might want to show an error message to the user here
+          {isLoggingIn ? (
+            <div className="flex flex-col items-center space-y-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              <p className="text-white text-sm">Signing you in...</p>
+            </div>
+          ) : (
+            <GoogleLogin
+              onSuccess={async (credentialResponse) => {
+                const token = credentialResponse.credential;
+                if (token) {
+                  setIsLoggingIn(true);
+                  try {
+                    await login(token);
+                    navigate(from, { replace: true });
+                  } catch (error) {
+                    console.error('Login failed:', error);
+                    setIsLoggingIn(false);
+                    // You might want to show an error message to the user here
+                  }
                 }
-              }
-            }}
-            onError={() => {
-              console.error('Login failed');
-              // You might want to show an error message to the user here
-            }}
-            useOneTap
-            theme="filled_black"
-            text="signin_with"
-            shape="rectangular"
-          />
+              }}
+              onError={() => {
+                console.error('Login failed');
+                setIsLoggingIn(false);
+                // You might want to show an error message to the user here
+              }}
+              useOneTap
+              theme="filled_black"
+              text="signin_with"
+              shape="rectangular"
+            />
+          )}
         </div>
 
         <p className="mt-6 text-sm text-zinc-400 text-center">
