@@ -55,7 +55,7 @@ def test_final_presentation():
                         investigation_id = investigation_ids[-1]
                     else:
                         print("❌ No investigations found via list_investigations")
-                        return False
+                        assert False, "No investigations found via list_investigations"
                 else:
                     # Manual search for recent investigation ID pattern
                     investigation_id = f"ENHANCED-001_{datetime.now().strftime('%Y%m%d')}_033355"
@@ -64,7 +64,7 @@ def test_final_presentation():
 
             except Exception as e:
                 print(f"❌ Could not find investigations: {e}")
-                return False
+                assert False, f"Could not find investigations: {e}"
         else:
             # Get the most recent investigation ID
             investigation_id = max(investigations.keys(
@@ -78,7 +78,7 @@ def test_final_presentation():
         if not investigation_state:
             print(
                 f"❌ Could not load investigation state for: {investigation_id}")
-            return False
+            assert False, f"Could not load investigation state for: {investigation_id}"
 
         print(f"   Total artifacts: {len(investigation_state.artifacts)}")
 
@@ -106,7 +106,7 @@ def test_final_presentation():
 
         if not result.get("success"):
             print(f"❌ Presentation creation failed: {result.get('error')}")
-            return False
+            assert False, f"Presentation creation failed: {result.get('error')}"
 
         print(f"✅ Enhanced presentation created successfully!")
         print(f"🌐 URL: {result.get('url')}")
@@ -136,11 +136,13 @@ def test_final_presentation():
             if images_inserted >= 8:
                 print(
                     f"🏆 EXCEPTIONAL PERFORMANCE: {images_inserted} images inserted!")
+            assert True
         else:
             print(f"\n⚠️ Enhancement targets not fully met")
             print(f"   Target: 8+ evidence, 6+ images inserted")
             print(
                 f"   Actual: {total_evidence} evidence, {images_inserted} images inserted")
+            assert False, f"Enhancement targets not fully met: {total_evidence} evidence, {images_inserted} images inserted"
 
         return success
 
@@ -148,7 +150,7 @@ def test_final_presentation():
         print(f"❌ Final presentation test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, f"Final presentation test failed: {e}"
 
 
 if __name__ == "__main__":

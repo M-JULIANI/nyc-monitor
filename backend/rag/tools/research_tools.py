@@ -349,7 +349,7 @@ def collect_media_content_simple_func(
                                         "content_type": success["content_type"],
                                         "size_bytes": success["size_bytes"],
                                         "ticker": state_manager.get_next_artifact_ticker(investigation_id),
-                                        "timestamp": success["created_at"],
+                                        "timestamp": datetime.now(timezone.utc).isoformat(),
                                         "relevance_score": 0.8,  # High relevance for search results
                                         "metadata": success.get("metadata", {}),
                                         "saved_to_gcs": True  # Mark as saved to GCS
@@ -408,7 +408,7 @@ def collect_media_content_simple_func(
                         "mime_type": "image/jpeg",
                         "relevance_score": 0.6,
                         "ticker": ticker,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": datetime.now(timezone.utc).isoformat()
                     })
 
     return {
@@ -466,7 +466,7 @@ def save_investigation_screenshot_simple_func(
         "planned_artifact": True,
         "mime_type": "image/png",
         "ticker": ticker,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "file_size_estimate": "~500KB",
         "relevance_score": 0.8,  # High relevance for screenshots
         "summary": f"Screenshot planned for {domain}: {description}"
@@ -611,7 +611,7 @@ def list_investigation_artifacts_simple_func(
                 "message": f"Investigation {investigation_id} not found",
                 "investigation_id": investigation_id,
                 "artifact_count": 0,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
         # Parse artifact types
@@ -642,7 +642,7 @@ def list_investigation_artifacts_simple_func(
             "artifact_counts": artifact_counts,
             # Limit to first 20 for display
             "artifacts": filtered_artifacts[:20],
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "summary": f"Found {len(filtered_artifacts)} artifacts of requested types from total of {len(investigation_state.artifacts)} artifacts"
         }
 
@@ -652,7 +652,7 @@ def list_investigation_artifacts_simple_func(
             "message": f"Failed to list artifacts: {str(e)}",
             "investigation_id": investigation_id,
             "artifact_count": 0,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
 
@@ -785,7 +785,7 @@ async def _real_reddit_search(query: str, location: Optional[str], time_range: s
         else:
             cutoff_hours = 24  # Default to 24h
 
-        cutoff_time = datetime.utcnow().replace(tzinfo=timezone.utc) - \
+        cutoff_time = datetime.now(timezone.utc).replace(tzinfo=timezone.utc) - \
             timedelta(hours=cutoff_hours)
 
         all_posts = []
@@ -810,12 +810,12 @@ async def _real_reddit_search(query: str, location: Optional[str], time_range: s
                     try:
                         # Get submission timestamp
                         created_at = getattr(
-                            submission, 'created_at', datetime.utcnow())
+                            submission, 'created_at', datetime.now(timezone.utc))
                         if hasattr(created_at, 'tzinfo') and created_at.tzinfo is None:
                             created_at = created_at.replace(
                                 tzinfo=timezone.utc)
                         elif not hasattr(created_at, 'tzinfo'):
-                            created_at = datetime.utcnow().replace(tzinfo=timezone.utc)
+                            created_at = datetime.now(timezone.utc).replace(tzinfo=timezone.utc)
 
                         # Skip if too old
                         if created_at < cutoff_time:

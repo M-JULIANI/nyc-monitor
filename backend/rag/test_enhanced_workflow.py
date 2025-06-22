@@ -47,7 +47,7 @@ def test_enhanced_artifact_collection():
 
     except Exception as e:
         print(f"❌ Failed to create investigation state: {e}")
-        return False
+        assert False, f"Failed to create investigation state: {e}"
 
     # Step 2: Generate MULTIPLE maps (target: 2-3 maps)
     try:
@@ -87,13 +87,13 @@ def test_enhanced_artifact_collection():
             'success'), result3.get('success')])
         if not maps_success:
             print(f"❌ Some map generation failed")
-            return False
+            assert False, "Some map generation failed"
 
         print(f"✅ Generated 3 maps successfully!")
 
     except Exception as e:
         print(f"❌ Map generation failed: {e}")
-        return False
+        assert False, f"Map generation failed: {e}"
 
     # Step 3: Collect MORE images (target: 5+ images)
     try:
@@ -144,7 +144,7 @@ def test_enhanced_artifact_collection():
 
     except Exception as e:
         print(f"❌ Image collection failed: {e}")
-        return False
+        assert False, f"Image collection failed: {e}"
 
     # Step 4: Generate additional artifacts (screenshots, timeline)
     try:
@@ -194,9 +194,11 @@ def test_enhanced_artifact_collection():
         if total_artifacts >= 8:
             print(
                 f"🎯 TARGET ACHIEVED: {total_artifacts} artifacts (target: 8+)")
+            assert True
         else:
             print(
                 f"⚠️ TARGET MISSED: {total_artifacts} artifacts (target: 8+)")
+            assert False, f"TARGET MISSED: {total_artifacts} artifacts (target: 8+)"
 
         # Show artifact breakdown
         if investigation_state:
@@ -210,11 +212,9 @@ def test_enhanced_artifact_collection():
             for artifact_type, count in artifact_types.items():
                 print(f"   {artifact_type}: {count}")
 
-        return total_artifacts >= 8
-
     except Exception as e:
         print(f"❌ Failed to check artifact count: {e}")
-        return False
+        assert False, f"Failed to check artifact count: {e}"
 
 
 def test_enhanced_presentation():
@@ -224,9 +224,11 @@ def test_enhanced_presentation():
     print("=" * 60)
 
     # Run enhanced artifact collection first
-    if not test_enhanced_artifact_collection():
+    try:
+        test_enhanced_artifact_collection()
+    except AssertionError:
         print("❌ Enhanced artifact collection failed, skipping presentation test")
-        return False
+        assert False, "Enhanced artifact collection failed"
 
     # Get the investigation ID from the last test
     try:
@@ -236,7 +238,7 @@ def test_enhanced_presentation():
         investigations = state_manager.investigations
         if not investigations:
             print("❌ No investigations found")
-            return False
+            assert False, "No investigations found"
 
         # Get the most recent investigation ID
         investigation_id = max(investigations.keys(),
@@ -257,7 +259,7 @@ def test_enhanced_presentation():
 
         if not result.get("success"):
             print(f"❌ Presentation creation failed: {result.get('error')}")
-            return False
+            assert False, f"Presentation creation failed: {result.get('error')}"
 
         print(f"✅ Enhanced presentation created successfully!")
         print(f"🌐 URL: {result.get('url')}")
@@ -279,17 +281,17 @@ def test_enhanced_presentation():
 
         if success:
             print(f"🎯 ENHANCED PRESENTATION SUCCESS!")
+            assert True
         else:
             print(f"⚠️ Enhancement targets not fully met")
             print(f"   Target: 8+ evidence, 6+ images inserted")
             print(
                 f"   Actual: {total_evidence} evidence, {images_inserted} images inserted")
-
-        return success
+            assert False, f"Enhancement targets not fully met: {total_evidence} evidence, {images_inserted} images inserted"
 
     except Exception as e:
         print(f"❌ Enhanced presentation creation failed: {e}")
-        return False
+        assert False, f"Enhanced presentation creation failed: {e}"
 
 
 if __name__ == "__main__":

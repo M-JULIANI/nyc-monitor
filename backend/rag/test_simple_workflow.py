@@ -46,14 +46,14 @@ def test_simple_tool_execution():
 
         if result.get("success"):
             print(f"🎯 Map saved successfully!")
-            return investigation_id
+            assert True
         else:
             print(f"❌ Map generation failed: {result}")
-            return None
+            assert False, f"Map generation failed: {result}"
 
     except Exception as e:
         print(f"❌ Tool execution failed: {e}")
-        return None
+        assert False, f"Tool execution failed: {e}"
 
 
 def test_simple_presentation():
@@ -63,12 +63,32 @@ def test_simple_presentation():
     print("=" * 50)
 
     try:
-        from rag.tools.report_tools import create_slides_presentation_func
+        # Step 1: Create investigation state first
+        from rag.investigation.state_manager import AlertData, state_manager
 
         investigation_id = f"SIMPLE-PRES-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
+        # Create alert data
+        alert_data = AlertData(
+            alert_id="SIMPLE-PRES-001",
+            event_type="test_presentation",
+            location="Test Location",
+            severity=5,
+            summary="Simple test for presentation creation",
+            sources=["test_source"],
+            timestamp=datetime.now()
+        )
+
+        # Create investigation state
+        investigation_state = state_manager.create_investigation(alert_data)
+        # Use the generated investigation ID from state manager
+        investigation_id = investigation_state.investigation_id
+
         print(f"📊 Testing presentation creation:")
         print(f"   Investigation ID: {investigation_id}")
+
+        # Step 2: Create presentation
+        from rag.tools.report_tools import create_slides_presentation_func
 
         result = create_slides_presentation_func(
             investigation_id=investigation_id,
@@ -79,14 +99,16 @@ def test_simple_presentation():
 
         if result.get("success"):
             print(f"🎯 Presentation URL: {result.get('url')}")
-            return result.get("url")
+            url = result.get("url")
+            assert url is not None
+            assert True
         else:
             print(f"❌ Presentation creation failed: {result}")
-            return None
+            assert False, f"Presentation creation failed: {result}"
 
     except Exception as e:
         print(f"❌ Presentation creation failed: {e}")
-        return None
+        assert False, f"Presentation creation failed: {e}"
 
 
 def test_web_search():
@@ -111,14 +133,14 @@ def test_web_search():
 
         if result.get("success"):
             print(f"🎯 Found {len(result.get('results', []))} results")
-            return True
+            assert True
         else:
             print(f"❌ Web search failed: {result}")
-            return False
+            assert False, f"Web search failed: {result}"
 
     except Exception as e:
         print(f"❌ Web search failed: {e}")
-        return False
+        assert False, f"Web search failed: {e}"
 
 
 if __name__ == "__main__":

@@ -61,7 +61,9 @@ class TestAlertRequestValidation:
             status="completed",
             findings="Investigation complete",
             artifacts=["artifact1", "artifact2"],
-            confidence_score=0.9
+            confidence_score=0.9,
+            report_url=None,
+            trace_id=None
         )
 
         assert response.investigation_id == "test-investigation"
@@ -69,3 +71,5 @@ class TestAlertRequestValidation:
         assert response.findings == "Investigation complete"
         assert response.artifacts == ["artifact1", "artifact2"]
         assert response.confidence_score == 0.9
+        assert response.report_url is None
+        assert response.trace_id is None

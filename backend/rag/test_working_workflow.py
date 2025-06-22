@@ -47,7 +47,7 @@ def test_complete_workflow():
 
     except Exception as e:
         print(f"❌ Failed to create investigation state: {e}")
-        return False
+        assert False, f"Failed to create investigation state: {e}"
 
     # Step 2: Test map generation with proper investigation ID
     try:
@@ -67,13 +67,13 @@ def test_complete_workflow():
 
         if not result.get("success"):
             print(f"❌ Map generation failed: {result.get('error')}")
-            return False
+            assert False, f"Map generation failed: {result.get('error')}"
 
         print(f"✅ Map generated successfully!")
 
     except Exception as e:
         print(f"❌ Map generation failed: {e}")
-        return False
+        assert False, f"Map generation failed: {e}"
 
     # Step 3: Test image collection with proper investigation ID
     try:
@@ -93,13 +93,13 @@ def test_complete_workflow():
 
         if not result.get("success"):
             print(f"❌ Image collection failed: {result.get('error')}")
-            return False
+            assert False, f"Image collection failed: {result.get('error')}"
 
         print(f"✅ Images collected successfully!")
 
     except Exception as e:
         print(f"❌ Image collection failed: {e}")
-        return False
+        assert False, f"Image collection failed: {e}"
 
     # Step 4: Test presentation creation with artifacts
     try:
@@ -118,7 +118,7 @@ def test_complete_workflow():
 
         if not result.get("success"):
             print(f"❌ Presentation creation failed: {result.get('error')}")
-            return False
+            assert False, f"Presentation creation failed: {result.get('error')}"
 
         print(f"✅ Presentation created successfully!")
         print(f"🌐 URL: {result.get('url')}")
@@ -127,11 +127,11 @@ def test_complete_workflow():
         images_inserted = result.get("images_inserted", 0)
         print(f"📊 Images inserted: {images_inserted}")
 
-        return True
+        assert True
 
     except Exception as e:
         print(f"❌ Presentation creation failed: {e}")
-        return False
+        assert False, f"Presentation creation failed: {e}"
 
 
 if __name__ == "__main__":

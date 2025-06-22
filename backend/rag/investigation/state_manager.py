@@ -1,7 +1,7 @@
 """Investigation state management for multi-agent coordination."""
 
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum
 
@@ -67,7 +67,7 @@ class InvestigationStateManager:
         Returns:
             New investigation state
         """
-        investigation_id = f"{alert_data.alert_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        investigation_id = f"{alert_data.alert_id}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
         state = InvestigationState(
             investigation_id=investigation_id,
@@ -82,8 +82,8 @@ class InvestigationStateManager:
             agent_findings={},
             confidence_scores={},
             next_actions=[],
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
 
         self.investigations[investigation_id] = state
@@ -113,7 +113,7 @@ class InvestigationStateManager:
             if hasattr(state, key):
                 setattr(state, key, value)
 
-        state.updated_at = datetime.utcnow()
+        state.updated_at = datetime.now(timezone.utc)
         return state
 
     def get_investigation(self, investigation_id: str) -> Optional[InvestigationState]:
@@ -174,7 +174,7 @@ class InvestigationStateManager:
             return 1
 
         state.artifact_ticker += 1
-        state.updated_at = datetime.utcnow()
+        state.updated_at = datetime.now(timezone.utc)
         return state.artifact_ticker
 
     def should_terminate_investigation(self, investigation_id: str) -> bool:
@@ -192,7 +192,7 @@ class InvestigationStateManager:
 
         # Termination criteria
         confidence = self.calculate_overall_confidence(investigation_id)
-        time_elapsed = (datetime.utcnow() -
+        time_elapsed = (datetime.now(timezone.utc) -
                         state.created_at).total_seconds() / 60  # minutes
 
         # High confidence threshold
