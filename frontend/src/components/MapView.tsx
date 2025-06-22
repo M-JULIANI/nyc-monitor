@@ -261,6 +261,11 @@ const MapView: React.FC = () => {
     // Step 1: Set the alert immediately for instant popup
     console.log('🎯 Setting selectedAlert to:', alert);
     setSelectedAlert(alert);
+
+    if(alert.source === "311") {
+      console.log('🎯 311 alert, returning early');
+      return;
+    }
     
     // Step 2: Set loading state 
     console.log('🎯 Setting loading state to true');
@@ -737,7 +742,8 @@ const MapView: React.FC = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="space-y-2">
+                {selectedAlert.source !== "311" && (
+                  <div className="space-y-2">
                   {/* Generate/View Report Button - always show unless disabled */}
                   <button
                     className={`btn w-full text-sm ${
@@ -764,6 +770,7 @@ const MapView: React.FC = () => {
                     </button>
                   )}
                 </div>
+                )}
               </div>
             </Popup>
           )}
