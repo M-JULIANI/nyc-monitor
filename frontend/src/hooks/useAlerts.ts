@@ -33,13 +33,13 @@ const normalizeAlert = (rawAlert: any): Alert => {
   }
 
   // Use the most complete/accurate data available
-  return {
+  const normalizedAlert = {
     id: rawAlert.id || original.id || rawAlert.alert_id,
     title: rawAlert.title || original.title || rawAlert.topic,
     description: original.description || rawAlert.description || '',
     source: original.source || rawAlert.source === 'unknown' ? originalData.signals?.[0] || 'unknown' : rawAlert.source,
     priority: original.priority || rawAlert.priority || 'medium',
-    status: original.status || rawAlert.status || 'active',
+    status: rawAlert.status || original.status || 'active', // PRIORITIZE rawAlert.status
     
     timestamp: original.timestamp || original.created_at || rawAlert.created_at || rawAlert.timestamp || new Date().toISOString(),
     neighborhood: original.neighborhood || originalData.area || rawAlert.area || rawAlert.neighborhood || 'Unknown',
@@ -71,11 +71,13 @@ const normalizeAlert = (rawAlert: any): Alert => {
     signals: originalData.signals || rawAlert.signals || [],
     url: rawAlert.url || '',
     
-    // Investigation & Report fields - extract from backend data
+    // Investigation & Report fields - PRIORITIZE rawAlert fields
     reportUrl: rawAlert.report_url || original.report_url,
     traceId: rawAlert.trace_id || original.trace_id,
     investigationId: rawAlert.investigation_id || original.investigation_id,
   };
+
+  return normalizedAlert;
 };
 
 export const useAlerts = (options: UseAlertsOptions = {}) => {
@@ -313,9 +315,10 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
 
       console.log(`🔄 Refetching alert ${alertId}...`);
 
-      const response = await fetch(`/api/alerts/get/${alertId}`, {
+      const response = await fetch(`/api/alerts/get/${alertId}?_t=${Date.now()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache',
         },
       });
 
@@ -356,7 +359,6 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       });
 
       console.log(`✅ Successfully refetched and updated alert ${alertId}`);
-      console.log(`📋 Updated alert data:`, normalizedAlert);
 
       return {
         success: true,

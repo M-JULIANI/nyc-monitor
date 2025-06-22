@@ -333,19 +333,22 @@ const MapView: React.FC = () => {
   };
 
   const getReportButtonContent = (alert: Alert) => {
-    switch (alert.status) {
-      case 'investigating':
-        return (
-          <div className="flex items-center gap-2">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            <span>Investigating...</span>
-          </div>
-        );
-      case 'resolved':
-        return 'View Report';
-      default:
-        return 'Generate Report';
+    if (alert.status === 'investigating') {
+      return (
+        <div className="flex items-center gap-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+          <span>Investigating...</span>
+        </div>
+      );
     }
+    
+    // Only show "View Report" if BOTH status is resolved AND reportUrl exists
+    if (alert.status === 'resolved' && alert.reportUrl) {
+      return 'View Report';
+    }
+    
+    // Default to "Generate Report" for all other cases
+    return 'Generate Report';
   };
 
   const handleReportButtonClick = async (alert: Alert) => {
@@ -363,15 +366,17 @@ const MapView: React.FC = () => {
       return;
     }
     
+    // STRICT CHECK: Only open report if BOTH conditions are true
     if (alert.status === 'resolved' && alert.reportUrl) {
       // Open report in new tab
       console.log(`Opening existing report for alert ${alert.id}: ${alert.reportUrl}`);
       window.open(alert.reportUrl, '_blank');
-    } else {
-      // Generate new report (for new alerts or failed investigations)
-      console.log(`Generating new report for alert ${alert.id}`);
-      await handleGenerateReport(alert);
+      return; // Early return to prevent fallback
     }
+    
+    // Generate new report for all other cases
+    console.log(`Generating new report for alert ${alert.id} - Status: ${alert.status}, ReportUrl: ${alert.reportUrl}`);
+    await handleGenerateReport(alert);
   };
 
   const isInvestigationDisabled = (alert: Alert) => {
@@ -748,11 +753,12 @@ const MapView: React.FC = () => {
 
                 {/* Action Buttons */}
                 <div className="space-y-2">
+                  {/* Generate/View Report Button - always show unless disabled */}
                   <button
                     className={`btn w-full text-sm ${
                       isInvestigationDisabled(selectedAlert)
                         ? 'bg-yellow-600 cursor-not-allowed text-white' 
-                        : selectedAlert.status === 'resolved'
+                        : selectedAlert.status === 'resolved' && selectedAlert.reportUrl
                         ? 'btn-success'
                         : 'btn-primary'
                     }`}
@@ -762,7 +768,7 @@ const MapView: React.FC = () => {
                     {getReportButtonContent(selectedAlert)}
                   </button>
 
-                  {/* View Trace Button - only show if trace exists */}
+                  {/* View Trace Button - only show if traceId exists */}
                   {selectedAlert.traceId && (
                     <button
                       className="btn btn-secondary w-full text-sm"
