@@ -75,7 +75,6 @@ export interface Alert {
   reportUrl?: string;     // URL to generated Google Slides report
   traceId?: string;       // ID to fetch agent trace from Firestore
   investigationId?: string; // ID of the investigation that was run
-  reportStatus?: 'investigating' | 'completed' | 'failed'; // Status of report generation
 }
 
 export interface User {

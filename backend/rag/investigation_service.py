@@ -129,8 +129,8 @@ def _create_investigation_runner(investigation_state):
 
 async def investigate_alert(alert_data: AlertData) -> tuple[str, str]:
     """
-    Main stateless entry point for investigating an alert.
-    This is where the investigation becomes "live" - creates state, executes runner, returns results.
+    Main stateless entry point for investigating an alert using the ADK multi-agent approach.
+    This is the full deployment approach with specialized agents.
 
     Args:
         alert_data: Alert information to investigate
@@ -162,142 +162,166 @@ async def investigate_alert(alert_data: AlertData) -> tuple[str, str]:
         progress_tracker.start_investigation(
             investigation_state.investigation_id)
 
-        # Update progress before starting minimal agent execution
+        # Update progress before starting ADK execution
         progress_tracker.add_progress(
             investigation_id=investigation_state.investigation_id,
             status=ProgressStatus.AGENT_ACTIVE,
-            active_agent="minimal_working_agent",
-            message="Starting minimal working agent execution"
+            active_agent="adk_investigation",
+            message="Starting ADK investigation execution"
         )
 
-        # Execute the investigation via minimal working agent
+        # Execute the investigation via ADK runner
         logger.info(
-            f"Starting minimal working agent for alert {alert_data.alert_id}")
+            f"Starting ADK investigation for alert {alert_data.alert_id}")
 
         # Update investigation state to show it's progressing
         state_manager.update_investigation(investigation_state.investigation_id, {
             "iteration_count": 1,
-            "findings": [f"Investigation initiated for {alert_data.event_type} at {alert_data.location}"],
+            "findings": [f"ADK Investigation initiated for {alert_data.event_type} at {alert_data.location}"],
             "confidence_score": 0.3
         })
 
         try:
-            # Use the minimal working agent instead of complex ADK runner
-            from .agents.minimal_working_agent import execute_minimal_investigation
+            # Create investigation runner for this specific investigation
+            runner = _create_investigation_runner(investigation_state)
 
             logger.info(
-                f"Executing minimal working agent for investigation {investigation_state.investigation_id}")
+                f"Executing ADK runner for investigation {investigation_state.investigation_id}")
 
-            # Prepare investigation data for the minimal agent
-            investigation_data = {
-                "investigation_id": investigation_state.investigation_id,
-                "alert_data": {
-                    "alert_id": alert_data.alert_id,
-                    "event_type": alert_data.event_type,
-                    "location": alert_data.location,
-                    "severity": alert_data.severity,
-                    "summary": alert_data.summary,
-                    "sources": alert_data.sources,
-                    "timestamp": alert_data.timestamp.isoformat()
-                }
-            }
+            # Prepare the investigation message for the ADK agent
+            investigation_message = f"""
+🚨 ALERT INVESTIGATION REQUEST 🚨
 
-            # Execute the minimal working agent
-            agent_result = await execute_minimal_investigation(investigation_data)
+**Alert Details:**
+- Alert ID: {alert_data.alert_id}
+- Event Type: {alert_data.event_type}
+- Location: {alert_data.location}
+- Severity: {alert_data.severity}/10
+- Summary: {alert_data.summary}
+- Sources: {', '.join(alert_data.sources)}
+- Investigation ID: {investigation_state.investigation_id}
+
+**Investigation Requirements:**
+1. Analyze the severity and nature of this alert
+2. Research relevant background information
+3. Collect evidence and artifacts
+4. Coordinate investigation activities
+5. Provide comprehensive findings and recommendations
+
+**Context:**
+This is a NYC Atlas system investigation for monitoring civic incidents and events.
+Use all available tools to thoroughly investigate this alert and provide actionable insights.
+
+Please begin the investigation immediately.
+"""
+
+            # Execute the ADK runner
+            results = []
+            session_id = investigation_state.investigation_id
+            user_id = f"investigation_user_{alert_data.alert_id}"
+
+            # Create session via the session service
+            session = runner._session_service.create_session(
+                session_id=session_id,
+                user_id=user_id,
+                app_name="atlas_investigation"
+            )
 
             logger.info(
-                f"Minimal working agent completed for investigation {investigation_state.investigation_id}")
-            logger.info(f"Agent result: {agent_result}")
+                f"Created ADK session {session_id} via session service API")
+
+            # Create the message as types.Content
+            from google.genai import types
+            content = types.Content(
+                role='user',
+                parts=[types.Part(text=investigation_message)]
+            )
+
+            logger.info(
+                f"Calling runner.run_async with session_id={session_id}, user_id={user_id}")
+
+            async for event in runner.run_async(
+                session_id=session_id,
+                user_id=user_id,
+                new_message=content
+            ):
+                # Handle different types of events from the ADK runner
+                if hasattr(event, 'text') and event.text:
+                    results.append(event.text)
+                    logger.info(f"ADK response: {event.text[:100]}...")
+                elif hasattr(event, 'content'):
+                    # Handle Content objects properly
+                    if hasattr(event.content, 'parts'):
+                        for part in event.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                results.append(part.text)
+                            elif hasattr(part, 'function_call') and part.function_call:
+                                logger.info(
+                                    f"ADK function call: {part.function_call.name}")
+                    else:
+                        results.append(str(event.content))
+                elif isinstance(event, str):
+                    results.append(event)
+                else:
+                    results.append(str(event))
+
+            logger.info(
+                f"ADK runner completed for investigation {investigation_state.investigation_id}")
+
+            # Combine all results
+            full_response = "\n".join(
+                results) if results else "No response from ADK agents"
 
             # Update investigation state with results
-            if agent_result.get("success"):
-                state_manager.update_investigation(investigation_state.investigation_id, {
-                    "iteration_count": investigation_state.iteration_count + 1,
-                    "findings": investigation_state.findings + [
-                        f"Minimal working agent completed successfully",
-                        f"Generated {agent_result.get('maps_generated', 0)} maps",
-                        f"Collected {agent_result.get('images_collected', 0)} images",
-                        f"Total artifacts: {agent_result.get('total_artifacts', 0)}"
-                    ],
-                    "confidence_score": 0.9,
-                    "is_complete": True
-                })
+            state_manager.update_investigation(investigation_state.investigation_id, {
+                "iteration_count": investigation_state.iteration_count + 1,
+                "findings": investigation_state.findings + [
+                    f"ADK multi-agent investigation completed",
+                    f"Response length: {len(full_response)} characters"
+                ],
+                "confidence_score": 0.8,
+                "is_complete": True
+            })
 
-                # Mark progress as completed
-                progress_tracker.complete_investigation(
-                    investigation_state.investigation_id,
-                    "Investigation completed successfully via minimal working agent"
-                )
+            # Mark progress as completed
+            progress_tracker.complete_investigation(
+                investigation_state.investigation_id,
+                "Investigation completed successfully via ADK multi-agent system"
+            )
 
-                investigation_summary = f"""Investigation Results for Alert {alert_data.alert_id}:
+            investigation_summary = f"""Investigation Results for Alert {alert_data.alert_id}:
 
 Event: {alert_data.event_type} at {alert_data.location}
 Severity: {alert_data.severity}/10
-Status: Investigation Complete
+Status: Investigation Complete (ADK Multi-Agent)
 Investigation ID: {investigation_state.investigation_id}
 
-🎯 Minimal Working Agent Results:
-✅ Workflow Status: {agent_result.get('workflow_status', 'unknown')}
-✅ Maps Generated: {agent_result.get('maps_generated', 0)} satellite maps
-✅ Images Collected: {agent_result.get('images_collected', 0)} images
-✅ Total Artifacts: {agent_result.get('total_artifacts', 0)}
+🎯 ADK Multi-Agent System Results:
+✅ Investigation Status: Completed
+✅ Agent Coordination: Multi-agent workflow executed
+✅ Response Length: {len(full_response)} characters
 
-📋 Artifact Breakdown:
-{agent_result.get('artifact_breakdown', {})}
+📝 Agent Response:
+{full_response[:1000]}{"..." if len(full_response) > 1000 else ""}
 
-📝 Summary: {agent_result.get('summary', 'Investigation completed')}
-
-🔗 Agent Response: {agent_result.get('agent_response', 'No detailed response')[:500]}...
-
-Investigation completed successfully via Minimal Working Agent."""
-
-            else:
-                # Agent failed
-                state_manager.update_investigation(investigation_state.investigation_id, {
-                    "iteration_count": investigation_state.iteration_count + 1,
-                    "findings": investigation_state.findings + [
-                        f"Minimal working agent failed: {agent_result.get('error', 'Unknown error')}"
-                    ],
-                    "confidence_score": 0.2,
-                    "is_complete": False
-                })
-
-                # Mark progress as error
-                progress_tracker.error_investigation(
-                    investigation_state.investigation_id,
-                    agent_result.get('error', 'Agent execution failed')
-                )
-
-                investigation_summary = f"""Investigation Results for Alert {alert_data.alert_id}:
-
-Event: {alert_data.event_type} at {alert_data.location}
-Severity: {alert_data.severity}/10
-Status: Investigation Failed
-Investigation ID: {investigation_state.investigation_id}
-
-❌ Minimal Working Agent Error:
-Error: {agent_result.get('error', 'Unknown error')}
-Workflow Status: {agent_result.get('workflow_status', 'failed')}
-
-Investigation failed. Please check logs for details."""
+Investigation completed successfully via ADK Multi-Agent System."""
 
             logger.info(
-                f"Investigation completed for alert {alert_data.alert_id}")
+                f"ADK investigation completed for alert {alert_data.alert_id}")
 
             # Return the investigation results
             return (investigation_summary, investigation_state.investigation_id)
 
-        except Exception as agent_error:
-            logger.error(
-                f"Minimal working agent execution failed: {agent_error}")
+        except Exception as adk_error:
+            logger.error(f"ADK investigation execution failed: {adk_error}")
 
             # Mark progress as error
             progress_tracker.error_investigation(
                 investigation_state.investigation_id,
-                str(agent_error)
+                str(adk_error)
             )
 
-            # Fallback to structured response if agent fails
+            # Fallback to structured response if ADK fails
             logger.info(
                 f"Falling back to basic response for alert {alert_data.alert_id}")
 
@@ -305,7 +329,7 @@ Investigation failed. Please check logs for details."""
 
 Event: {alert_data.event_type} at {alert_data.location}
 Severity: {alert_data.severity}/10
-Status: Investigation Error (Fallback Mode)
+Status: Investigation Error (ADK Fallback Mode)
 Investigation ID: {investigation_state.investigation_id}
 
 Initial Analysis:
@@ -316,9 +340,9 @@ Initial Analysis:
 
 Infrastructure Status:
 - State Manager: ✅ Investigation created and tracked
-- Minimal Working Agent: ❌ Execution failed ({str(agent_error)})
+- ADK Multi-Agent System: ❌ Execution failed ({str(adk_error)})
 
-Note: Minimal working agent execution failed, using fallback response.
+Note: ADK multi-agent execution failed, using fallback response.
 Investigation Status: Requires manual intervention"""
 
             return (investigation_summary, investigation_state.investigation_id)

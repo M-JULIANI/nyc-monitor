@@ -74,21 +74,20 @@ class MinimalWorkingAgent:
 Your job is to execute this EXACT workflow when given an investigation request:
 
 **STEP 1: WEB SEARCH FOR RELEVANT FINDINGS**
-- Call web_search_func 3 times to gather relevant information:
-  * Search 1: Use the event type and location from the request (max_results=5)
-  * Search 2: Search for location + "news recent" (source_types="news", max_results=5)
-  * Search 3: Search for event type + "NYC" (max_results=3)
+- Call web_search_func 2 times to gather relevant information:
+  * Search 1: Use the event type and location from the request (max_results=3)
+  * Search 2: Search for location + "news recent" (source_types="news", max_results=3)
 
 **STEP 2: GENERATE 2 SATELLITE MAPS**
 - Call generate_location_map_func with:
-  * Map 1: zoom_level=16, map_type="satellite" (close view)
+  * Map 1: zoom_level=18, map_type="satellite" (close view)
   * Map 2: zoom_level=12, map_type="satellite" (wide view)
 
-**STEP 3: COLLECT IMAGES FROM 3 SEARCH QUERIES**
+**STEP 3: COLLECT EXACTLY 8 IMAGES FROM 3 SEARCH QUERIES**
 - Call collect_media_content_simple_func 3 times:
-  * Search 1: Use location + event type (max_items=4)
+  * Search 1: Use location + event type (max_items=3)
   * Search 2: Use location only (max_items=3) 
-  * Search 3: Use "NYC" + event type + "demonstration" (max_items=3)
+  * Search 3: Use "NYC" + event type (max_items=2)
 
 **STEP 4: CREATE PRESENTATION**
 - Call create_slides_presentation_func with evidence_types="all"
@@ -103,9 +102,9 @@ Your job is to execute this EXACT workflow when given an investigation request:
 7. ACTUALLY READ and analyze web search results to provide meaningful findings
 
 **SUCCESS CRITERIA:**
-- 3 web searches completed with relevant findings
-- 2 satellite maps generated
-- 8+ images collected total
+- 2 web searches completed with relevant findings
+- 2 satellite maps generated (zoom 18 + zoom 12)
+- EXACTLY 8 images collected total (3+3+2)
 - 1 presentation created with all artifacts
 - Meaningful analysis of findings in your response
 
@@ -178,16 +177,15 @@ EXECUTE ALL REQUIRED TOOLS NOW IN SEQUENCE:
 1. **WEB SEARCH PHASE** - Gather relevant findings:
    - Search for "{event_type} {location}" to find specific information
    - Search for "{location} news recent" to find recent news coverage
-   - Search for "{event_type} NYC" to find broader context
 
 2. **MAP GENERATION PHASE** - Create location context:
-   - Generate satellite map with zoom level 16 (close view)
+   - Generate satellite map with zoom level 18 (close view)
    - Generate satellite map with zoom level 12 (wide view)
 
-3. **IMAGE COLLECTION PHASE** - Gather visual evidence:
-   - Collect images for "{location} {event_type}"
-   - Collect images for "{location}"
-   - Collect images for "NYC {event_type} demonstration"
+3. **IMAGE COLLECTION PHASE** - Gather EXACTLY 8 images:
+   - Collect images for "{location} {event_type}" (max_items=3)
+   - Collect images for "{location}" (max_items=3)
+   - Collect images for "NYC {event_type}" (max_items=2)
 
 4. **PRESENTATION PHASE** - Create comprehensive report:
    - Generate presentation with all collected artifacts and findings
@@ -198,6 +196,7 @@ EXECUTE ALL REQUIRED TOOLS NOW IN SEQUENCE:
 - PROVIDE a meaningful summary of what you discovered
 - DO NOT skip any steps
 - START IMMEDIATELY - NO CONFIRMATION NEEDED
+- Collect EXACTLY 8 images total (3+3+2)
 
 Your goal is to provide both comprehensive artifact collection AND meaningful investigative findings.
 """
@@ -300,7 +299,7 @@ Your goal is to provide both comprehensive artifact collection AND meaningful in
 
                 success = (
                     maps_count >= 2 and
-                    images_count >= 6 and
+                    images_count >= 8 and
                     web_search_performed and
                     total_artifacts >= 8
                 )

@@ -19,6 +19,7 @@ interface AlertsContextType {
     resolved: number;
   };
   refetch: () => void;
+  refetchAlert: (alertId: string) => Promise<{ success: boolean; message: string; alert?: Alert }>;
   generateReport: (alertId: string) => Promise<{ success: boolean; message: string; investigationId?: string }>;
   fetchAgentTrace: (traceId: string) => Promise<{ success: boolean; trace?: string; message: string }>;
 }

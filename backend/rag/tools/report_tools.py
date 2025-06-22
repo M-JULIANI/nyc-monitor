@@ -404,6 +404,38 @@ def _populate_presentation_with_data(
         logger.info(
             f"   Images: {successful_images} successful, {failed_images} failed")
 
+        # Save the presentation URL as an artifact to the investigation state
+        try:
+            from ..investigation.state_manager import state_manager
+            investigation_state = state_manager.get_investigation(
+                investigation_id)
+            if investigation_state:
+                # Create a presentation artifact
+                presentation_artifact = {
+                    'type': 'presentation',
+                    'filename': f'presentation_{investigation_id}.slides',
+                    'url': public_url,
+                    'public_url': public_url,
+                    'presentation_id': presentation_id,
+                    'title': title,
+                    'created_at': datetime.now().isoformat(),
+                    'evidence_count': evidence_data.get("evidence_summary", {}).get("total_items", 0),
+                    'images_inserted': successful_images,
+                    'template_type': 'status_tracker'
+                }
+
+                # Add the artifact to the investigation state
+                investigation_state.artifacts.append(presentation_artifact)
+                logger.info(
+                    f"✅ Saved presentation URL as artifact: {public_url}")
+                logger.info(
+                    f"📋 Total artifacts now: {len(investigation_state.artifacts)}")
+            else:
+                logger.warning(
+                    f"⚠️ Could not find investigation state {investigation_id} to save presentation artifact")
+        except Exception as e:
+            logger.error(f"❌ Failed to save presentation artifact: {e}")
+
         return {
             "success": True,
             "presentation_id": presentation_id,
@@ -1386,7 +1418,7 @@ def create_investigation_report_func(
                     "location": investigation_state.alert_data.location,
                     "severity": investigation_state.alert_data.severity,
                     "summary": investigation_state.alert_data.summary,
-                    "timestamp": investigation_state.alert_data.timestamp.isoformat()
+                    "timestamp": investigation_state.alert_data.timestamp.isoformat() if hasattr(investigation_state.alert_data.timestamp, 'isoformat') else str(investigation_state.alert_data.timestamp)
                 },
                 "investigation_status": {
                     "phase": investigation_state.phase.value,

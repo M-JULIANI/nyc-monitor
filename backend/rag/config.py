@@ -23,7 +23,7 @@ class Config:
         # RAG and AI
         self.RAG_CORPUS: Optional[str] = os.getenv("RAG_CORPUS")
         self.INVESTIGATION_APPROACH: str = os.getenv(
-            "INVESTIGATION_APPROACH", "adk")
+            "INVESTIGATION_APPROACH", "simple")
 
         # Google Cloud
         self.GOOGLE_CLOUD_PROJECT: Optional[str] = os.getenv(
