@@ -263,20 +263,38 @@ const MapView: React.FC = () => {
 
   const handleAlertSelection = (alert: Alert) => {
     console.log('🎯 HANDLE ALERT SELECTION CALLED! Alert ID:', alert.id);
-    console.log('🎯 Setting selectedAlert to:', alert);
     
-    // JUST set the alert - nothing else!
+    // Step 1: Set the alert immediately for instant popup
+    console.log('🎯 Setting selectedAlert to:', alert);
     setSelectedAlert(alert);
     
-    console.log('🎯 setSelectedAlert called');
-  };
-
-  // Test function - let's add a button to test popup directly
-  const testPopup = () => {
-    console.log('🧪 TEST: Setting first alert as selected');
-    if (filteredAlerts.length > 0) {
-      setSelectedAlert(filteredAlerts[0]);
-    }
+    // Step 2: Set loading state 
+    console.log('🎯 Setting loading state to true');
+    setSelectedAlertLoading(true);
+    
+    // Step 3: Start refetch in background (non-blocking)
+    console.log('🎯 Starting background refetch...');
+    setTimeout(() => {
+      console.log('🔄 Refetching alert data for:', alert.id);
+      
+      refetchAlert(alert.id)
+        .then(result => {
+          console.log('📥 Refetch completed for:', alert.id, result);
+          if (result.success && result.alert) {
+            console.log('✅ Updating with fresh data');
+            setSelectedAlert(result.alert);
+          } else {
+            console.warn('⚠️ Refetch failed, keeping cached data');
+          }
+        })
+        .catch(err => {
+          console.warn('⚠️ Refetch error, keeping cached data:', err);
+        })
+        .finally(() => {
+          console.log('🏁 Clearing loading state');
+          setSelectedAlertLoading(false);
+        });
+    }, 50); // Small delay to ensure UI updates first
   };
 
   useEffect(() => { 
@@ -646,13 +664,22 @@ const MapView: React.FC = () => {
               onClose={() => {
                 console.log('❌ Closing popup');
                 setSelectedAlert(null);
+                setSelectedAlertLoading(false);
               }}
               closeButton={true}
               closeOnClick={false}
               className="max-w-[360px]"
             >
               <div className="p-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white shadow-xl relative">
-                {/* Loading overlay removed for simplicity */}
+                {/* Loading Spinner Overlay */}
+                {selectedAlertLoading && (
+                  <div className="absolute inset-0 bg-zinc-800/50 backdrop-blur-[1px] rounded-xl flex items-center justify-center z-10">
+                    <div className="flex flex-col items-center gap-2 bg-zinc-900/90 px-4 py-3 rounded-lg">
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent"></div>
+                      <span className="text-xs text-zinc-200 font-medium">Updating...</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Header */}
                 <div className="flex items-start gap-3 mb-3">
