@@ -66,9 +66,11 @@ These are basically the agents. The search one will do most of the work, so mayb
 - [ ] ensure twitter collector is actually working?
 - [x] ensure 'create report' button works for certain (non 311) alerts, and when a report doesnt already exist
 - [x] ensure when a report is created, it is linked back to an alert, so that no duppicate reports can be created for an alert
-- [ ] when a report is created, have it persist to the alert card, not just an in session persistence
+- [x] when a report is created, have it persist to the alert card, not just an in session persistence
 - [ ] ensure that a report is findable & clickable from '/reports' tab
-    - [ ] once a report is created, a 'reportLink' field should be created in the alert object in firestore.
+    - [x] once a report is created, a 'reportLink' field should be created in the alert object in firestore.
+- [x] loading spinner during login
+- [x] improved reports with actual insights and a useful executive summary
 - [ ] save the investigation logs in a structured, readable way. markdown? ideally we can render store these in firestore, and have them relate to an alret, similar to how reports are linked to alerts
 - [ ] in the alerts & report cards in the UI, there should be a link to the agent logs which can be rendered in place (markdown)
 - [ ] when an adhoc report is triggered via a button, figure out how to display that in a non-blocking way to indicate that the report us underway. _ideally_ with streaming of the report state.
