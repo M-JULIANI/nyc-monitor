@@ -79,7 +79,7 @@ These are basically the agents. The search one will do most of the work, so mayb
     - [x] once a report is created, a 'reportLink' field should be created in the alert object in firestore.
 - [x] loading spinner during login
 - [x] improved reports with actual insights and a useful executive summary
-- [ ] in the alerts & report cards in the UI, there should be a link to the agent logs which can be rendered in place (markdown)
+- [x] in the alerts & report cards in the UI, there should be a link to the agent logs which can be rendered in place (markdown)
 - [ ] when an adhoc report is triggered via a button, figure out how to display that in a non-blocking way to indicate that the report us underway. _ideally_ with streaming of the report state.
 - [ ] 'daily report' agent
     - [ ] 'daily reports' folder

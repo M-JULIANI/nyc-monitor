@@ -332,13 +332,6 @@ const MapView: React.FC = () => {
     }, 50); // Small delay to ensure UI updates first
   };
 
-  const handleGenerateReport = async (alert: Alert) => {
-    await ReportService.handleGenerateReportForMap(alert, {
-      generateReport,
-      isConnected
-    });
-  };
-
   const handleViewTrace = (alert: Alert) => {
     if (alert.traceId) {
       setTraceModal({
