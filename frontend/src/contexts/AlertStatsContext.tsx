@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Alert } from '../types';
 
 interface AlertStats {
   monitor_alerts: number;
@@ -38,7 +37,6 @@ interface AlertStatsContextType {
   isLoading: boolean;
   error: string | null;
   refetch: () => void;
-  setTimeRange: (hours: number) => void;
   timeRange: number;
 }
 
@@ -46,15 +44,14 @@ const AlertStatsContext = createContext<AlertStatsContextType | undefined>(undef
 
 interface AlertStatsProviderProps {
   children: ReactNode;
-  alerts: Alert[]; // Pass alerts from AlertsContext for processing
 }
 
-export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children, alerts }) => {
+export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children }) => {
   const [alertStats, setAlertStats] = useState<AlertStatsResponse | null>(null);
   const [alertCategories, setAlertCategories] = useState<AlertCategoriesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState(24); // hours
+  const timeRange = 72; // Fixed to 3 days
 
   const fetchStats = async () => {
     try {
@@ -85,6 +82,7 @@ export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children
 
       setAlertStats(statsData);
       setAlertCategories(categoriesData);
+
     } catch (err) {
       console.error('Error fetching alert stats:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch alert stats');
@@ -97,14 +95,10 @@ export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children
     fetchStats();
   };
 
-  const handleSetTimeRange = (hours: number) => {
-    setTimeRange(hours);
-  };
-
-  // Fetch data on mount and when timeRange changes
+  // Fetch data on mount
   useEffect(() => {
     fetchStats();
-  }, [timeRange]);
+  }, []);
 
   const value: AlertStatsContextType = {
     alertStats,
@@ -112,7 +106,6 @@ export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children
     isLoading,
     error,
     refetch,
-    setTimeRange: handleSetTimeRange,
     timeRange
   };
 

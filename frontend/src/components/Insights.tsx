@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useAlerts } from '../contexts/AlertsContext';
 import { useAlertStats } from '../contexts/AlertStatsContext';
 import { Alert } from '../types';
+import Spinner from './Spinner';
 import {
   PieChart,
   Pie,
@@ -19,20 +20,22 @@ import {
 } from 'recharts';
 
 const Insights: React.FC = () => {
-  const { alerts, error: alertsError, isLoading: alertsLoading } = useAlerts();
+  // Get alerts from AlertsContext
+  const { alerts, isLoading: alertsLoading } = useAlerts();
+  
+  // Get stats and categories from AlertStatsContext
   const { 
     alertStats, 
     alertCategories, 
     isLoading: statsLoading, 
     error: statsError,
-    timeRange,
-    setTimeRange 
+    timeRange
   } = useAlertStats();
   
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
+  // Overall loading state
   const isLoading = alertsLoading || statsLoading;
-  const error = alertsError || statsError;
 
   // Category colors for consistent theming
   const categoryColors = {
@@ -129,21 +132,18 @@ const Insights: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-zinc-900">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-2 border-white border-t-transparent"></div>
-          <p className="text-white">Loading insights...</p>
-        </div>
+      <div className="w-full h-full bg-zinc-900 relative">
+        <Spinner />
       </div>
     );
   }
 
-  if (error) {
+  if (statsError) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-zinc-900">
         <div className="text-center">
           <p className="text-red-400 text-lg mb-2">Error loading insights</p>
-          <p className="text-zinc-400">{error}</p>
+          <p className="text-zinc-400">{statsError}</p>
         </div>
       </div>
     );
@@ -154,27 +154,18 @@ const Insights: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl md:text-3xl font-bold text-white">
-            NYC Alert Insights
-          </h2>
-          
-          {/* Time Range Selector */}
-          <div className="flex items-center gap-4">
-            <label className="text-sm text-zinc-300">Time Range:</label>
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(Number(e.target.value))}
-              className="bg-zinc-800 text-white border border-zinc-600 rounded px-3 py-1 text-sm"
-            >
-              <option value={24}>Last 24 hours</option>
-              <option value={72}>Last 3 days</option>
-              <option value={168}>Last 7 days</option>
-            </select>
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold text-white">
+              NYC Alert Insights
+            </h2>
+            <p className="text-zinc-400 text-sm mt-1">
+              Analytics from the last 3 days • {alerts.length} alerts (of {alertStats?.stats.total || '...'} total)
+            </p>
           </div>
         </div>
 
         {/* Stats Overview */}
-        {alertStats && (
+        {alertStats ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
             <div className="card">
               <h3 className="text-lg font-semibold mb-2">Monitor Alerts</h3>
@@ -192,6 +183,16 @@ const Insights: React.FC = () => {
               <p className="text-sm text-zinc-300">{alertStats.timeframe}</p>
             </div>
           </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="card relative h-24">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
         {/* Charts Grid */}
@@ -199,51 +200,67 @@ const Insights: React.FC = () => {
           {/* Category Pie Chart */}
           <div className="card">
             <h3 className="text-xl font-semibold mb-4">Alerts by Category</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={chartData.categoryData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {chartData.categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => [value, 'Alerts']} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            {chartData.categoryData.length > 0 ? (
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={chartData.categoryData}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {chartData.categoryData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [value, 'Alerts']} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-80 relative">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Priority Breakdown */}
           <div className="card">
             <h3 className="text-xl font-semibold mb-4">Alerts by Priority</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData.priorityData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" stroke="#9ca3af" />
-                  <YAxis stroke="#9ca3af" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1f2937', 
-                      border: '1px solid #374151',
-                      borderRadius: '8px'
-                    }}
-                  />
-                  <Bar dataKey="value">
-                    {chartData.priorityData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {chartData.priorityData.length > 0 ? (
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData.priorityData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="name" stroke="#9ca3af" />
+                    <YAxis stroke="#9ca3af" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#1f2937', 
+                        border: '1px solid #374151',
+                        borderRadius: '8px'
+                      }}
+                    />
+                    <Bar dataKey="value">
+                      {chartData.priorityData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-80 relative">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -253,45 +270,53 @@ const Insights: React.FC = () => {
           <p className="text-sm text-zinc-400 mb-4">
             Click on dots to see alert details. X-axis: Day of week, Y-axis: Hour of day
           </p>
-          <div className="h-96">
-            <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis
-                  dataKey="x"
-                  domain={[0, 6]}
-                  ticks={[0, 1, 2, 3, 4, 5, 6]}
-                  tickFormatter={(value) => dayNames[value]}
-                  stroke="#9ca3af"
-                />
-                <YAxis
-                  dataKey="y"
-                  domain={[0, 23]}
-                  stroke="#9ca3af"
-                  label={{ value: 'Hour of Day', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }}
-                />
-                <Tooltip content={<ScatterTooltip />} />
-                {Object.entries(categoryColors).map(([category, color]) => {
-                  const categoryData = chartData.timeData.filter(d => d.category === category);
-                  return (
-                    <Scatter
-                      key={category}
-                      name={category.charAt(0).toUpperCase() + category.slice(1)}
-                      data={categoryData}
-                      fill={color}
-                      onClick={handleScatterClick}
-                      style={{ cursor: 'pointer' }}
-                    />
-                  );
-                })}
-                <Legend />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </div>
+          {chartData.timeData.length > 0 ? (
+            <div className="h-96">
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis
+                    dataKey="x"
+                    domain={[0, 6]}
+                    ticks={[0, 1, 2, 3, 4, 5, 6]}
+                    tickFormatter={(value) => dayNames[value]}
+                    stroke="#9ca3af"
+                  />
+                  <YAxis
+                    dataKey="y"
+                    domain={[0, 23]}
+                    stroke="#9ca3af"
+                    label={{ value: 'Hour of Day', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }}
+                  />
+                  <Tooltip content={<ScatterTooltip />} />
+                  {Object.entries(categoryColors).map(([category, color]) => {
+                    const categoryData = chartData.timeData.filter(d => d.category === category);
+                    return (
+                      <Scatter
+                        key={category}
+                        name={category.charAt(0).toUpperCase() + category.slice(1)}
+                        data={categoryData}
+                        fill={color}
+                        onClick={handleScatterClick}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    );
+                  })}
+                  <Legend />
+                </ScatterChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-96 relative">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Category Details */}
-        {alertCategories && (
+        {alertCategories ? (
           <div className="card">
             <h3 className="text-xl font-semibold mb-4">Category Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -317,6 +342,15 @@ const Insights: React.FC = () => {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        ) : (
+          <div className="card">
+            <h3 className="text-xl font-semibold mb-4">Category Information</h3>
+            <div className="relative h-40">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+              </div>
             </div>
           </div>
         )}
