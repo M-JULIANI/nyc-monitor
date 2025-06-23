@@ -1,4 +1,4 @@
-parch# Atlas - Multi-Agent Investigation System
+# Atlas - Multi-Agent Investigation System
 
 Refer to [setup](./docs/setup.md) for getting started
 
