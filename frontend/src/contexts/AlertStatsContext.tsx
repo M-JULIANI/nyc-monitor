@@ -58,12 +58,21 @@ export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children
       setIsLoading(true);
       setError(null);
 
+      const token = localStorage.getItem('idToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
       const [statsResponse, categoriesResponse] = await Promise.all([
         fetch(`/api/alerts/stats?hours=${timeRange}`, {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         }),
         fetch('/api/alerts/categories', {
-          credentials: 'include'
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         })
       ]);
 

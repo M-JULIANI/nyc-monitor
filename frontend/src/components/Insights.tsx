@@ -221,10 +221,10 @@ const Insights: React.FC = () => {
   }
 
   return (
-    <div className="w-full h-full p-4 md:p-6 bg-zinc-900 text-white overflow-y-auto">
-      <div className="max-w-7xl mx-auto">
+    <div className="w-full h-full bg-zinc-900 text-white overflow-y-auto">
+      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-white">
               NYC Alert Insights
@@ -237,25 +237,25 @@ const Insights: React.FC = () => {
 
         {/* Stats Overview */}
         {alertStats ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-            <div className="card">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="card p-4">
               <h3 className="text-lg font-semibold mb-2">Monitor Alerts</h3>
               <p className="text-3xl font-bold text-blue-400">{alertStats.stats.monitor_alerts}</p>
               <p className="text-sm text-zinc-300">Reddit, Twitter, etc.</p>
             </div>
-            <div className="card">
+            <div className="card p-4">
               <h3 className="text-lg font-semibold mb-2">311 Signals</h3>
               <p className="text-3xl font-bold text-yellow-400">{alertStats.stats.nyc_311_signals}</p>
               <p className="text-sm text-zinc-300">Official city reports</p>
             </div>
-            <div className="card">
+            <div className="card p-4">
               <h3 className="text-lg font-semibold mb-2">Total Alerts</h3>
               <p className="text-3xl font-bold text-green-400">{alertStats.stats.total}</p>
               <p className="text-sm text-zinc-300">{alertStats.timeframe}</p>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
               <div key={i} className="card relative h-24">
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -267,19 +267,19 @@ const Insights: React.FC = () => {
         )}
 
         {/* Charts Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Category Pie Chart */}
-          <div className="card">
+          <div className="card p-4">
             <h3 className="text-xl font-semibold mb-4">Alerts by Category</h3>
             {chartData.categoryData.length > 0 ? (
-              <div className="h-80">
+              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={chartData.categoryData}
                       cx="50%"
                       cy="50%"
-                      outerRadius={100}
+                      outerRadius={80}
                       dataKey="value"
                       label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                     >
@@ -292,7 +292,7 @@ const Insights: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-80 relative">
+              <div className="h-64 relative">
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
                 </div>
@@ -301,10 +301,10 @@ const Insights: React.FC = () => {
           </div>
 
           {/* Priority Breakdown */}
-          <div className="card">
+          <div className="card p-4">
             <h3 className="text-xl font-semibold mb-4">Alerts by Priority</h3>
             {chartData.priorityData.length > 0 ? (
-              <div className="h-80">
+              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData.priorityData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -326,7 +326,7 @@ const Insights: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-80 relative">
+              <div className="h-64 relative">
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
                 </div>
@@ -336,7 +336,7 @@ const Insights: React.FC = () => {
         </div>
 
         {/* Time-based Scatter Plot */}
-        <div className="card mb-8">
+        <div className="card p-4">
           <h3 className="text-xl font-semibold mb-4">Alert Timing Patterns</h3>
           <p className="text-sm text-zinc-400 mb-4">
             Click on dots to see alert details. X-axis: Date, Y-axis: Hour of day (Last 3 days)
@@ -348,9 +348,9 @@ const Insights: React.FC = () => {
             </p>
           )}
           {chartData.timeData.length > 0 ? (
-            <div className="h-[600px]">
+            <div className="h-[28rem] sm:h-96 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 20, right: 20, bottom: 80, left: 40 }}>
+                <ScatterChart margin={{ top: 20, right: 20, bottom: 90, left: 40 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis
                     dataKey="x"
@@ -364,7 +364,7 @@ const Insights: React.FC = () => {
                     stroke="#9ca3af"
                     interval={0}
                     angle={-45}
-                    tick={{ textAnchor: 'end', fontSize: 12 }}
+                    tick={{ textAnchor: 'end', fontSize: 11 }}
                   />
                   <YAxis
                     dataKey="y"
@@ -387,12 +387,16 @@ const Insights: React.FC = () => {
                       />
                     );
                   })}
-                  <Legend />
+                  <Legend 
+                    verticalAlign="bottom" 
+                    height={60}
+                    wrapperStyle={{ paddingTop: '15px', paddingBottom: '0px' }}
+                  />
                 </ScatterChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-[600px] relative">
+            <div className="h-[28rem] sm:h-96 relative">
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
               </div>
@@ -402,7 +406,7 @@ const Insights: React.FC = () => {
 
         {/* Category Details */}
         {alertCategories ? (
-          <div className="card">
+          <div className="card p-4">
             <h3 className="text-xl font-semibold mb-4">Category Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {Object.entries(alertCategories.categories).map(([key, category]) => (
@@ -430,7 +434,7 @@ const Insights: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div className="card">
+          <div className="card p-4">
             <h3 className="text-xl font-semibold mb-4">Category Information</h3>
             <div className="relative h-40">
               <div className="absolute inset-0 flex items-center justify-center">
