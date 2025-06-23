@@ -1,8 +1,9 @@
 from monitor.types.alert_categories import get_categories_summary, ALERT_TYPES, categorize_311_complaint, get_alert_type_info, normalize_category, get_main_categories
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from sse_starlette.sse import EventSourceResponse
 from google.cloud import firestore
 from ..config import get_config
+from ..auth import verify_google_token
 import asyncio
 from datetime import datetime, timedelta
 import json
@@ -160,7 +161,8 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
 async def get_recent_alerts(
     limit: int = Query(2000, ge=1, le=5000,
                        description="Number of alerts to return"),
-    hours: int = Query(24, ge=1, le=168, description="Hours to look back")
+    hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
+    user=Depends(verify_google_token)
 ):
     """
     Get recent alerts with MINIMAL data - ultra-fast for map display
@@ -172,8 +174,13 @@ async def get_recent_alerts(
     - NO sorting
     - NO complex transformations
     - In-memory caching (5 min TTL)
+
+    **Requires authentication**: Valid Google OAuth token
     """
     try:
+        logger.info(
+            f"🔒 Authenticated user {user.get('email')} accessing recent alerts")
+
         # Check cache first
         cache_key = f"minimal:{limit}:{hours}"
 
@@ -420,7 +427,8 @@ async def get_recent_alerts(
                 },
                 'optimizations': ['ultra_minimal_fields', 'no_sorting', 'minimal_transform', 'similarity_deduplication_non_311'],
                 'cached': False,
-                'cache_ttl_seconds': CACHE_TTL_SECONDS
+                'cache_ttl_seconds': CACHE_TTL_SECONDS,
+                'accessed_by': user.get('email')  # Track who accessed the data
             }
         }
 
@@ -438,14 +446,19 @@ async def get_recent_alerts(
 
 
 @alerts_router.get('/get/{alert_id}')
-async def get_single_alert(alert_id: str):
+async def get_single_alert(alert_id: str, user=Depends(verify_google_token)):
     """
     Get a single alert with full details by ID
 
     Searches both collections (monitor and 311) for the alert ID
     Returns complete alert object with all available fields
+
+    **Requires authentication**: Valid Google OAuth token
     """
     try:
+        logger.info(
+            f"🔒 Authenticated user {user.get('email')} accessing alert: {alert_id}")
+
         db = get_db()
 
         # Try monitor collection first
@@ -461,7 +474,8 @@ async def get_single_alert(alert_id: str):
                 return {
                     'alert': alert_data,
                     'source_collection': 'nyc_monitor_alerts',
-                    'found': True
+                    'found': True,
+                    'accessed_by': user.get('email')
                 }
         except Exception as e:
             logger.error(f"Error checking monitor collection: {e}")
@@ -481,7 +495,8 @@ async def get_single_alert(alert_id: str):
                 return {
                     'alert': normalized_signal,
                     'source_collection': 'nyc_311_signals',
-                    'found': True
+                    'found': True,
+                    'accessed_by': user.get('email')
                 }
         except Exception as e:
             logger.error(f"Error checking 311 collection: {e}")
@@ -503,7 +518,8 @@ async def get_single_alert(alert_id: str):
                     'alert': normalized_signal,
                     'source_collection': 'nyc_311_signals',
                     'found': True,
-                    'matched_by': 'unique_key'
+                    'matched_by': 'unique_key',
+                    'accessed_by': user.get('email')
                 }
         except Exception as e:
             logger.error(f"Error searching by unique_key: {e}")
@@ -632,8 +648,15 @@ def _extract_monitor_timestamp(data: dict) -> str:
 
 
 @alerts_router.get('/cache/info')
-async def get_cache_info():
-    """Get information about current cache state"""
+async def get_cache_info(user=Depends(verify_google_token)):
+    """
+    Get information about current cache state
+
+    **Requires authentication**: Valid Google OAuth token
+    """
+    logger.info(
+        f"🔒 Authenticated user {user.get('email')} accessing cache info")
+
     current_time = time.time()
     cache_info = {}
 
@@ -651,25 +674,40 @@ async def get_cache_info():
     return {
         'cache_ttl_seconds': CACHE_TTL_SECONDS,
         'entries': cache_info,
-        'total_entries': len(_cache)
+        'total_entries': len(_cache),
+        'accessed_by': user.get('email')
     }
 
 
 @alerts_router.delete('/cache')
-async def clear_cache():
-    """Clear all cached data"""
+async def clear_cache(user=Depends(verify_google_token)):
+    """
+    Clear all cached data
+
+    **Requires authentication**: Valid Google OAuth token - ADMINISTRATIVE ACTION
+    """
+    logger.warning(
+        f"🔒⚠️ Authenticated user {user.get('email')} clearing all cache data - ADMINISTRATIVE ACTION")
+
     cleared_count = len(_cache)
     _cache.clear()
     return {
         'message': f"Cleared {cleared_count} cache entries",
-        'cache_size': len(_cache)
+        'cache_size': len(_cache),
+        'cleared_by': user.get('email')
     }
 
 
 # Keep the stream endpoint for potential future use
 @alerts_router.get('/stream')
-async def stream_alerts():
-    """Stream alerts via Server-Sent Events (legacy endpoint)"""
+async def stream_alerts(user=Depends(verify_google_token)):
+    """
+    Stream alerts via Server-Sent Events (legacy endpoint)
+
+    **Requires authentication**: Valid Google OAuth token
+    """
+    logger.info(
+        f"🔒 Authenticated user {user.get('email')} starting alert stream")
     return EventSourceResponse(alert_stream())
 
 
@@ -690,10 +728,18 @@ async def alert_stream():
 
 @alerts_router.get('/stats')
 async def get_alert_stats(
-    hours: int = Query(24, ge=1, le=168, description="Hours to look back")
+    hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
+    user=Depends(verify_google_token)
 ):
-    """Get simple statistics for both collections"""
+    """
+    Get simple statistics for both collections
+
+    **Requires authentication**: Valid Google OAuth token
+    """
     try:
+        logger.info(
+            f"🔒 Authenticated user {user.get('email')} accessing alert stats")
+
         db = get_db()
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
 
@@ -726,7 +772,8 @@ async def get_alert_stats(
         return {
             'stats': stats,
             'timeframe': f"Last {hours} hours",
-            'generated_at': datetime.utcnow().isoformat()
+            'generated_at': datetime.utcnow().isoformat(),
+            'accessed_by': user.get('email')
         }
 
     except Exception as e:
@@ -735,15 +782,18 @@ async def get_alert_stats(
 
 
 @alerts_router.get('/categories')
-async def get_alert_categories():
+async def get_alert_categories(user=Depends(verify_google_token)):
     """
     Get all available alert categories and types with metadata for frontend use
 
     Returns:
         Dictionary with categorized alert types including descriptions
+
+    **Requires authentication**: Valid Google OAuth token
     """
     try:
-        logger.info("📋 Fetching alert categories and types")
+        logger.info(
+            f"🔒 Authenticated user {user.get('email')} accessing alert categories")
 
         # Get the categories summary from our categorization system
         categories = get_categories_summary()
@@ -756,7 +806,8 @@ async def get_alert_categories():
             'total_categories': len(categories),
             'total_alert_types': len(ALERT_TYPES),
             'timestamp': datetime.utcnow().isoformat(),
-            'version': '1.0'
+            'version': '1.0',
+            'accessed_by': user.get('email')
         }
 
         logger.info(
@@ -770,7 +821,7 @@ async def get_alert_categories():
 
 
 @alerts_router.get('/agent-traces/{trace_id}')
-async def get_agent_trace(trace_id: str):
+async def get_agent_trace(trace_id: str, user=Depends(verify_google_token)):
     """
     Get agent trace from Firestore by trace ID
 
@@ -779,9 +830,12 @@ async def get_agent_trace(trace_id: str):
 
     Returns:
         Agent trace data formatted as markdown
+
+    **Requires authentication**: Valid Google OAuth token - SENSITIVE INVESTIGATION DATA
     """
     try:
-        logger.info(f"📋 Fetching agent trace: {trace_id}")
+        logger.warning(
+            f"🔒🔍 Authenticated user {user.get('email')} accessing SENSITIVE agent trace: {trace_id}")
 
         # Get Firestore client
         db = get_db()
@@ -804,7 +858,8 @@ async def get_agent_trace(trace_id: str):
             'investigation_id': trace_data.get('investigation_id'),
             'trace': trace_markdown,
             'created_at': trace_data.get('created_at'),
-            'approach': trace_data.get('approach')
+            'approach': trace_data.get('approach'),
+            'accessed_by': user.get('email')
         }
 
     except HTTPException:
