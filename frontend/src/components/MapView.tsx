@@ -331,23 +331,6 @@ const MapView: React.FC = () => {
     }, 50); // Small delay to ensure UI updates first
   };
 
-  const handleGenerateReport = async (alert: Alert) => {
-    if (!isConnected) return;
-    
-    try {
-      const result = await generateReport(alert.id);
-      if (result.success) {
-        console.log('Report generation started:', result.investigationId);
-        // The UI will update automatically via polling
-      } else {
-        window.alert(`Failed to generate report: ${result.message}`);
-      }
-    } catch (err) {
-      console.error('Error generating report:', err);
-      window.alert('Failed to generate report');
-    }
-  };
-
   const handleViewTrace = (alert: Alert) => {
     if (alert.traceId) {
       setTraceModal({
@@ -400,9 +383,38 @@ const MapView: React.FC = () => {
       return; // Early return to prevent fallback
     }
     
-    // Generate new report for all other cases
+    // Immediately update the alert state to show investigating AND set local loading
+    console.log(`Setting alert ${alert.id} to investigating state immediately`);
+    setSelectedAlert(prev => prev ? { ...prev, status: 'investigating' as const } : null);
+    setSelectedAlertLoading(true);
+    
+    // Generate new report using local state management (avoid global loading)
     console.log(`Generating new report for alert ${alert.id} - Status: ${alert.status}, ReportUrl: ${alert.reportUrl}`);
-    await handleGenerateReport(alert);
+    
+    try {
+      const result = await generateReport(alert.id);
+      if (result.success) {
+        console.log('Report generation started:', result.investigationId);
+        // Update the selected alert with investigation details
+        setSelectedAlert(prev => prev ? { 
+          ...prev, 
+          investigationId: result.investigationId,
+          status: 'investigating' as const 
+        } : null);
+      } else {
+        console.error('Failed to generate report:', result.message);
+        // Revert the status on failure
+        setSelectedAlert(prev => prev ? { ...prev, status: 'active' as const } : null);
+        window.alert(`Failed to generate report: ${result.message}`);
+      }
+    } catch (err) {
+      console.error('Error generating report:', err);
+      // Revert the status on error
+      setSelectedAlert(prev => prev ? { ...prev, status: 'active' as const } : null);
+      window.alert('Failed to generate report');
+    } finally {
+      setSelectedAlertLoading(false);
+    }
   };
 
   const isInvestigationDisabled = (alert: Alert) => {
@@ -878,7 +890,7 @@ const MapView: React.FC = () => {
                     
                     // Determine disabled state - "View Report" is never disabled by role
                     const isDisabledForInvestigation = isInvestigationDisabled(selectedAlert);
-                    const isDisabledForRole = !isViewReportMode && (user?.role !== 'admin'); // Only restrict role for "Generate Report"
+                    const isDisabledForRole = !isViewReportMode && (user?.role === 'viewer'); // Only restrict role for "Generate Report"
                     const isDisabled = isDisabledForInvestigation || isDisabledForRole;
                     
                     // Determine button styling based on state
@@ -887,7 +899,7 @@ const MapView: React.FC = () => {
                         // Always green and accessible for "View Report"
                         return 'btn-success';
                       } else if (isDisabledForRole) {
-                        // Halftone gray for non-admin users trying to generate reports
+                        // Halftone gray for viewer users trying to generate reports
                         return 'bg-gray-500 text-gray-300 cursor-not-allowed opacity-60';
                       } else if (isDisabledForInvestigation) {
                         // Yellow for investigation-level restrictions (existing behavior)

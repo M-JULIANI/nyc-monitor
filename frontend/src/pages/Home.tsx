@@ -2,11 +2,13 @@ import { useState } from 'react';
 import TabNavigation from '../components/TabNavigation';
 import MapView from '../components/MapView';
 import Dashboard from '../components/Dashboard';
-import Reports from '../components/Reports';
+import Insights from '../components/Insights';
 import { AlertsProvider } from '../contexts/AlertsContext';
+import { AlertStatsProvider } from '../contexts/AlertStatsContext';
 import { MapStateProvider } from '../contexts/MapStateContext';
 
-const Home = () => {
+// Internal component to access alerts for AlertStatsProvider
+const HomeContent = () => {
   const [activeTab, setActiveTab] = useState('map');
 
   const renderActiveTab = () => {
@@ -15,34 +17,42 @@ const Home = () => {
         return <MapView />;
       case 'dashboard':
         return <Dashboard />;
-      case 'reports':
-        return <Reports />;
+      case 'insights':
+        return <Insights />;
       default:
         return <MapView />;
     }
   };
 
   return (
+    <AlertStatsProvider>
+      <div style={{
+        width: '100vw',
+        height: 'calc(100vh - 60px)', // Account for navbar height
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#111827'
+      }}>
+        <TabNavigation 
+          activeTab={activeTab} 
+          onTabChange={setActiveTab} 
+        />
+        <div style={{
+          flex: 1,
+          overflow: 'hidden'
+        }}>
+          {renderActiveTab()}
+        </div>
+      </div>
+    </AlertStatsProvider>
+  );
+};
+
+const Home = () => {
+  return (
     <AlertsProvider>
       <MapStateProvider>
-        <div style={{
-          width: '100vw',
-          height: 'calc(100vh - 60px)', // Account for navbar height
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#111827'
-        }}>
-          <TabNavigation 
-            activeTab={activeTab} 
-            onTabChange={setActiveTab} 
-          />
-          <div style={{
-            flex: 1,
-            overflow: 'hidden'
-          }}>
-            {renderActiveTab()}
-          </div>
-        </div>
+        <HomeContent />
       </MapStateProvider>
     </AlertsProvider>
   );
