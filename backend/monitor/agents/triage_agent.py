@@ -223,6 +223,19 @@ You MUST categorize each alert with specific event types. DO NOT use "general" u
    - First-hand witness accounts vs. second-hand reports
 4. **Update vs. New Alert**: If it's the same event with minor updates, mark it as "duplicate_of" and include the original alert's document_id
 
+**🚨 CRITICAL DUPLICATE DETECTION RULES**:
+1. **EXACT TITLE MATCHES**: If the title is identical or 90%+ similar to any recent alert, mark as duplicate
+2. **SAME EVENT TYPE + LOCATION**: If event_type AND area/location are the same, mark as duplicate
+3. **RECURRING NON-EVENTS**: If seeing the same non-urgent event repeatedly (like "Birds on Fire Escape"), mark as duplicate after first occurrence
+4. **DEFAULT TO DUPLICATE**: When in doubt between duplicate vs. new alert, choose duplicate to avoid spam
+5. **AGGRESSIVE DUPLICATE DETECTION**: Be very strict - only create new alerts for genuinely new information
+
+**DUPLICATE MARKING INSTRUCTIONS**:
+- Set "is_duplicate": true for any alert that matches recent alerts
+- Set "duplicate_of": "[document_id or title]" to reference the original
+- Set "duplicate_reason": "Exact title match" or "Same event and location" etc.
+- Use "new_information": "None" if no new details, or describe what's new if any
+
 **CONTENT AND SENTIMENT ANALYSIS**:
 1. **Analyze Actual Content**: Examine the full text, sentiment, and tone across all sources (Reddit posts, Tweets, HackerNews stories, 311 reports, etc.)
 2. **Community Reaction**: Note if content shows concern, excitement, avoidance, or participation across different platforms
@@ -359,6 +372,13 @@ Only create alerts if you can identify SPECIFIC locations with actionable geogra
   ]
 }}
 
+🚨 **DUPLICATE DETECTION PRIORITY**: 
+- ALWAYS check recent alerts first before creating any new alert
+- If ANY recent alert has similar title, location, or event type, mark as duplicate
+- Example: If you see "Birds on Fire Escape - Queens" in recent alerts, do NOT create another "Birds on Fire Escape - Queens" alert
+- Example: If you see "SunnyPride in Sunnyside" in recent alerts, mark any new "SunnyPride" or "Sunnyside" events as duplicates
+- Better to have zero alerts than duplicate alerts
+
 IMPORTANT: 
 - Respond with ONLY valid JSON - no markdown, no explanations, no code blocks
 - Start your response with '{{' and end with '}}'
@@ -369,6 +389,7 @@ IMPORTANT:
 - Use descriptive titles WITHOUT date prefixes - dates go in separate "event_date" field
 - Use SPECIFIC event_type from the list above - NO "general" unless absolutely necessary
 - If no locationally-specific alerts can be created, use an empty alerts array: "alerts": []
+- 🚨 CRITICAL: Always set is_duplicate=true for any alert matching recent alerts
 """
         return prompt
 

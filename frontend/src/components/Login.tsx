@@ -19,7 +19,7 @@ const Login: React.FC = () => {
           Welcome to NYC Monitor
         </h2>
         <p className="text-zinc-300 mb-8 text-center">
-          Sign in to access the dashboard
+          Sign in to proceed
         </p>
         
         <div className="flex justify-center">
@@ -57,9 +57,6 @@ const Login: React.FC = () => {
           )}
         </div>
 
-        <p className="mt-6 text-sm text-zinc-400 text-center">
-          By signing in, you agree to our Terms of Service and Privacy Policy
-        </p>
       </div>
     </div>
   );

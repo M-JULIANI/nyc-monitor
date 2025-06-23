@@ -44,6 +44,37 @@ class HackerNewsCollector(BaseCollector):
         logger.info(
             f"🗺️ HackerNews Location extractor initialized with {self.location_extractor.get_location_count()} NYC locations")
 
+        # NYC-relevant search terms for HackerNews (expanded for better coverage)
+        self.nyc_search_terms = [
+            # Direct NYC mentions
+            'NYC', 'New York', 'Manhattan', 'Brooklyn', 'Queens', 'Bronx',
+
+            # Tech companies and areas
+            'Silicon Alley', 'Flatiron', 'DUMBO', 'Cornell Tech', 'Hudson Yards',
+            'Goldman Sachs', 'JPMorgan', 'Bloomberg', 'Two Sigma', 'Palantir',
+
+            # Infrastructure and services
+            'MTA', 'subway', 'Citi Bike', '311', 'LinkNYC', 'mesh network',
+            'broadband NYC', 'internet outage', 'power grid', 'ConEd',
+
+            # Events and conferences
+            'hackathon NYC', 'tech meetup', 'startup week', 'TechCrunch',
+            'NYC startup', 'venture capital', 'tech conference NYC',
+
+            # General infrastructure/tech topics that often affect NYC
+            'transportation app', 'delivery app', 'rideshare', 'food delivery',
+            'smart city', 'urban planning', 'traffic management', 'public wifi',
+            'electric grid', 'renewable energy', 'data center outage',
+
+            # Major NYC universities and research
+            'Columbia University', 'NYU', 'New York University', 'Rockefeller',
+            'Memorial Sloan Kettering', 'Mount Sinai', 'research NYC',
+
+            # Economic and regulatory
+            'Wall Street', 'financial district', 'SEC', 'CFTC', 'fintech NYC',
+            'cryptocurrency exchange', 'trading system', 'market outage'
+        ]
+
     async def collect_signals(self) -> List[Dict]:
         """
         Collect recent signals from HackerNews filtered for NYC relevance
@@ -92,8 +123,8 @@ class HackerNewsCollector(BaseCollector):
 
                         monitoring_stats['recent_stories'] += 1
 
-                        # Check relevance (unemployment-related stories)
-                        if not self._is_nyc_relevant(story_data.get('title', ''), story_data.get('text', '')):
+                        # Check relevance (NYC-related stories using expanded search terms)
+                        if not self._is_hackernews_nyc_relevant(story_data.get('title', ''), story_data.get('text', '')):
                             continue
 
                         monitoring_stats['relevant_stories'] += 1
@@ -379,3 +410,10 @@ class HackerNewsCollector(BaseCollector):
             'source': 'none',
             'success': False
         }
+
+    def _is_hackernews_nyc_relevant(self, title: str, text: str) -> bool:
+        """Check if story is relevant to NYC using expanded search terms"""
+        for term in self.nyc_search_terms:
+            if term in title or term in text:
+                return True
+        return False

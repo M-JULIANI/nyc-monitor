@@ -50,26 +50,27 @@ class TwitterCollector(BaseCollector):
             raise ValueError(error_msg)
 
         # Search parameters - optimized for 15-minute cycles
-        self.max_tweets_per_query = 10     # Keep minimum for API
-        self.time_window_hours = 1         # Reduce to 1 hour for more recent tweets
-        self.max_collection_time = 45      # Reduce to 45 seconds to leave buffer
-        self.wait_on_rate_limit = False    # Handle rate limits ourselves
+        self.max_tweets_per_query = 5      # Reduce from 10 to 5 to avoid rate limits
+        self.time_window_hours = 2         # Increase to 2 hours for more coverage
+        self.max_collection_time = 30      # Reduce to 30 seconds to be safer
+        self.wait_on_rate_limit = True     # Change to True to handle rate limits better
         self.rate_limit_reset_time = None  # Track when rate limit will reset
-        self.contexts_per_cycle = 3        # Process only 3 contexts per 15-min cycle
-        self.delay_between_contexts = 2    # 2 second delay between contexts
+        self.contexts_per_cycle = 2        # Reduce from 3 to 2 contexts per cycle
+        self.delay_between_contexts = 5    # Increase delay from 2 to 5 seconds
 
-        # NYC contexts to monitor (similar to Reddit's subreddits)
-        # Prioritize contexts based on population/activity
+        # NYC contexts to monitor - simplified and more targeted
         self.nyc_contexts = [
-            # Core NYC areas - prioritize Manhattan and Brooklyn
-            {'name': 'Manhattan',
-                'query': 'Manhattan -is:retweet -is:reply lang:en', 'priority': 1},
-            {'name': 'Brooklyn',
-                'query': 'Brooklyn -is:retweet -is:reply lang:en', 'priority': 1},
-            {'name': 'Queens', 'query': 'Queens -is:retweet -is:reply lang:en', 'priority': 2},
-            {'name': 'Bronx', 'query': 'Bronx -is:retweet -is:reply lang:en', 'priority': 2},
-            {'name': 'Staten Island',
-                'query': '"Staten Island" -is:retweet -is:reply lang:en', 'priority': 3},
+            # Core NYC areas - prioritize Manhattan and Brooklyn with more targeted searches
+            {'name': 'NYC_Emergency',
+                'query': '(NYC OR "New York") (emergency OR fire OR police OR ambulance) -is:retweet -is:reply lang:en', 'priority': 1},
+            {'name': 'NYC_Events',
+                'query': '(NYC OR "New York") (parade OR festival OR concert OR protest OR event OR closing OR traffic) -is:retweet -is:reply lang:en', 'priority': 1},
+            {'name': 'NYC_Infrastructure',
+                'query': '(NYC OR "New York") (subway OR "power outage" OR "water main" OR "road closure" OR MTA) -is:retweet -is:reply lang:en', 'priority': 2},
+            {'name': 'Manhattan_Local',
+                'query': 'Manhattan (happening OR breaking OR live OR urgent OR now) -is:retweet -is:reply lang:en', 'priority': 2},
+            {'name': 'Brooklyn_Local',
+                'query': 'Brooklyn (happening OR breaking OR live OR urgent OR now) -is:retweet -is:reply lang:en', 'priority': 3},
         ]
 
         # Sort contexts by priority
