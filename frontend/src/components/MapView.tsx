@@ -6,6 +6,7 @@ import { useAlerts } from '../contexts/AlertsContext';
 import { useMapState } from '../contexts/MapStateContext';
 import Spinner from './Spinner';
 import AgentTraceModal from './AgentTraceModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA';
 
@@ -50,6 +51,7 @@ const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
   //const markerClickedRef = useRef(false);
   const { alerts, error, isLoading, generateReport, refetchAlert } = useAlerts();
+  const { user } = useAuth();
   const isConnected = !isLoading;
   const { viewport, setViewport, filter, setFilter, viewMode, setViewMode } = useMapState();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
@@ -266,8 +268,17 @@ const MapView: React.FC = () => {
     // Step 1.5: Fly to center the marker on the map
     if (mapRef.current) {
       console.log('🗺️ Flying to marker coordinates:', alert.coordinates);
+      
+      // Calculate offset to account for popup height
+      // Popup appears above the marker, so we need to shift the map center down
+      // This ensures the popup is fully visible without top clipping
+      const map = mapRef.current.getMap();
+      const containerHeight = map.getContainer().clientHeight;
+      const popupOffset = -200; // Approximate popup height in pixels
+      const offsetInDegrees = (popupOffset / containerHeight) * (map.getBounds().getNorth() - map.getBounds().getSouth());
+      
       mapRef.current.flyTo({
-        center: [alert.coordinates.lng, alert.coordinates.lat],
+        center: [alert.coordinates.lng, alert.coordinates.lat - offsetInDegrees], // Offset south to show popup fully
         duration: 800, // Smooth 800ms animation
         essential: true // This animation is essential and will not be interrupted
       });
@@ -861,19 +872,42 @@ const MapView: React.FC = () => {
                 {selectedAlert.source !== "311" && (
                   <div className="space-y-2">
                   {/* Generate/View Report Button - always show unless disabled */}
-                  <button
-                    className={`btn w-full text-sm ${
-                      isInvestigationDisabled(selectedAlert)
-                        ? 'bg-yellow-600 cursor-not-allowed text-white' 
-                        : selectedAlert.status === 'resolved' && selectedAlert.reportUrl
-                        ? 'btn-success'
-                        : 'btn-primary'
-                    }`}
-                    onClick={() => handleReportButtonClick(selectedAlert)}
-                    disabled={isInvestigationDisabled(selectedAlert)}
-                  >
-                    {getReportButtonContent(selectedAlert)}
-                  </button>
+                  {(() => {
+                    // Check if this is a "View Report" scenario (completed investigation with report URL)
+                    const isViewReportMode = selectedAlert.status === 'resolved' && selectedAlert.reportUrl;
+                    
+                    // Determine disabled state - "View Report" is never disabled by role
+                    const isDisabledForInvestigation = isInvestigationDisabled(selectedAlert);
+                    const isDisabledForRole = !isViewReportMode && (user?.role !== 'admin'); // Only restrict role for "Generate Report"
+                    const isDisabled = isDisabledForInvestigation || isDisabledForRole;
+                    
+                    // Determine button styling based on state
+                    const getButtonClasses = () => {
+                      if (isViewReportMode) {
+                        // Always green and accessible for "View Report"
+                        return 'btn-success';
+                      } else if (isDisabledForRole) {
+                        // Halftone gray for non-admin users trying to generate reports
+                        return 'bg-gray-500 text-gray-300 cursor-not-allowed opacity-60';
+                      } else if (isDisabledForInvestigation) {
+                        // Yellow for investigation-level restrictions (existing behavior)
+                        return 'bg-yellow-600 cursor-not-allowed text-white';
+                      } else {
+                        // Default primary state for "Generate Report"
+                        return 'btn-primary';
+                      }
+                    };
+
+                    return (
+                      <button
+                        className={`btn w-full text-sm ${getButtonClasses()}`}
+                        onClick={() => handleReportButtonClick(selectedAlert)}
+                        disabled={isDisabled}
+                      >
+                        {getReportButtonContent(selectedAlert)}
+                      </button>
+                    );
+                  })()}
 
                   {/* View Trace Button - only show if traceId exists */}
                   {selectedAlert.traceId && (

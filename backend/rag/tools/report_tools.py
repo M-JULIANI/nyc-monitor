@@ -24,6 +24,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google.adk.tools import FunctionTool
 from google.auth import default
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -480,166 +481,139 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
     alert_data = investigation_state.alert_data
     evidence_summary = evidence_data.get("evidence_summary", {})
 
-    # Create findings summary - Extract real findings from investigation results
-    findings_text = []
+    # Extract all available findings for LLM synthesis
+    raw_findings = []
 
-    # Try to get actual investigation results/content to extract meaningful findings
     try:
-        # First priority: Extract findings from the alert summary itself - it contains the most factual information
-        if alert_data.summary and len(alert_data.summary) > 100:
-            logger.debug(
-                f"Extracting findings from rich alert summary: {len(alert_data.summary)} characters")
+        # Collect web search findings from agent_findings
+        if hasattr(investigation_state, 'agent_findings'):
+            for agent_name, findings in investigation_state.agent_findings.items():
+                if 'web_search' in agent_name.lower() or 'search' in agent_name.lower():
+                    if isinstance(findings, list):
+                        raw_findings.extend(findings)
 
-            # Parse the alert summary to extract key facts
+        # Collect insights from artifact descriptions and URLs
+        for artifact in investigation_state.artifacts:
+            artifact_type = artifact.get('type', '')
+            description = artifact.get('description', '')
+            url = artifact.get('url', '')
+            filename = artifact.get('filename', '')
+
+            if description and len(description) > 20:
+                # Clean and enhance descriptions
+                if 'image' in artifact_type and description != f"Image related to {alert_data.event_type}":
+                    raw_findings.append(f"Visual evidence: {description}")
+                elif 'screenshot' in artifact_type:
+                    raw_findings.append(
+                        f"Web evidence captured: {description}")
+                elif 'map' in artifact_type:
+                    raw_findings.append(f"Geographic context: {description}")
+                elif description not in [f"Events at {alert_data.location}", "Map image", "Screenshot"]:
+                    raw_findings.append(description)
+
+            # Extract context from meaningful URLs
+            if url:
+                # News sources
+                news_domains = ['nytimes.com', 'cnn.com', 'reuters.com', 'washingtonpost.com',
+                                'ap.org', 'nbcnews.com', 'abcnews.com', 'cbsnews.com', 'bbc.com']
+                for domain in news_domains:
+                    if domain in url:
+                        raw_findings.append(
+                            f"News source documented: {domain}")
+                        break
+
+                # Social media
+                social_domains = ['twitter.com',
+                                  'facebook.com', 'instagram.com', 'tiktok.com']
+                for domain in social_domains:
+                    if domain in url:
+                        raw_findings.append(
+                            f"Social media evidence from {domain}")
+                        break
+
+            # Extract context from filenames
+            if filename and len(filename) > 10:
+                # Look for meaningful filename patterns
+                filename_lower = filename.lower()
+                if any(word in filename_lower for word in ['protest', 'march', 'demonstration', 'rally']):
+                    raw_findings.append(f"Event-specific content: {filename}")
+                elif any(word in filename_lower for word in ['news', 'article', 'report']):
+                    raw_findings.append(f"News documentation: {filename}")
+
+        # Extract additional context from investigation state
+        if hasattr(investigation_state, 'findings') and investigation_state.findings:
+            for finding in investigation_state.findings:
+                if isinstance(finding, str) and len(finding) > 30:
+                    raw_findings.append(finding)
+
+        # Enhanced alert summary processing
+        if alert_data.summary and len(alert_data.summary) > 50:
+            # Extract key phrases from alert summary
             summary_lower = alert_data.summary.lower()
 
-            # Extract crowd size information
-            if "tens of thousands" in summary_lower:
-                findings_text.append(
-                    "• Massive demonstration involving tens of thousands of participants")
-            elif "thousands" in summary_lower or "50,000" in alert_data.summary:
-                findings_text.append(
-                    "• Large-scale protest with thousands of participants documented")
-            elif "hundreds" in summary_lower:
-                findings_text.append(
-                    "• Significant demonstration with hundreds of participants")
+            # Look for scale indicators
+            scale_indicators = ['thousands', 'hundreds',
+                                'large', 'massive', 'significant']
+            for indicator in scale_indicators:
+                if indicator in summary_lower:
+                    raw_findings.append(
+                        f"Initial report indicates {indicator} scale event")
+                    break
 
-            # Extract event details and timeline
-            if "june 14" in summary_lower or "trump's" in summary_lower and "birthday" in summary_lower:
-                findings_text.append(
-                    "• Event timed to coincide with Donald Trump's 79th birthday on June 14")
+            # Look for nature indicators
+            nature_indicators = ['peaceful', 'violent',
+                                 'confrontational', 'organized', 'spontaneous']
+            for indicator in nature_indicators:
+                if indicator in summary_lower:
+                    raw_findings.append(
+                        f"Alert characterizes event as {indicator}")
+                    break
 
-            # Extract geographic scope
-            if "bryant park" in summary_lower and "madison square park" in summary_lower:
-                findings_text.append(
-                    "• Demonstration route spanned from Bryant Park to Madison Square Park in Manhattan")
+            # Add full summary if substantial
+            if len(alert_data.summary) > 100:
+                raw_findings.append(
+                    f"Initial alert context: {alert_data.summary}")
 
-            # Extract behavior and law enforcement response
-            if "peaceful" in summary_lower and "no arrests" in summary_lower:
-                findings_text.append(
-                    "• Demonstration remained peaceful throughout with no arrests reported")
-            elif "no arrests" in summary_lower:
-                findings_text.append(
-                    "• No arrests reported despite significant police presence")
+        # Log what we collected for debugging
+        logger.info(
+            f"🔍 Collected {len(raw_findings)} raw findings for synthesis:")
+        for i, finding in enumerate(raw_findings[:5]):  # Show first 5
+            logger.info(f"   {i+1}: {finding[:80]}...")
+        if len(raw_findings) > 5:
+            logger.info(f"   ... and {len(raw_findings) - 5} more findings")
 
-            # Extract specific protest themes
-            if "no kings" in summary_lower and "presidential monarchism" in summary_lower:
-                findings_text.append(
-                    "• Protest focused on 'No Kings' theme opposing perceived presidential monarchism")
+        # Use LLM to synthesize findings and executive summary
+        if raw_findings:
+            synthesis_result = _llm_synthesize_findings(
+                event_type=alert_data.event_type,
+                location=alert_data.location,
+                raw_findings=raw_findings,
+                evidence_count=evidence_summary.get("total_items", 0),
+                confidence_score=investigation_state.confidence_score
+            )
 
-            # Extract weather impact
-            if "rain" in summary_lower and "despite" in summary_lower:
-                findings_text.append(
-                    "• Participants continued demonstration despite adverse weather conditions")
-
-        # Second priority: Check if we have agent findings with actual content
-        if len(findings_text) < 3 and hasattr(investigation_state, 'agent_findings') and investigation_state.agent_findings:
-            logger.debug(
-                f"Found {len(investigation_state.agent_findings)} agent findings")
-
-            # Extract key insights from agent findings
-            for agent_name, findings in investigation_state.agent_findings.items():
-                if isinstance(findings, list) and findings:
-                    # Take up to 2 findings per agent
-                    for finding in findings[:2]:
-                        if finding and len(finding) > 30:  # Only substantial findings
-                            # Clean up and format the finding
-                            clean_finding = finding.strip()
-                            if not clean_finding.startswith("•"):
-                                clean_finding = f"• {clean_finding}"
-                            if clean_finding not in findings_text:  # Avoid duplicates
-                                findings_text.append(
-                                    clean_finding[:120] + "..." if len(clean_finding) > 120 else clean_finding)
-                                if len(findings_text) >= 4:  # Cap at 4 findings
-                                    break
-
-        # Third priority: Extract from investigation state findings (but filter out generic ones)
-        if len(findings_text) < 3 and investigation_state.findings:
-            for finding in investigation_state.findings[:3]:
-                if finding and len(finding) > 20:
-                    # Only include findings that aren't just process status
-                    if not any(generic in finding for generic in ["Investigation initiated", "ADK investigation", "Agent", "started", "completed"]):
-                        clean_finding = finding.strip()
-                        if not clean_finding.startswith("•"):
-                            clean_finding = f"• {clean_finding}"
-                        if clean_finding not in findings_text:
-                            findings_text.append(clean_finding)
-
-        # Fourth priority: Extract specific insights from evidence (but more intelligently)
-        if len(findings_text) < 3 and evidence_data.get("evidence_items"):
-            evidence_insights = set()
-
-            # Analyze evidence for specific factual content
-            image_sources = set()
-            for item in evidence_data.get("evidence_items", []):
-                description = item.get("description", "")
-                original_url = item.get("original_url", "")
-
-                # Track news sources
-                if original_url:
-                    if "nytimes.com" in original_url:
-                        image_sources.add("New York Times")
-                    elif "cnn.com" in original_url:
-                        image_sources.add("CNN")
-                    elif "usatoday.com" in original_url:
-                        image_sources.add("USA Today")
-                    elif "guim.co.uk" in original_url:
-                        image_sources.add("The Guardian")
-
-            if len(image_sources) >= 2:
-                evidence_insights.add(
-                    f"• Visual evidence corroborated by major news outlets including {', '.join(list(image_sources)[:3])}")
-
-            # Analyze evidence types
-            evidence_types = evidence_data.get(
-                "evidence_summary", {}).get("types_found", [])
-            if "map_image" in evidence_types:
-                evidence_insights.add(
-                    f"• Geographic verification through satellite imagery of {alert_data.location}")
-
-            # Add up to 2 evidence insights
-            findings_text.extend(list(evidence_insights)[:2])
-
-        # Last resort: Generate contextual findings based on alert data (more specific)
-        if not findings_text:
-            findings_text = [
-                f"• {alert_data.event_type} documented at {alert_data.location} with severity level {alert_data.severity}/10",
-                f"• Investigation achieved {investigation_state.confidence_score:.1%} confidence through analysis of {evidence_summary.get('total_items', 0)} evidence items",
-                f"• Multi-source verification from {', '.join(alert_data.sources[:3]) if alert_data.sources else 'various platforms'}"
-            ]
-
-        # Ensure we have at least 2-3 substantial findings
-        if len(findings_text) == 1:
-            # If we only have one finding, add a supplementary one
-            findings_text.append(
-                f"• Investigation phase: {investigation_state.phase.value.title()} with {investigation_state.confidence_score:.1%} confidence level")
-
-        logger.debug(
-            f"Generated {len(findings_text)} meaningful findings from investigation data")
+            findings_formatted = synthesis_result.get('key_findings', '')
+            executive_summary = synthesis_result.get('executive_summary', '')
+        else:
+            # Improved fallback even when no findings are available
+            logger.warning(
+                "⚠️ No raw findings available, using enhanced fallback")
+            synthesis_result = _fallback_synthesis(
+                event_type=alert_data.event_type,
+                location=alert_data.location,
+                raw_findings=[
+                    f"Investigation of {alert_data.event_type} at {alert_data.location}"],
+                evidence_count=evidence_summary.get("total_items", 0),
+                confidence_score=investigation_state.confidence_score
+            )
+            findings_formatted = synthesis_result.get('key_findings', '')
+            executive_summary = synthesis_result.get('executive_summary', '')
 
     except Exception as e:
-        logger.warning(f"Error extracting findings: {e}")
-        # Fallback to generic findings
-        findings_text = [
-            f"• {alert_data.event_type} investigation at {alert_data.location}",
-            f"• Evidence collection completed with {evidence_summary.get('total_items', 0)} items",
-            f"• Investigation confidence: {investigation_state.confidence_score:.1%}"
-        ]
-
-    # Format the findings for different placeholder names
-    findings_formatted = "\n".join(findings_text)
-
-    # Create executive summary - one paragraph summary from key findings
-    try:
-        executive_summary = _create_executive_summary(
-            investigation_state, findings_text, evidence_summary, alert_data
-        )
-        logger.debug(
-            f"Generated executive summary: {len(executive_summary)} characters")
-    except Exception as e:
-        logger.warning(f"Error creating executive summary: {e}")
-        # Fallback executive summary
-        executive_summary = f"Investigation of {alert_data.event_type} at {alert_data.location} has achieved {investigation_state.confidence_score:.1%} confidence through analysis of {evidence_summary.get('total_items', 0)} evidence items. The investigation reveals significant community activity with implications for public safety and civic engagement in the area."
+        logger.warning(f"Error in LLM synthesis: {e}")
+        # Fallback to basic findings
+        findings_formatted = f"• {alert_data.event_type} investigation at {alert_data.location}\n• Evidence collection completed with {evidence_summary.get('total_items', 0)} items"
+        executive_summary = f"Investigation of {alert_data.event_type} at {alert_data.location} has been completed with analysis of {evidence_summary.get('total_items', 0)} evidence items."
 
     # Prepare base replacements
     replacements = {
@@ -651,7 +625,7 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
         "status": investigation_state.phase.value.title(),
         "confidence_score": f"{investigation_state.confidence_score:.1%}",
         "findings_summary": findings_formatted,
-        "executive_summary": executive_summary,  # New executive summary field
+        "executive_summary": executive_summary,
         "evidence_count": str(evidence_summary.get("total_items", 0)),
         "evidence_types": ", ".join(evidence_summary.get("types_found", ["None"])),
         "high_relevance_count": str(evidence_summary.get("high_relevance_count", 0)),
@@ -661,143 +635,410 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
     }
 
     # Add alternative placeholder names for template compatibility
-    # Based on the user's template export, these are the missing placeholders:
     replacements.update({
-        # Template uses {{key_findings}} but we provide {{findings_summary}}
         "key_findings": findings_formatted,
-        # Template uses {{stats}} but we provide {{status}}
         "stats": investigation_state.phase.value.title(),
-        # Template uses {{iteration}} but we provide {{iteration_count}}
-        "iteration": str(investigation_state.iteration_count),
-        # Also provide iteration_count for backwards compatibility
         "iteration_count": str(investigation_state.iteration_count)
     })
 
-    logger.debug(f"Prepared {len(replacements)} placeholder replacements")
-    logger.debug(f"Replacement keys: {list(replacements.keys())}")
-
+    logger.debug(
+        f"Prepared {len(replacements)} placeholder replacements using LLM synthesis")
     return replacements
 
 
-def _create_executive_summary(investigation_state, findings_text, evidence_summary, alert_data) -> str:
-    """Create a professional one-paragraph executive summary from investigation findings."""
+def _llm_synthesize_findings(event_type: str, location: str, raw_findings: list, evidence_count: int, confidence_score: float) -> dict:
+    """Use LLM to intelligently synthesize raw findings into executive summary and key findings."""
     try:
-        # Extract key metrics
-        confidence = investigation_state.confidence_score
-        evidence_count = evidence_summary.get("total_items", 0)
-        event_type = alert_data.event_type
-        location = alert_data.location
-        severity = alert_data.severity
+        # Use Vertex AI directly (consistent with rest of codebase)
+        import vertexai
+        from vertexai.generative_models import GenerativeModel
+        import os
+        import json
+        import re
 
-        # Determine investigation scope and scale
-        if evidence_count >= 10:
-            evidence_scope = "comprehensive evidence collection"
-        elif evidence_count >= 5:
-            evidence_scope = "substantial evidence gathering"
+        # Initialize Vertex AI if not already done
+        project = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location_ai = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+        if project:
+            try:
+                vertexai.init(project=project, location=location_ai)
+                logger.info(
+                    f"✅ Initialized Vertex AI for synthesis: {project}")
+            except Exception as init_error:
+                logger.warning(
+                    f"Vertex AI init failed: {init_error}, using fallback")
+                return _fallback_synthesis(event_type, location, raw_findings, evidence_count, confidence_score)
         else:
-            evidence_scope = "focused evidence analysis"
+            logger.warning("No GOOGLE_CLOUD_PROJECT found for LLM synthesis")
+            return _fallback_synthesis(event_type, location, raw_findings, evidence_count, confidence_score)
 
-        # Determine confidence level description
-        if confidence >= 0.85:
-            confidence_desc = "high confidence"
-        elif confidence >= 0.70:
-            confidence_desc = "substantial confidence"
+        # Prepare the synthesis prompt
+        findings_text = "\n".join([f"- {finding}" for finding in raw_findings])
+
+        prompt = f"""You are an expert investigative analyst. Analyze the following findings about a {event_type} at {location} and create:
+
+1. **Key Findings** (4-5 bullet points with specific, factual insights)
+2. **Executive Summary** (2-3 sentences focusing on what actually happened)
+
+**Raw Investigation Findings:**
+{findings_text}
+
+**Investigation Context:**
+- Event Type: {event_type}
+- Location: {location}
+- Evidence Items Analyzed: {evidence_count}
+- Investigation Confidence: {confidence_score:.1%}
+
+**Requirements:**
+- Focus on WHAT HAPPENED, not how it was investigated
+- Include specific details like scale, nature, timeline, media coverage
+- Avoid generic language like "investigation completed" or "evidence collected"
+- Extract concrete facts about participants, behavior, scope, impact
+- Synthesize information across sources rather than just listing them
+
+**Output Format:**
+```json
+{{
+    "key_findings": "• [First key finding with specific details]\\n• [Second key finding]\\n• [Third key finding]\\n• [Fourth key finding]",
+    "executive_summary": "[2-3 sentences describing what actually happened during the {event_type}, focusing on scale, nature, and significance]"
+}}
+```
+
+Analyze the findings and synthesize them into meaningful insights:"""
+
+        # Generate synthesis using Vertex AI (consistent with codebase)
+        try:
+            model = GenerativeModel('gemini-2.0-flash')
+            logger.info("✅ Using gemini-2.0-flash for synthesis")
+        except Exception:
+            # Fallback to alternate model
+            try:
+                model = GenerativeModel('gemini-2.0-flash-001')
+                logger.info(
+                    "✅ Using gemini-2.0-flash-001 for synthesis (fallback)")
+            except Exception:
+                try:
+                    model = GenerativeModel('gemini-1.5-flash')
+                    logger.info(
+                        "✅ Using gemini-1.5-flash for synthesis (fallback)")
+                except Exception as model_error:
+                    logger.warning(
+                        f"No Vertex AI models available: {model_error}")
+                    return _fallback_synthesis(event_type, location, raw_findings, evidence_count, confidence_score)
+
+        response = model.generate_content(prompt)
+
+        # Parse the JSON response
+        response_text = response.text
+        json_match = re.search(
+            r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        if json_match:
+            json_text = json_match.group(1)
         else:
-            confidence_desc = "moderate confidence"
-
-        # Extract key themes from findings
-        findings_combined = " ".join(findings_text).lower()
-        themes = []
-
-        # Analyze findings for key themes
-        if "peaceful" in findings_combined and "no arrests" in findings_combined:
-            themes.append("peaceful demonstration with no reported incidents")
-        elif "thousands" in findings_combined or "massive" in findings_combined:
-            themes.append("large-scale public gathering")
-        elif "organized" in findings_combined or "demonstration" in findings_combined:
-            themes.append("organized civic activity")
-
-        if "trump" in findings_combined and "birthday" in findings_combined:
-            themes.append("politically-motivated event with specific timing")
-        elif "no kings" in findings_combined:
-            themes.append("anti-monarchism protest theme")
-
-        if "bryant park" in findings_combined and "madison square" in findings_combined:
-            themes.append("multi-location demonstration route")
-        elif "manhattan" in findings_combined:
-            themes.append("Manhattan-based civic engagement")
-
-        # Weather/conditions
-        if "rain" in findings_combined or "weather" in findings_combined:
-            themes.append("continued participation despite adverse conditions")
-
-        # Build executive summary
-        summary_parts = []
-
-        # Opening statement
-        summary_parts.append(
-            f"Investigation of the {event_type} at {location} has been completed with {confidence_desc} ({confidence:.1%}) through {evidence_scope} encompassing {evidence_count} artifacts.")
-
-        # Key findings synthesis
-        if themes:
-            if len(themes) == 1:
-                summary_parts.append(f"The investigation reveals {themes[0]}.")
-            elif len(themes) == 2:
-                summary_parts.append(
-                    f"Key findings indicate {themes[0]} and {themes[1]}.")
+            # Try to find JSON without code blocks
+            json_match = re.search(r'(\{.*?\})', response_text, re.DOTALL)
+            if json_match:
+                json_text = json_match.group(1)
             else:
-                # Multiple themes - group them intelligently
-                summary_parts.append(
-                    f"Analysis reveals {themes[0]}, {themes[1]}, and {themes[2]}.")
-        else:
-            # Fallback based on severity and type
-            if severity >= 7:
-                summary_parts.append(
-                    "The investigation reveals significant community mobilization with potential implications for public safety and civic order.")
-            else:
-                summary_parts.append(
-                    "Findings indicate standard civic engagement activity within normal community response parameters.")
+                raise ValueError("No JSON found in response")
 
-        # Evidence quality statement
-        high_relevance = evidence_summary.get("high_relevance_count", 0)
-        if high_relevance >= 8:
-            summary_parts.append(
-                f"Evidence quality is exceptional with {high_relevance} high-relevance items providing strong corroboration.")
-        elif high_relevance >= 5:
-            summary_parts.append(
-                f"Evidence collection yielded {high_relevance} high-relevance items supporting key conclusions.")
-        else:
-            summary_parts.append(
-                "Evidence analysis supports the investigation's primary conclusions.")
+        synthesis_result = json.loads(json_text)
 
-        # Conclusion based on investigation phase
-        phase = investigation_state.phase.value.lower()
-        if phase == "complete":
-            summary_parts.append(
-                "The investigation is complete with actionable intelligence for stakeholder decision-making.")
-        elif phase == "reporting":
-            summary_parts.append(
-                "Investigation findings are ready for stakeholder review and action planning.")
-        else:
-            summary_parts.append(
-                f"Investigation is in {phase} phase with ongoing analysis to enhance confidence levels.")
+        logger.info("✅ Vertex AI synthesis completed successfully")
+        logger.debug(
+            f"Generated executive summary: {len(synthesis_result.get('executive_summary', ''))} chars")
+        logger.debug(
+            f"Generated key findings: {synthesis_result.get('key_findings', '').count('•')} items")
 
-        # Combine into flowing paragraph
-        executive_summary = " ".join(summary_parts)
-
-        # Ensure reasonable length (target 150-300 words)
-        if len(executive_summary) > 800:
-            # Trim to essential elements if too long
-            # Keep opening, findings, and evidence
-            essential_parts = summary_parts[:3]
-            executive_summary = " ".join(essential_parts)
-
-        return executive_summary
+        return synthesis_result
 
     except Exception as e:
-        logger.error(f"Failed to create executive summary: {e}")
-        # Simple fallback
-        return f"Investigation of {alert_data.event_type} at {alert_data.location} achieved {investigation_state.confidence_score:.1%} confidence through analysis of {evidence_summary.get('total_items', 0)} evidence items, revealing significant community activity with implications for public safety and civic engagement."
+        logger.warning(f"Vertex AI synthesis failed: {e}, using fallback")
+        return _fallback_synthesis(event_type, location, raw_findings, evidence_count, confidence_score)
+
+
+def _fallback_synthesis(event_type: str, location: str, raw_findings: list, evidence_count: int, confidence_score: float) -> dict:
+    """Improved fallback synthesis when LLM is not available."""
+    # Better extraction of key information from raw findings
+    findings_text = " ".join(raw_findings).lower()
+    logger.info(
+        f"🔍 Fallback synthesis analyzing {len(raw_findings)} findings for {event_type} at {location}")
+
+    # Enhanced information extraction - more specific patterns
+    scale_info = ""
+    nature_info = ""
+    media_info = ""
+    timeline_info = ""
+    location_details = ""
+    participation_info = ""
+    specific_details = []
+
+    # Extract specific numbers and details first
+    import re
+
+    # Extract specific numbers (crowd sizes, costs, timeframes)
+    number_patterns = [
+        r'(\d{1,3},?\d{3})\s*(?:participants?|people|demonstrators?|protesters?)',
+        r'(\d+,?\d+)\s*(?:participants?|people|demonstrators?|protesters?)',
+        r'(\$\d+(?:,\d+)*(?:\.\d+)?\s*(?:million|billion|thousand)?)',
+        r'(\d+[-–]\w+)\s*(?:repair|timeline|work|project)',
+        r'(\d{4})\s*(?:year|when|last|since)',
+        r'(\d+)\s*(?:hours?|minutes?|days?)'
+    ]
+
+    for pattern in number_patterns:
+        matches = re.findall(pattern, findings_text)
+        for match in matches:
+            if match and match not in specific_details:
+                specific_details.append(match)
+
+    # Extract organizational details
+    org_patterns = [
+        r'((?:cnn|reuters|nytimes|abc|nbc|cbs|associated press|fox news|nypd|dot|city|government|coalition|organiz\w+))',
+        r'(peaceful|violence|confrontation|arrests?|incidents?|cooperative|organized|spontaneous)',
+        r'(permits?|coordination|planned|advance|scheduled)',
+        r'(trending|hashtag|social media|coverage|sources?)',
+        r'(bridge|park|square|avenue|street|area|location|spanning|through|from .+ to .+)'
+    ]
+
+    for pattern in org_patterns:
+        matches = re.findall(pattern, findings_text, re.IGNORECASE)
+        for match in matches:
+            if match and len(match) > 2 and match.lower() not in specific_details:
+                specific_details.append(match)
+
+    # Enhanced scale analysis
+    scale_patterns = [
+        r'tens of thousands|10,000|20,000|30,000|40,000|50,000',
+        r'thousands|(\d+,\d+)',
+        r'hundreds|(\d+)00',
+        r'dozens|small group|limited'
+    ]
+
+    for pattern in scale_patterns:
+        matches = re.findall(pattern, findings_text)
+        if matches:
+            if any(x in findings_text for x in ['tens of thousands', '10,000', '20,000', '30,000']):
+                scale_info = "tens of thousands of participants"
+            elif 'thousands' in findings_text or any(re.search(r'\d+,\d+', findings_text) for m in matches):
+                # Try to extract exact number
+                number_match = re.search(
+                    r'(\d+,?\d+)\s*(?:participants?|people)', findings_text)
+                if number_match:
+                    scale_info = f"approximately {number_match.group(1)} participants"
+                else:
+                    scale_info = "thousands of participants"
+            elif 'hundreds' in findings_text:
+                scale_info = "hundreds of participants"
+            elif 'dozens' in findings_text:
+                scale_info = "dozens of participants"
+            break
+
+    # Enhanced nature and behavior analysis
+    nature_keywords = []
+    if "peaceful" in findings_text:
+        nature_keywords.append("peaceful")
+        if any(x in findings_text for x in ["no arrests", "no incidents", "no violence", "orderly", "cooperative"]):
+            nature_info = "peaceful with no reported incidents"
+        elif "arrests" in findings_text:
+            nature_info = "peaceful demonstration with some arrests"
+        else:
+            nature_info = "peaceful in nature"
+    elif "violence" in findings_text or "confrontation" in findings_text:
+        nature_info = "confrontational with reported incidents"
+        nature_keywords.append("confrontational")
+    elif "celebration" in findings_text or "festival" in findings_text:
+        nature_info = "celebratory community event"
+        nature_keywords.append("celebratory")
+
+    # Media coverage analysis
+    news_sources = []
+    source_patterns = ["cnn", "reuters", "nytimes", "new york times",
+                       "abc", "nbc", "cbs", "fox", "associated press"]
+    found_sources = [
+        source for source in source_patterns if source in findings_text]
+
+    if found_sources:
+        media_info = f"documented by major news outlets including {', '.join(found_sources[:3])}"
+        news_sources.extend(found_sources[:3])
+    elif "news" in findings_text or "media" in findings_text:
+        media_info = "covered by local and national media"
+
+    # Timeline extraction
+    time_patterns = ['morning', 'afternoon', 'evening',
+                     'night', 'hours', 'all day', r'\d+\s*hours?']
+    for pattern in time_patterns:
+        if re.search(pattern, findings_text):
+            match = re.search(pattern, findings_text)
+            timeline_info = f"occurred during {match.group()}"
+            break
+
+    # Enhanced location details
+    location_lower = location.lower()
+    if location_lower in findings_text:
+        location_contexts = ["park", "street", "avenue",
+                             "square", "bridge", "plaza", "center", "area"]
+        for context in location_contexts:
+            if context in findings_text:
+                location_details = f"centered around {location} {context} area"
+                break
+        if not location_details:
+            location_details = f"concentrated in the {location} area"
+
+        # Check for movement between locations
+        movement_patterns = [
+            r'from\s+([^.]+?)\s+to\s+([^.]+?)(?:\s|\.)',
+            r'spanning\s+([^.]+?)(?:\s|\.)',
+            r'through\s+([^.]+?)(?:\s|\.)'
+        ]
+        for pattern in movement_patterns:
+            matches = re.findall(pattern, findings_text, re.IGNORECASE)
+            if matches:
+                if 'from' in pattern:
+                    location_details = f"route from {matches[0][0]} to {matches[0][1]}"
+                else:
+                    location_details = f"spanning {matches[0]} area"
+                break
+
+    # Participation analysis
+    participation_keywords = ["organized", "spontaneous", "planned",
+                              "community", "local", "student", "worker", "coalition", "group"]
+    found_participation = [
+        kw for kw in participation_keywords if kw in findings_text]
+    if found_participation:
+        participation_info = f"involved {', '.join(found_participation[:2])} groups"
+
+    # Extract purpose/cause from findings
+    purpose_info = ""
+    purpose_patterns = [
+        r'for\s+([^.]+?)\s+(?:rights?|policy|reform|cause)',
+        r'about\s+([^.]+?)\s+(?:issues?|concerns?|reform)',
+        r'against\s+([^.]+?)(?:\s|\.)',
+        r'(?:focused on|regarding|concerning)\s+([^.]+?)(?:\s|\.)'
+    ]
+    for pattern in purpose_patterns:
+        matches = re.findall(pattern, findings_text, re.IGNORECASE)
+        if matches:
+            purpose_info = f"focused on {matches[0]}"
+            specific_details.append(matches[0])
+            break
+
+    # Generate much better key findings based on extracted info
+    key_findings_list = []
+
+    # Scale and participation
+    if scale_info and participation_info:
+        key_findings_list.append(
+            f"• Event involved {scale_info} with {participation_info}")
+    elif scale_info:
+        key_findings_list.append(f"• Scale analysis documents {scale_info}")
+
+    # Nature and behavior with specifics
+    if nature_info and purpose_info:
+        key_findings_list.append(
+            f"• {nature_info.title()} demonstration {purpose_info}")
+    elif nature_info:
+        key_findings_list.append(f"• Event characterized as {nature_info}")
+
+    # Location and geography with movement
+    if location_details:
+        key_findings_list.append(
+            f"• Geographic analysis shows event {location_details}")
+    elif location != "Unknown Location":
+        key_findings_list.append(
+            f"• Event focused on {location} with significant local impact")
+
+    # Timeline and duration
+    if timeline_info:
+        key_findings_list.append(
+            f"• Temporal analysis indicates event {timeline_info}")
+
+    # Media and public attention with sources
+    if media_info:
+        key_findings_list.append(
+            f"• Public attention confirmed with event {media_info}")
+
+    # Add specific details found
+    if specific_details:
+        # Filter and add the most important specific details
+        important_details = []
+        for detail in specific_details[:3]:  # Top 3 most specific details
+            if len(detail) > 2 and detail not in key_findings_list:
+                important_details.append(detail)
+
+        if important_details:
+            key_findings_list.append(
+                f"• Investigation documented: {', '.join(important_details)}")
+
+    # Evidence quality assessment
+    if evidence_count > 20:
+        key_findings_list.append(
+            f"• Comprehensive evidence collection yielded {evidence_count} artifacts with {confidence_score:.1%} confidence")
+    elif evidence_count > 5:
+        key_findings_list.append(
+            f"• Multi-source verification completed through {evidence_count} evidence sources")
+
+    # Ensure we have at least 3 findings
+    if len(key_findings_list) < 3:
+        if event_type != "incident":
+            key_findings_list.append(
+                f"• Analysis confirms {event_type} classification based on evidence patterns")
+        if news_sources:
+            key_findings_list.append(
+                f"• Media verification from {len(news_sources)} major news outlets")
+
+    # Generate enhanced executive summary
+    summary_parts = []
+
+    # Main event description with specific details
+    if scale_info and nature_info and location_details:
+        if purpose_info:
+            summary_parts.append(
+                f"Investigation of {event_type} at {location} reveals a {nature_info} event involving {scale_info}, {location_details}, {purpose_info}.")
+        else:
+            summary_parts.append(
+                f"Investigation of {event_type} at {location} reveals a {nature_info} event involving {scale_info}, {location_details}.")
+    elif scale_info and nature_info:
+        if purpose_info:
+            summary_parts.append(
+                f"Analysis of {event_type} at {location} confirms {nature_info} activity involving {scale_info} {purpose_info}.")
+        else:
+            summary_parts.append(
+                f"Analysis of {event_type} at {location} confirms {nature_info} activity involving {scale_info}.")
+    elif nature_info:
+        summary_parts.append(
+            f"Investigation of {event_type} at {location} documents {nature_info} activity.")
+    else:
+        summary_parts.append(
+            f"Comprehensive investigation of {event_type} at {location} has been completed.")
+
+    # Media and public impact
+    if media_info:
+        summary_parts.append(
+            f"The event was {media_info}, indicating significant public interest.")
+
+    # Investigation quality
+    if confidence_score >= 0.7:
+        summary_parts.append(
+            f"Investigation achieved high confidence ({confidence_score:.1%}) through analysis of {evidence_count} evidence items.")
+    elif confidence_score >= 0.5:
+        summary_parts.append(
+            f"Investigation completed with moderate confidence ({confidence_score:.1%}) based on {evidence_count} evidence sources.")
+    else:
+        summary_parts.append(
+            f"Investigation processed {evidence_count} evidence items to establish {confidence_score:.1%} confidence in findings.")
+
+    result = {
+        "key_findings": "\n".join(key_findings_list),
+        "executive_summary": " ".join(summary_parts)
+    }
+
+    logger.info(
+        f"✅ Enhanced fallback synthesis generated {len(key_findings_list)} findings and {len(' '.join(summary_parts))} char summary")
+    logger.info(f"   Extracted specific details: {specific_details[:5]}")
+
+    return result
 
 
 def _create_evidence_image_requests(evidence_data, slides_service, presentation_id: str) -> List[dict]:

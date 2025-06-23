@@ -239,6 +239,27 @@ def web_search_func(
         # Limit to max_results
         search_results = search_results[:max_results]
 
+        # ENHANCED: Store search insights in investigation findings for presentation synthesis
+        try:
+            investigation_state = state_manager.get_investigation(
+                investigation_id)
+            if investigation_state and search_results:
+                # Analyze search results to extract key insights
+                insights = _analyze_search_results_for_insights(
+                    query, search_results)
+
+                # Store insights in agent findings for presentation generation
+                agent_name = f"web_search_{query.replace(' ', '_')[:20]}"
+                if not hasattr(investigation_state, 'agent_findings'):
+                    investigation_state.agent_findings = {}
+                investigation_state.agent_findings[agent_name] = insights
+
+                logger.info(
+                    f"💡 Stored {len(insights)} web search insights for query: {query}")
+
+        except Exception as e:
+            logger.warning(f"Failed to store search insights: {e}")
+
         # Create summary
         summary = f"Found {len(search_results)} results for query: {query}"
         if search_results:
@@ -274,6 +295,209 @@ def web_search_func(
             "evidence_collected": [],
             "summary": f"Web search failed for query: {query}"
         }
+
+
+def _analyze_search_results_for_insights(query: str, search_results: list) -> list:
+    """Analyze search results to extract meaningful insights about the incident."""
+    insights = []
+
+    try:
+        # Combine all search result text for analysis
+        all_text = ""
+        titles = []
+        snippets = []
+        sources = []
+
+        for result in search_results[:5]:  # Analyze top 5 results
+            title = result.get("title", "").lower()
+            snippet = result.get("snippet", "").lower()
+            url = result.get("url", "")
+
+            titles.append(title)
+            snippets.append(snippet)
+            sources.append(url)
+            all_text += f" {title} {snippet}"
+
+        combined_text = all_text.lower()
+
+        # Enhanced extraction of specific incident details
+
+        # 1. SCALE AND PARTICIPATION ANALYSIS
+        if "tens of thousands" in combined_text or "50,000" in combined_text or "massive" in combined_text:
+            insights.append(
+                "Large-scale demonstration with tens of thousands of participants documented")
+        elif "thousands" in combined_text and ("protesters" in combined_text or "demonstrators" in combined_text or "march" in combined_text):
+            if "several thousand" in combined_text or "multiple thousand" in combined_text:
+                insights.append(
+                    "Multi-thousand participant demonstration confirmed by multiple sources")
+            else:
+                insights.append(
+                    "Significant demonstration with thousands of participants documented")
+        elif "hundreds" in combined_text and ("protesters" in combined_text or "people" in combined_text):
+            insights.append(
+                "Medium-scale demonstration with hundreds of participants")
+        elif "dozen" in combined_text or "small group" in combined_text:
+            insights.append(
+                "Small-scale demonstration with limited participation")
+
+        # 2. BEHAVIORAL AND SAFETY ANALYSIS
+        if "peaceful" in combined_text and "no arrests" in combined_text:
+            insights.append(
+                "Peaceful demonstration with no arrests or incidents reported")
+        elif "arrests" in combined_text:
+            # Extract specific arrest numbers if mentioned
+            import re
+            arrest_match = re.search(r'(\d+)\s+arrest', combined_text)
+            if arrest_match:
+                num_arrests = arrest_match.group(1)
+                insights.append(
+                    f"Law enforcement made {num_arrests} arrests during the incident")
+            else:
+                insights.append(
+                    "Multiple arrests reported during demonstration")
+        elif "violent" in combined_text or "clash" in combined_text or "scuffle" in combined_text:
+            insights.append(
+                "Physical confrontations or violent incidents documented")
+        elif "tense" in combined_text or "heated" in combined_text:
+            insights.append(
+                "Elevated tensions but no major incidents reported")
+
+        # 3. GEOGRAPHIC AND LOGISTICAL ANALYSIS
+        if "blocked" in combined_text and ("street" in combined_text or "road" in combined_text or "traffic" in combined_text):
+            insights.append(
+                "Significant traffic disruption with streets/roads blocked")
+        if "subway" in combined_text and ("closed" in combined_text or "delayed" in combined_text):
+            insights.append(
+                "Public transportation impacted with subway disruptions")
+        if "manhattan" in combined_text and "route" in combined_text:
+            insights.append(
+                "Organized march route documented across Manhattan")
+
+        # Extract specific locations mentioned
+        locations = []
+        if "bryant park" in combined_text:
+            locations.append("Bryant Park")
+        if "times square" in combined_text:
+            locations.append("Times Square")
+        if "union square" in combined_text:
+            locations.append("Union Square")
+        if "washington square" in combined_text:
+            locations.append("Washington Square")
+        if "madison square" in combined_text:
+            locations.append("Madison Square")
+
+        if len(locations) >= 2:
+            insights.append(
+                f"Multi-location demonstration spanning {', '.join(locations[:3])}")
+        elif len(locations) == 1:
+            insights.append(f"Demonstration centered at {locations[0]}")
+
+        # 4. TEMPORAL AND CONTEXTUAL ANALYSIS
+        # Extract timing information
+        time_context = []
+        if any(month in combined_text for month in ["january", "february", "march", "april", "may", "june"]):
+            if "2024" in combined_text:
+                time_context.append("2024")
+        if "weekend" in combined_text:
+            time_context.append("weekend timing")
+        if "evening" in combined_text or "night" in combined_text:
+            time_context.append("evening/night event")
+        if "morning" in combined_text:
+            time_context.append("morning event")
+
+        if time_context:
+            insights.append(f"Event timing: {', '.join(time_context)}")
+
+        # 5. THEMATIC AND POLITICAL ANALYSIS
+        themes = []
+        if "climate" in combined_text:
+            themes.append("climate activism")
+        if "trump" in combined_text:
+            themes.append("political opposition")
+        if "gaza" in combined_text or "palestine" in combined_text:
+            themes.append("Gaza/Palestine solidarity")
+        if "ukraine" in combined_text:
+            themes.append("Ukraine support")
+        if "abortion" in combined_text or "reproductive" in combined_text:
+            themes.append("reproductive rights")
+        if "police" in combined_text and ("brutality" in combined_text or "reform" in combined_text):
+            themes.append("police reform")
+        if "housing" in combined_text or "rent" in combined_text:
+            themes.append("housing rights")
+
+        if themes:
+            insights.append(f"Primary themes: {', '.join(themes[:3])}")
+
+        # 6. MEDIA COVERAGE ANALYSIS
+        credible_sources = []
+        for url in sources:
+            if "nytimes.com" in url:
+                credible_sources.append("New York Times")
+            elif "cnn.com" in url:
+                credible_sources.append("CNN")
+            elif "washingtonpost.com" in url:
+                credible_sources.append("Washington Post")
+            elif "reuters.com" in url:
+                credible_sources.append("Reuters")
+            elif "ap.org" in url or "apnews.com" in url:
+                credible_sources.append("Associated Press")
+            elif "nbcnews.com" in url:
+                credible_sources.append("NBC News")
+            elif "gothamist.com" in url:
+                credible_sources.append("Gothamist")
+            elif "ny1.com" in url:
+                credible_sources.append("NY1")
+
+        if len(credible_sources) >= 3:
+            insights.append(
+                f"Extensive news coverage from {', '.join(credible_sources[:3])} and others")
+        elif len(credible_sources) >= 1:
+            insights.append(
+                f"News coverage documented by {', '.join(credible_sources)}")
+
+        # 7. OFFICIAL RESPONSE ANALYSIS
+        if "mayor" in combined_text and ("statement" in combined_text or "response" in combined_text):
+            insights.append(
+                "Official mayoral statement or response documented")
+        if "nypd" in combined_text or "police commissioner" in combined_text:
+            insights.append("NYPD official response or statement noted")
+        if "emergency" in combined_text and "services" in combined_text:
+            insights.append("Emergency services involvement documented")
+
+        # 8. IMPACT AND CONSEQUENCES ANALYSIS
+        if "business" in combined_text and ("closed" in combined_text or "impact" in combined_text):
+            insights.append("Local business operations affected")
+        if "school" in combined_text and ("closed" in combined_text or "dismissal" in combined_text):
+            insights.append("Educational institutions impacted")
+        if "hospital" in combined_text or "medical" in combined_text:
+            insights.append("Medical/healthcare response documented")
+
+        # 9. WEATHER AND CONDITIONS
+        if "rain" in combined_text or "weather" in combined_text:
+            if "despite" in combined_text:
+                insights.append(
+                    "Demonstration continued despite adverse weather conditions")
+            else:
+                insights.append("Weather conditions noted as factor in event")
+
+        # If no specific insights found, create basic ones
+        if not insights and search_results:
+            insights.append(
+                f"Web search yielded {len(search_results)} relevant results for '{query}'")
+            if any("news" in r.get("url", "") for r in search_results):
+                insights.append(
+                    "Multiple news sources documented this incident")
+
+    except Exception as e:
+        logger.warning(f"Error analyzing search results: {e}")
+        insights = [f"Web search completed for query: {query}"]
+
+    # Ensure we have at least one insight and limit to most relevant
+    if not insights:
+        insights = [f"Web search analysis completed for query: {query}"]
+
+    # Return up to 8 most specific insights, prioritizing factual content
+    return insights[:8]
 
 
 def collect_media_content_simple_func(
@@ -319,11 +543,23 @@ def collect_media_content_simple_func(
                             continue
 
                         try:
+                            # Extract metadata from image URL for better captions
+                            image_metadata = _extract_image_metadata(image_url)
+
+                            # Generate intelligent caption using LLM and metadata
+                            enhanced_query = query
+                            if image_metadata.get('likely_content'):
+                                enhanced_query = f"{query} {' '.join(image_metadata['likely_content'])}"
+
+                            # Generate the caption once for consistency
+                            meaningful_caption = _generate_meaningful_caption(
+                                enhanced_query, investigation_id)
+
                             # Download and save to GCS
                             success = artifact_manager.download_and_save_image(
                                 investigation_id=investigation_id,
                                 image_url=image_url,
-                                description=f"Image related to {query}"
+                                description=meaningful_caption
                             )
 
                             if success and success.get("success"):
@@ -342,7 +578,7 @@ def collect_media_content_simple_func(
                                         "gcs_url": success["gcs_url"],
                                         "public_url": success["public_url"],
                                         "signed_url": success["signed_url"],
-                                        "description": f"Image related to {query}",
+                                        "description": meaningful_caption,
                                         "source": "image_search",
                                         "search_query": query,
                                         "source_url": image_url,
@@ -815,7 +1051,8 @@ async def _real_reddit_search(query: str, location: Optional[str], time_range: s
                             created_at = created_at.replace(
                                 tzinfo=timezone.utc)
                         elif not hasattr(created_at, 'tzinfo'):
-                            created_at = datetime.now(timezone.utc).replace(tzinfo=timezone.utc)
+                            created_at = datetime.now(
+                                timezone.utc).replace(tzinfo=timezone.utc)
 
                         # Skip if too old
                         if created_at < cutoff_time:
@@ -1315,3 +1552,269 @@ def _search_web_with_fallback(query: str, max_results: int = 10, search_type: st
     logger.warning(
         f"❌ Both DuckDuckGo and Google Custom Search failed for web search: {query}")
     return []
+
+
+def _generate_meaningful_caption(query: str, investigation_id: str) -> str:
+    """
+    Generate meaningful, context-aware image captions using LLM analysis.
+
+    Args:
+        query: The search query used to find the image
+        investigation_id: Investigation ID to get context
+
+    Returns:
+        Meaningful caption describing the image in context
+    """
+    try:
+        # Get investigation context
+        investigation_state = state_manager.get_investigation(investigation_id)
+        if investigation_state:
+            event_type = investigation_state.alert_data.event_type
+            location = investigation_state.alert_data.location
+        else:
+            event_type = "incident"
+            location = "NYC"
+
+        # Try Vertex AI-powered caption generation first
+        try:
+            return _llm_generate_image_caption(query, event_type, location, investigation_state)
+        except Exception as e:
+            logger.warning(
+                f"Vertex AI caption generation failed: {e}, using intelligent fallback")
+            return _intelligent_fallback_caption(query, event_type, location)
+
+    except Exception as e:
+        logger.error(f"Caption generation failed: {e}")
+        return f"Visual evidence related to {query}"
+
+
+def _llm_generate_image_caption(query: str, event_type: str, location: str, investigation_state=None) -> str:
+    """Use Vertex AI to generate intelligent image captions based on context."""
+    try:
+        # Use Vertex AI directly (consistent with rest of codebase)
+        import vertexai
+        from vertexai.generative_models import GenerativeModel
+        import os
+
+        # Initialize Vertex AI if not already done
+        project = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location_ai = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+        if not project:
+            raise ValueError("No GOOGLE_CLOUD_PROJECT available")
+
+        try:
+            vertexai.init(project=project, location=location_ai)
+        except Exception as init_error:
+            logger.warning(f"Vertex AI init failed for caption: {init_error}")
+            raise ValueError("Vertex AI initialization failed")
+
+        # Build context from investigation findings
+        context_info = []
+        if investigation_state and hasattr(investigation_state, 'agent_findings'):
+            for agent_name, findings in investigation_state.agent_findings.items():
+                if isinstance(findings, list):
+                    # Limit to avoid long prompts
+                    context_info.extend(findings[:3])
+
+        context_text = " ".join(
+            context_info[:5]) if context_info else "No additional context available"
+
+        prompt = f"""You are generating a precise, informative caption for an image found during an investigation.
+
+**Investigation Context:**
+- Event Type: {event_type}
+- Location: {location}  
+- Search Query Used: "{query}"
+- Investigation Findings: {context_text[:300]}
+
+**Requirements:**
+- Create a 3-8 word caption that describes what the image likely shows
+- Focus on the CONTENT of the image, not the investigation process
+- Use specific, concrete language
+- Include location if relevant
+- Avoid words like "documentation", "evidence", "investigation"
+- Make it sound like a news photo caption
+
+**Examples:**
+- Query "protest Bryant Park" → "Crowd gathered at Bryant Park demonstration"
+- Query "fire building Manhattan" → "Building fire in Lower Manhattan"  
+- Query "traffic accident Brooklyn Bridge" → "Vehicle collision on Brooklyn Bridge"
+- Query "flood street Queens" → "Flooded street in Queens neighborhood"
+
+**Your caption for "{query}":**"""
+
+        # Use Vertex AI model (consistent with codebase)
+        try:
+            model = GenerativeModel('gemini-2.0-flash')
+            logger.info("✅ Using gemini-2.0-flash for caption generation")
+        except Exception:
+            # Fallback to alternate model
+            try:
+                model = GenerativeModel('gemini-2.0-flash-001')
+                logger.info(
+                    "✅ Using gemini-2.0-flash-001 for caption generation (fallback)")
+            except Exception:
+                try:
+                    model = GenerativeModel('gemini-1.5-flash')
+                    logger.info(
+                        "✅ Using gemini-1.5-flash for caption generation (fallback)")
+                except Exception as model_error:
+                    logger.warning(
+                        f"No Vertex AI models available for caption: {model_error}")
+                    raise ValueError("No available Vertex AI models")
+
+        response = model.generate_content(prompt)
+
+        caption = response.text.strip()
+
+        # Clean up the response (remove quotes, extra text)
+        if '"' in caption:
+            caption = caption.split('"')[1] if caption.count(
+                '"') >= 2 else caption.replace('"', '')
+
+        # Ensure it's not too long
+        if len(caption) > 60:
+            caption = caption[:60] + "..."
+
+        # Fallback if caption is too generic or empty
+        if not caption or len(caption) < 10 or any(word in caption.lower() for word in ['documentation', 'evidence', 'investigation']):
+            raise ValueError("Generated caption too generic")
+
+        logger.debug(
+            f"Vertex AI generated caption: '{caption}' for query: '{query}'")
+        return caption
+
+    except Exception as e:
+        logger.warning(f"Vertex AI caption generation failed: {e}")
+        raise
+
+
+def _intelligent_fallback_caption(query: str, event_type: str, location: str) -> str:
+    """Intelligent fallback when Vertex AI is not available."""
+
+    # Parse query to extract key information
+    query_lower = query.lower()
+
+    # Extract time/urgency indicators
+    time_indicators = {
+        'recent': 'Recent',
+        'breaking': 'Breaking',
+        'live': 'Live',
+        'urgent': 'Urgent',
+        'now': 'Current'
+    }
+
+    # Extract scene/content indicators
+    scene_indicators = {
+        'crowd': 'crowd',
+        'fire': 'fire scene',
+        'accident': 'accident scene',
+        'flood': 'flooding',
+        'construction': 'construction work',
+        'emergency': 'emergency response',
+        'police': 'police activity',
+        'protest': 'demonstration',
+        'march': 'march',
+        'rally': 'rally',
+        'gathering': 'gathering'
+    }
+
+    # Extract location specifics
+    location_specifics = {
+        'street': 'street',
+        'bridge': 'bridge',
+        'park': 'park',
+        'building': 'building',
+        'station': 'station',
+        'square': 'square',
+        'avenue': 'avenue'
+    }
+
+    # Build caption components
+    time_prefix = ""
+    scene_description = event_type
+    location_suffix = location
+
+    # Find time indicator
+    for indicator, prefix in time_indicators.items():
+        if indicator in query_lower:
+            time_prefix = prefix + " "
+            break
+
+    # Find scene description
+    for indicator, description in scene_indicators.items():
+        if indicator in query_lower:
+            scene_description = description
+            break
+
+    # Find location specifics
+    for indicator, specific in location_specifics.items():
+        if indicator in query_lower:
+            location_suffix = f"{specific} in {location}"
+            break
+
+    # Construct intelligent caption
+    if time_prefix:
+        caption = f"{time_prefix}{scene_description} at {location_suffix}"
+    else:
+        caption = f"{scene_description.title()} at {location_suffix}"
+
+    # Clean up and validate
+    caption = caption.replace("  ", " ").strip()
+
+    # Ensure it's descriptive enough
+    if len(caption) < 15:
+        caption = f"{event_type.title()} scene at {location}"
+
+    return caption
+
+
+def _extract_image_metadata(image_url: str, image_data: bytes = None) -> dict:
+    """Extract metadata from image URL and optionally image data."""
+    metadata = {
+        'source_domain': '',
+        'filename': '',
+        'image_type': '',
+        'likely_content': []
+    }
+
+    try:
+        from urllib.parse import urlparse, unquote
+        parsed_url = urlparse(image_url)
+
+        # Extract source domain
+        metadata['source_domain'] = parsed_url.netloc
+
+        # Extract filename from URL
+        path = unquote(parsed_url.path)
+        if '/' in path:
+            filename = path.split('/')[-1]
+            metadata['filename'] = filename
+
+            # Infer content from filename
+            filename_lower = filename.lower()
+            if any(word in filename_lower for word in ['protest', 'demo', 'rally']):
+                metadata['likely_content'].append('protest')
+            if any(word in filename_lower for word in ['fire', 'emergency']):
+                metadata['likely_content'].append('emergency')
+            if any(word in filename_lower for word in ['traffic', 'accident', 'crash']):
+                metadata['likely_content'].append('traffic_incident')
+
+        # Infer image type from URL patterns
+        if any(domain in metadata['source_domain'] for domain in ['instagram', 'twitter', 'facebook']):
+            metadata['image_type'] = 'social_media'
+        elif any(domain in metadata['source_domain'] for domain in ['cnn', 'reuters', 'nytimes', 'ap']):
+            metadata['image_type'] = 'news_media'
+        elif 'gov' in metadata['source_domain']:
+            metadata['image_type'] = 'official'
+        else:
+            metadata['image_type'] = 'web'
+
+        # TODO: If image_data is provided, could extract EXIF data
+        # This would require pillow: from PIL import Image, ExifTags
+
+    except Exception as e:
+        logger.warning(f"Could not extract image metadata: {e}")
+
+    return metadata
