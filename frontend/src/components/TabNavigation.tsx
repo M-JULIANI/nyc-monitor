@@ -7,9 +7,9 @@ interface TabNavigationProps {
 
 const TabNavigation: React.FC<TabNavigationProps> = ({ activeTab, onTabChange }) => {
   const tabs = [
-    { id: 'map', label: 'Map', icon: '🗺️' },
-    { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-    { id: 'insights', label: 'Insights', icon: '📈' }
+    { id: 'map', label: 'Map', icon: '' },
+    { id: 'dashboard', label: 'Dashboard', icon: '' },
+    { id: 'insights', label: 'Insights', icon: '' }
   ];
 
   return (

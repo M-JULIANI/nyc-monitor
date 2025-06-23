@@ -102,7 +102,16 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       setIsLoading(true);
       setError(null);
       
-      const response = await fetch(`/api/alerts/recent?limit=${limit}&hours=${hours}`);
+      const token = localStorage.getItem('idToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+      
+      const response = await fetch(`/api/alerts/recent?limit=${limit}&hours=${hours}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
       
       if (!response.ok) {
         throw new Error(`Failed to fetch alerts: ${response.status}`);
