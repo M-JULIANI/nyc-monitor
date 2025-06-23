@@ -268,8 +268,17 @@ const MapView: React.FC = () => {
     // Step 1.5: Fly to center the marker on the map
     if (mapRef.current) {
       console.log('🗺️ Flying to marker coordinates:', alert.coordinates);
+      
+      // Calculate offset to account for popup height
+      // Popup appears above the marker, so we need to shift the map center down
+      // This ensures the popup is fully visible without top clipping
+      const map = mapRef.current.getMap();
+      const containerHeight = map.getContainer().clientHeight;
+      const popupOffset = -200; // Approximate popup height in pixels
+      const offsetInDegrees = (popupOffset / containerHeight) * (map.getBounds().getNorth() - map.getBounds().getSouth());
+      
       mapRef.current.flyTo({
-        center: [alert.coordinates.lng, alert.coordinates.lat],
+        center: [alert.coordinates.lng, alert.coordinates.lat - offsetInDegrees], // Offset south to show popup fully
         duration: 800, // Smooth 800ms animation
         essential: true // This animation is essential and will not be interrupted
       });
@@ -864,24 +873,27 @@ const MapView: React.FC = () => {
                   <div className="space-y-2">
                   {/* Generate/View Report Button - always show unless disabled */}
                   {(() => {
-                    // Determine disabled state
+                    // Check if this is a "View Report" scenario (completed investigation with report URL)
+                    const isViewReportMode = selectedAlert.status === 'resolved' && selectedAlert.reportUrl;
+                    
+                    // Determine disabled state - "View Report" is never disabled by role
                     const isDisabledForInvestigation = isInvestigationDisabled(selectedAlert);
-                    const isDisabledForRole = user?.role !== 'admin';
+                    const isDisabledForRole = !isViewReportMode && (user?.role !== 'admin'); // Only restrict role for "Generate Report"
                     const isDisabled = isDisabledForInvestigation || isDisabledForRole;
                     
                     // Determine button styling based on state
                     const getButtonClasses = () => {
-                      if (isDisabledForRole) {
-                        // Halftone gray for non-admin users
+                      if (isViewReportMode) {
+                        // Always green and accessible for "View Report"
+                        return 'btn-success';
+                      } else if (isDisabledForRole) {
+                        // Halftone gray for non-admin users trying to generate reports
                         return 'bg-gray-500 text-gray-300 cursor-not-allowed opacity-60';
                       } else if (isDisabledForInvestigation) {
                         // Yellow for investigation-level restrictions (existing behavior)
                         return 'bg-yellow-600 cursor-not-allowed text-white';
-                      } else if (selectedAlert.status === 'resolved' && selectedAlert.reportUrl) {
-                        // Success state for completed investigations
-                        return 'btn-success';
                       } else {
-                        // Default primary state
+                        // Default primary state for "Generate Report"
                         return 'btn-primary';
                       }
                     };
