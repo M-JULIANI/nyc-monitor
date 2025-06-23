@@ -391,13 +391,38 @@ const MapView: React.FC = () => {
       return; // Early return to prevent fallback
     }
     
-    // Immediately update the alert state to show investigating before making the API call
+    // Immediately update the alert state to show investigating AND set local loading
     console.log(`Setting alert ${alert.id} to investigating state immediately`);
     setSelectedAlert(prev => prev ? { ...prev, status: 'investigating' as const } : null);
+    setSelectedAlertLoading(true);
     
-    // Generate new report for all other cases
+    // Generate new report using local state management (avoid global loading)
     console.log(`Generating new report for alert ${alert.id} - Status: ${alert.status}, ReportUrl: ${alert.reportUrl}`);
-    await handleGenerateReport(alert);
+    
+    try {
+      const result = await generateReport(alert.id);
+      if (result.success) {
+        console.log('Report generation started:', result.investigationId);
+        // Update the selected alert with investigation details
+        setSelectedAlert(prev => prev ? { 
+          ...prev, 
+          investigationId: result.investigationId,
+          status: 'investigating' as const 
+        } : null);
+      } else {
+        console.error('Failed to generate report:', result.message);
+        // Revert the status on failure
+        setSelectedAlert(prev => prev ? { ...prev, status: 'active' as const } : null);
+        window.alert(`Failed to generate report: ${result.message}`);
+      }
+    } catch (err) {
+      console.error('Error generating report:', err);
+      // Revert the status on error
+      setSelectedAlert(prev => prev ? { ...prev, status: 'active' as const } : null);
+      window.alert('Failed to generate report');
+    } finally {
+      setSelectedAlertLoading(false);
+    }
   };
 
   const isInvestigationDisabled = (alert: Alert) => {
