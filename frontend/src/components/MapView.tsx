@@ -6,6 +6,7 @@ import { useAlerts } from '../contexts/AlertsContext';
 import { useMapState } from '../contexts/MapStateContext';
 import Spinner from './Spinner';
 import AgentTraceModal from './AgentTraceModal';
+import { useAuth } from '@/contexts/AuthContext';
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA';
 
@@ -50,6 +51,7 @@ const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
   //const markerClickedRef = useRef(false);
   const { alerts, error, isLoading, generateReport, refetchAlert } = useAlerts();
+  const { user } = useAuth();
   const isConnected = !isLoading;
   const { viewport, setViewport, filter, setFilter, viewMode, setViewMode } = useMapState();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
@@ -861,19 +863,39 @@ const MapView: React.FC = () => {
                 {selectedAlert.source !== "311" && (
                   <div className="space-y-2">
                   {/* Generate/View Report Button - always show unless disabled */}
-                  <button
-                    className={`btn w-full text-sm ${
-                      isInvestigationDisabled(selectedAlert)
-                        ? 'bg-yellow-600 cursor-not-allowed text-white' 
-                        : selectedAlert.status === 'resolved' && selectedAlert.reportUrl
-                        ? 'btn-success'
-                        : 'btn-primary'
-                    }`}
-                    onClick={() => handleReportButtonClick(selectedAlert)}
-                    disabled={isInvestigationDisabled(selectedAlert)}
-                  >
-                    {getReportButtonContent(selectedAlert)}
-                  </button>
+                  {(() => {
+                    // Determine disabled state
+                    const isDisabledForInvestigation = isInvestigationDisabled(selectedAlert);
+                    const isDisabledForRole = user?.role !== 'admin';
+                    const isDisabled = isDisabledForInvestigation || isDisabledForRole;
+                    
+                    // Determine button styling based on state
+                    const getButtonClasses = () => {
+                      if (isDisabledForRole) {
+                        // Halftone gray for non-admin users
+                        return 'bg-gray-500 text-gray-300 cursor-not-allowed opacity-60';
+                      } else if (isDisabledForInvestigation) {
+                        // Yellow for investigation-level restrictions (existing behavior)
+                        return 'bg-yellow-600 cursor-not-allowed text-white';
+                      } else if (selectedAlert.status === 'resolved' && selectedAlert.reportUrl) {
+                        // Success state for completed investigations
+                        return 'btn-success';
+                      } else {
+                        // Default primary state
+                        return 'btn-primary';
+                      }
+                    };
+
+                    return (
+                      <button
+                        className={`btn w-full text-sm ${getButtonClasses()}`}
+                        onClick={() => handleReportButtonClick(selectedAlert)}
+                        disabled={isDisabled}
+                      >
+                        {getReportButtonContent(selectedAlert)}
+                      </button>
+                    );
+                  })()}
 
                   {/* View Trace Button - only show if traceId exists */}
                   {selectedAlert.traceId && (
