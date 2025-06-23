@@ -7,7 +7,6 @@ import { useMapState } from '../contexts/MapStateContext';
 import Spinner from './Spinner';
 import AgentTraceModal from './AgentTraceModal';
 import { useAuth } from '@/contexts/AuthContext';
-import { ReportService } from '../services/reportService';
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA';
 
