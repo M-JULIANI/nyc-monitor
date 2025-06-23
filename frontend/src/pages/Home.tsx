@@ -6,12 +6,10 @@ import Insights from '../components/Insights';
 import { AlertsProvider } from '../contexts/AlertsContext';
 import { AlertStatsProvider } from '../contexts/AlertStatsContext';
 import { MapStateProvider } from '../contexts/MapStateContext';
-import { useAlerts } from '../contexts/AlertsContext';
 
 // Internal component to access alerts for AlertStatsProvider
 const HomeContent = () => {
   const [activeTab, setActiveTab] = useState('map');
-  const { alerts } = useAlerts();
 
   const renderActiveTab = () => {
     switch (activeTab) {

@@ -115,7 +115,7 @@ const Insights: React.FC = () => {
     });
 
     // Apply intelligent spreading to prevent clustering
-    const spreadTimeData = timeData.map((point, index) => {
+    const spreadTimeData = timeData.map((point) => {
       // Find all points with same or very similar coordinates
       const similarPoints = timeData.filter(p => 
         Math.abs(p.originalX - point.originalX) < 0.1 && 
@@ -137,7 +137,6 @@ const Insights: React.FC = () => {
       
       // Create horizontal spread pattern for clustered points
       const horizontalSpread = (pointIndex - totalSimilar / 2) * 0.08; // Systematic horizontal spacing
-      const additionalSpread = Math.min(0.4, totalSimilar * 0.03); // Additional spread for large clusters
       
       // Add some horizontal randomness to avoid perfect lines
       const randomX = (Math.random() - 0.5) * 0.15;

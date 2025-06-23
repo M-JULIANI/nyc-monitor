@@ -391,6 +391,10 @@ const MapView: React.FC = () => {
       return; // Early return to prevent fallback
     }
     
+    // Immediately update the alert state to show investigating before making the API call
+    console.log(`Setting alert ${alert.id} to investigating state immediately`);
+    setSelectedAlert(prev => prev ? { ...prev, status: 'investigating' as const } : null);
+    
     // Generate new report for all other cases
     console.log(`Generating new report for alert ${alert.id} - Status: ${alert.status}, ReportUrl: ${alert.reportUrl}`);
     await handleGenerateReport(alert);

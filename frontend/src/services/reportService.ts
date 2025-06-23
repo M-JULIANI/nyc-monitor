@@ -41,7 +41,6 @@ export class ReportService {
 
     // Extract alert ID
     const alertId = typeof alertOrId === 'string' ? alertOrId : alertOrId.id;
-    const alert = typeof alertOrId === 'object' ? alertOrId : null;
 
     // Check connection
     if (!isConnected) {
