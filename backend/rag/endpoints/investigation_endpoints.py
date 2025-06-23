@@ -218,13 +218,52 @@ async def start_investigation(
                 except Exception as e:
                     logger.warning(f"⚠️ Error saving agent trace: {e}")
 
+                # Determine if investigation was actually successful
+                # Check for clear failure indicators in the investigation result
+                investigation_success = True
+                if investigation_result:
+                    # Look for error indicators in the result
+                    error_indicators = [
+                        "failed", "error", "exception", "traceback",
+                        "❌", "ERROR:", "WARNING:", "fallback",
+                        "Context variable not found", "object has no attribute"
+                    ]
+                    result_lower = investigation_result.lower()
+                    for indicator in error_indicators:
+                        if indicator.lower() in result_lower:
+                            investigation_success = False
+                            logger.warning(
+                                f"🚨 Investigation failure detected: found '{indicator}' in result")
+                            break
+
+                # Also check if we have meaningful artifacts (beyond just trace data)
+                meaningful_artifacts = 0
+                if investigation_state.artifacts:
+                    for artifact in investigation_state.artifacts:
+                        artifact_type = artifact.get('type', '')
+                        if artifact_type in ['map_image', 'image', 'screenshot', 'presentation']:
+                            meaningful_artifacts += 1
+
+                # Consider investigation failed if no meaningful artifacts AND no report URL
+                if meaningful_artifacts == 0 and not report_url:
+                    investigation_success = False
+                    logger.warning(
+                        "🚨 Investigation considered failed: no meaningful artifacts or report generated")
+
+                logger.info(
+                    f"🎯 Investigation success determination: {investigation_success}")
+                logger.info(
+                    f"   - Meaningful artifacts: {meaningful_artifacts}")
+                logger.info(f"   - Report URL present: {bool(report_url)}")
+
                 # Update the alert in Firestore with investigation results
                 try:
                     success = update_alert_with_investigation_results(
                         alert_id=alert_request.alert_id,
                         investigation_id=investigation_state.investigation_id,
                         report_url=report_url,
-                        trace_id=trace_id
+                        trace_id=trace_id,
+                        success=investigation_success  # Pass the actual success status
                     )
                     if success:
                         logger.info(
@@ -566,7 +605,7 @@ def update_alert_status_to_investigating(alert_id: str) -> bool:
         return False
 
 
-def update_alert_with_investigation_results(alert_id: str, investigation_id: str, report_url: str = None, trace_id: str = None) -> bool:
+def update_alert_with_investigation_results(alert_id: str, investigation_id: str, report_url: str = None, trace_id: str = None, success: bool = True) -> bool:
     """Update the alert in Firestore with investigation results.
 
     Args:
@@ -574,6 +613,7 @@ def update_alert_with_investigation_results(alert_id: str, investigation_id: str
         investigation_id: The investigation ID that was run
         report_url: URL to the generated report/presentation
         trace_id: ID of the saved trace in Firestore
+        success: Whether the investigation was successful
 
     Returns:
         True if update was successful, False otherwise
@@ -595,9 +635,25 @@ def update_alert_with_investigation_results(alert_id: str, investigation_id: str
         logger.info(
             f"📋 Current alert {alert_id} data before final update: {doc.to_dict()}")
 
-        # Prepare update data
+        # Prepare update data based on success/failure
+        if success and report_url:
+            # Only set to resolved if we have both success AND a report URL
+            status = 'resolved'
+            logger.info(
+                f"✅ Investigation succeeded with report URL, setting status to 'resolved'")
+        elif success:
+            # Success but no report URL - investigation completed but may not have generated a report
+            status = 'resolved'
+            logger.info(
+                f"✅ Investigation succeeded without report URL, setting status to 'resolved'")
+        else:
+            # Investigation failed
+            status = 'failed'
+            logger.warning(
+                f"❌ Investigation failed, setting status to 'failed'")
+
         update_data = {
-            'status': 'resolved',  # Update status to resolved when investigation completes
+            'status': status,
             'investigation_id': investigation_id,
             'updated_at': datetime.utcnow(),
         }
@@ -625,6 +681,7 @@ def update_alert_with_investigation_results(alert_id: str, investigation_id: str
         logger.info(f"   - Investigation ID: {investigation_id}")
         logger.info(f"   - Report URL: {report_url}")
         logger.info(f"   - Trace ID: {trace_id}")
+        logger.info(f"   - Status: {status}")
 
         return True
 

@@ -89,8 +89,8 @@ Your job is to execute this EXACT workflow when given an investigation request:
 
 **CRITICAL WEB SEARCH INSTRUCTIONS:**
 - ALWAYS use the EXACT event_type provided in the investigation request
-- For Search 1: Use "{event_type} {location}" exactly as provided
-- For Search 2: Use "{location} news recent" for news coverage
+- For Search 1: Use "event_type location" exactly as provided in the request
+- For Search 2: Use "location news recent" for news coverage  
 - DO NOT substitute generic terms like "events" for specific event types like "protest"
 - DO NOT change the event_type - use it exactly as given
 
@@ -201,10 +201,10 @@ Your response MUST include:
 Execute immediately when given investigation details and provide a summary that focuses on WHAT YOU LEARNED about the incident, not just what tools you ran.
 
 🚨 **CRITICAL WEB SEARCH REQUIREMENTS:**
-   - Use EXACT terms: "{event_type}" (do NOT change to "events" or other generic terms)
-   - Use EXACT location: "{location}" 
-   - Example: If event_type="protest", search "protest {location}", NOT "events {location}"
-   - Example: If event_type="fire", search "fire {location}", NOT "incident {location}"
+   - Use EXACT terms from the investigation request (do NOT change to "events" or other generic terms)
+   - Use EXACT location provided in the request
+   - Example: If event_type="protest", search "protest location", NOT "events location"
+   - Example: If event_type="fire", search "fire location", NOT "incident location"
 
 🎯 **CRITICAL INSTRUCTIONS:**
 - ACTUALLY EXECUTE each tool - do not just describe what you would do
@@ -213,7 +213,7 @@ Execute immediately when given investigation details and provide a summary that 
 - DO NOT skip any steps
 - START IMMEDIATELY - NO CONFIRMATION NEEDED
 - Collect EXACTLY 8 images total (3+3+2)
-- 🚨 NEVER CHANGE THE EVENT_TYPE - USE "{event_type}" EXACTLY AS PROVIDED
+- 🚨 NEVER CHANGE THE EVENT_TYPE - USE THE EVENT_TYPE EXACTLY AS PROVIDED
 """
 
     async def investigate(self, investigation_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -331,11 +331,10 @@ EXECUTE ALL REQUIRED TOOLS NOW IN SEQUENCE:
    - Search for "{enhanced_location} news recent" to find recent news coverage
 
 🚨 **CRITICAL WEB SEARCH REQUIREMENTS:**
-   - Use EXACT terms: "{event_type}" (do NOT change to "events" or other generic terms)
-   - Use EXACT location: "{enhanced_location}"
-{f'   - PRIMARY SEARCH: Use the alert description "{summary_search_terms}" for most specific results' if summary_search_terms else ""}
-   - Example: If event_type="protest", search "protest {enhanced_location}", NOT "events {enhanced_location}"
-   - Example: If event_type="fire", search "fire {enhanced_location}", NOT "incident {enhanced_location}"
+   - Use EXACT terms from the investigation request (do NOT change to "events" or other generic terms)
+   - Use EXACT location provided in the request
+   - Example: If event_type="protest", search "protest location", NOT "events location"
+   - Example: If event_type="fire", search "fire location", NOT "incident location"
 
 2. **MAP GENERATION PHASE** - Create location context:
    - Generate satellite map with zoom level 18 (close view)
@@ -356,7 +355,7 @@ EXECUTE ALL REQUIRED TOOLS NOW IN SEQUENCE:
 - DO NOT skip any steps
 - START IMMEDIATELY - NO CONFIRMATION NEEDED
 - Collect EXACTLY 8 images total (3+3+2)
-- 🚨 NEVER CHANGE THE EVENT_TYPE - USE "{event_type}" EXACTLY AS PROVIDED
+- 🚨 NEVER CHANGE THE EVENT_TYPE - USE THE EVENT_TYPE EXACTLY AS PROVIDED
 
 Your goal is to provide both comprehensive artifact collection AND meaningful investigative findings.
 """
@@ -464,6 +463,14 @@ Your goal is to provide both comprehensive artifact collection AND meaningful in
 
                 logger.info(
                     f"📊 Calculated confidence score: {confidence_score:.1%}")
+
+                # 🚨 CRITICAL FIX: Save the confidence score back to the state manager
+                state_manager.update_investigation(investigation_id, {
+                    'confidence_score': confidence_score,
+                    'confidence_scores': final_state.confidence_scores
+                })
+                logger.info(
+                    f"✅ Saved confidence score {confidence_score:.1%} to state manager")
 
                 # Enhanced success criteria including web search results
                 maps_count = artifact_types.get('map_image', 0)

@@ -551,12 +551,15 @@ def collect_media_content_simple_func(
                             if image_metadata.get('likely_content'):
                                 enhanced_query = f"{query} {' '.join(image_metadata['likely_content'])}"
 
+                            # Generate the caption once for consistency
+                            meaningful_caption = _generate_meaningful_caption(
+                                enhanced_query, investigation_id)
+
                             # Download and save to GCS
                             success = artifact_manager.download_and_save_image(
                                 investigation_id=investigation_id,
                                 image_url=image_url,
-                                description=_generate_meaningful_caption(
-                                    enhanced_query, investigation_id)
+                                description=meaningful_caption
                             )
 
                             if success and success.get("success"):
@@ -575,7 +578,7 @@ def collect_media_content_simple_func(
                                         "gcs_url": success["gcs_url"],
                                         "public_url": success["public_url"],
                                         "signed_url": success["signed_url"],
-                                        "description": _generate_meaningful_caption(query, investigation_id),
+                                        "description": meaningful_caption,
                                         "source": "image_search",
                                         "search_query": query,
                                         "source_url": image_url,
@@ -1572,12 +1575,12 @@ def _generate_meaningful_caption(query: str, investigation_id: str) -> str:
             event_type = "incident"
             location = "NYC"
 
-        # Try LLM-powered caption generation first
+        # Try Vertex AI-powered caption generation first
         try:
             return _llm_generate_image_caption(query, event_type, location, investigation_state)
         except Exception as e:
             logger.warning(
-                f"LLM caption generation failed: {e}, using intelligent fallback")
+                f"Vertex AI caption generation failed: {e}, using intelligent fallback")
             return _intelligent_fallback_caption(query, event_type, location)
 
     except Exception as e:
@@ -1586,17 +1589,25 @@ def _generate_meaningful_caption(query: str, investigation_id: str) -> str:
 
 
 def _llm_generate_image_caption(query: str, event_type: str, location: str, investigation_state=None) -> str:
-    """Use LLM to generate intelligent image captions based on context."""
+    """Use Vertex AI to generate intelligent image captions based on context."""
     try:
-        import google.generativeai as genai
+        # Use Vertex AI directly (consistent with rest of codebase)
+        import vertexai
+        from vertexai.generative_models import GenerativeModel
         import os
 
-        # Initialize Gemini if not already done
-        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("No Google API key available")
+        # Initialize Vertex AI if not already done
+        project = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location_ai = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
-        genai.configure(api_key=api_key)
+        if not project:
+            raise ValueError("No GOOGLE_CLOUD_PROJECT available")
+
+        try:
+            vertexai.init(project=project, location=location_ai)
+        except Exception as init_error:
+            logger.warning(f"Vertex AI init failed for caption: {init_error}")
+            raise ValueError("Vertex AI initialization failed")
 
         # Build context from investigation findings
         context_info = []
@@ -1633,7 +1644,26 @@ def _llm_generate_image_caption(query: str, event_type: str, location: str, inve
 
 **Your caption for "{query}":**"""
 
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Use Vertex AI model (consistent with codebase)
+        try:
+            model = GenerativeModel('gemini-2.0-flash')
+            logger.info("✅ Using gemini-2.0-flash for caption generation")
+        except Exception:
+            # Fallback to alternate model
+            try:
+                model = GenerativeModel('gemini-2.0-flash-001')
+                logger.info(
+                    "✅ Using gemini-2.0-flash-001 for caption generation (fallback)")
+            except Exception:
+                try:
+                    model = GenerativeModel('gemini-1.5-flash')
+                    logger.info(
+                        "✅ Using gemini-1.5-flash for caption generation (fallback)")
+                except Exception as model_error:
+                    logger.warning(
+                        f"No Vertex AI models available for caption: {model_error}")
+                    raise ValueError("No available Vertex AI models")
+
         response = model.generate_content(prompt)
 
         caption = response.text.strip()
@@ -1652,16 +1682,16 @@ def _llm_generate_image_caption(query: str, event_type: str, location: str, inve
             raise ValueError("Generated caption too generic")
 
         logger.debug(
-            f"LLM generated caption: '{caption}' for query: '{query}'")
+            f"Vertex AI generated caption: '{caption}' for query: '{query}'")
         return caption
 
     except Exception as e:
-        logger.warning(f"LLM caption generation failed: {e}")
+        logger.warning(f"Vertex AI caption generation failed: {e}")
         raise
 
 
 def _intelligent_fallback_caption(query: str, event_type: str, location: str) -> str:
-    """Intelligent fallback when LLM is not available."""
+    """Intelligent fallback when Vertex AI is not available."""
 
     # Parse query to extract key information
     query_lower = query.lower()
