@@ -480,217 +480,54 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
     alert_data = investigation_state.alert_data
     evidence_summary = evidence_data.get("evidence_summary", {})
 
-    # Create findings summary - Extract real findings from web search results and evidence
-    findings_text = []
+    # Extract all available findings for LLM synthesis
+    raw_findings = []
 
     try:
-        # FIRST PRIORITY: Extract insights from web search artifacts (screenshots and search results)
-        logger.debug("Extracting findings from web search artifacts...")
-
-        web_search_findings = []
-        screenshot_findings = []
-
-        # Analyze screenshots and web search artifacts for meaningful content
-        for artifact in investigation_state.artifacts:
-            artifact_type = artifact.get('type', '')
-            description = artifact.get('description', '').lower()
-            url = artifact.get('url', '')
-
-            # Extract insights from screenshot descriptions and URLs
-            if artifact_type == 'screenshot':
-                # Analyze what the screenshot captured based on URL and description
-                if 'nytimes.com' in url:
-                    screenshot_findings.append(
-                        "• Major news coverage documented via New York Times reporting")
-                elif 'cnn.com' in url:
-                    screenshot_findings.append(
-                        "• National news attention confirmed through CNN coverage")
-                elif 'washingtonpost.com' in url:
-                    screenshot_findings.append(
-                        "• Investigation corroborated by Washington Post journalism")
-                elif 'reddit.com' in url and 'nyc' in description:
-                    screenshot_findings.append(
-                        "• Community eyewitness accounts documented on NYC social media")
-                elif 'twitter.com' in url or 'x.com' in url:
-                    screenshot_findings.append(
-                        "• Real-time social media documentation captured")
-                elif 'instagram.com' in url:
-                    screenshot_findings.append(
-                        "• Visual evidence preserved from Instagram posts")
-                elif 'youtube.com' in url:
-                    screenshot_findings.append(
-                        "• Video evidence documented from YouTube coverage")
-
-                # Extract event-specific insights from description
-                if 'protest' in description and 'peaceful' in description:
-                    web_search_findings.append(
-                        "• Web evidence indicates peaceful demonstration activities")
-                elif 'protest' in description and 'arrest' in description:
-                    web_search_findings.append(
-                        "• Web sources document law enforcement response and arrests")
-                elif 'march' in description or 'demonstration' in description:
-                    web_search_findings.append(
-                        "• Organized demonstration activity confirmed through web sources")
-
-        # SECOND PRIORITY: Analyze web search results stored in investigation findings
+        # Collect web search findings from agent_findings
         if hasattr(investigation_state, 'agent_findings'):
             for agent_name, findings in investigation_state.agent_findings.items():
                 if 'web_search' in agent_name.lower() or 'search' in agent_name.lower():
                     if isinstance(findings, list):
-                        for finding in findings:
-                            finding_text = str(finding).lower()
+                        raw_findings.extend(findings)
 
-                            # Extract crowd size information from web search
-                            if 'thousand' in finding_text:
-                                if 'tens of thousands' in finding_text:
-                                    web_search_findings.append(
-                                        "• Web sources report tens of thousands of participants")
-                                else:
-                                    web_search_findings.append(
-                                        "• Web sources indicate thousands of participants documented")
+        # Collect insights from artifact descriptions and URLs
+        for artifact in investigation_state.artifacts:
+            artifact_type = artifact.get('type', '')
+            description = artifact.get('description', '')
+            url = artifact.get('url', '')
 
-                            # Extract timeline information
-                            if 'june 14' in finding_text and 'trump' in finding_text:
-                                web_search_findings.append(
-                                    "• Event timing linked to political calendar per web research")
+            if description:
+                raw_findings.append(f"Visual evidence: {description}")
+            if url and any(domain in url for domain in ['nytimes.com', 'cnn.com', 'reuters.com', 'washingtonpost.com', 'ap.org', 'nbcnews.com']):
+                raw_findings.append(f"News source documented: {url}")
 
-                            # Extract geographic scope
-                            if ('bryant park' in finding_text and 'madison square' in finding_text) or 'route' in finding_text:
-                                web_search_findings.append(
-                                    "• Multi-location demonstration route documented across Manhattan")
+        # Add alert summary context if available
+        if alert_data.summary and len(alert_data.summary) > 50:
+            raw_findings.append(f"Initial alert context: {alert_data.summary}")
 
-                            # Extract safety and security insights
-                            if 'no arrests' in finding_text and 'peaceful' in finding_text:
-                                web_search_findings.append(
-                                    "• Web sources confirm peaceful nature with no arrests reported")
-                            elif 'police' in finding_text and 'presence' in finding_text:
-                                web_search_findings.append(
-                                    "• Significant law enforcement presence documented in web coverage")
+        # Use LLM to synthesize findings and executive summary
+        if raw_findings:
+            synthesis_result = _llm_synthesize_findings(
+                event_type=alert_data.event_type,
+                location=alert_data.location,
+                raw_findings=raw_findings,
+                evidence_count=evidence_summary.get("total_items", 0),
+                confidence_score=investigation_state.confidence_score
+            )
 
-                            # Extract thematic content
-                            if 'no kings' in finding_text or 'monarchism' in finding_text:
-                                web_search_findings.append(
-                                    "• Anti-monarchism protest theme identified through web analysis")
-
-        # THIRD PRIORITY: Synthesize from investigation artifacts and web evidence
-        evidence_items = evidence_data.get("evidence_items", [])
-        news_sources = set()
-        visual_evidence_count = 0
-
-        for item in evidence_items:
-            item_url = item.get("original_url", "")
-            item_type = item.get("type", "")
-
-            # Track credible news sources
-            if "nytimes.com" in item_url:
-                news_sources.add("New York Times")
-            elif "cnn.com" in item_url:
-                news_sources.add("CNN")
-            elif "washingtonpost.com" in item_url:
-                news_sources.add("Washington Post")
-            elif "reuters.com" in item_url:
-                news_sources.add("Reuters")
-            elif "ap.org" in item_url or "apnews.com" in item_url:
-                news_sources.add("Associated Press")
-            elif "nbcnews.com" in item_url:
-                news_sources.add("NBC News")
-            elif "abcnews.go.com" in item_url:
-                news_sources.add("ABC News")
-            elif "cbsnews.com" in item_url:
-                news_sources.add("CBS News")
-
-            # Count visual evidence
-            if item_type in ['image', 'screenshot']:
-                visual_evidence_count += 1
-
-        # Create findings from source analysis
-        if len(news_sources) >= 3:
-            web_search_findings.append(
-                f"• Multi-source verification from {len(news_sources)} major news outlets including {', '.join(list(news_sources)[:3])}")
-        elif len(news_sources) >= 1:
-            web_search_findings.append(
-                f"• News coverage documented by {', '.join(news_sources)}")
-
-        if visual_evidence_count >= 5:
-            web_search_findings.append(
-                f"• Extensive visual documentation with {visual_evidence_count} images and screenshots collected")
-
-        # Combine and deduplicate findings
-        all_web_findings = web_search_findings + screenshot_findings
-
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_findings = []
-        for finding in all_web_findings:
-            finding_key = finding.lower().replace('•', '').strip()
-            # Only substantial findings
-            if finding_key not in seen and len(finding_key) > 20:
-                seen.add(finding_key)
-                unique_findings.append(finding)
-
-        # Take top 4 web-derived findings
-        findings_text.extend(unique_findings[:4])
-
-        # FALLBACK: Extract from alert summary only if we don't have enough web findings
-        if len(findings_text) < 2 and alert_data.summary and len(alert_data.summary) > 100:
-            logger.debug("Supplementing with alert summary analysis...")
-            summary_lower = alert_data.summary.lower()
-
-            # Extract only the most factual information from alert summary
-            if "tens of thousands" in summary_lower:
-                findings_text.append(
-                    "• Large-scale demonstration involving tens of thousands of participants")
-            elif "thousands" in summary_lower:
-                findings_text.append(
-                    "• Significant demonstration with thousands of participants documented")
-
-            if "bryant park" in summary_lower and "madison square park" in summary_lower:
-                findings_text.append(
-                    "• Multi-location demonstration spanning Manhattan parks")
-
-            if "peaceful" in summary_lower and "no arrests" in summary_lower:
-                findings_text.append(
-                    "• Peaceful demonstration with no law enforcement incidents")
-
-        # FINAL FALLBACK: Generate basic findings if still insufficient
-        if len(findings_text) < 2:
-            findings_text = [
-                f"• Investigation of {alert_data.event_type} at {alert_data.location} completed with {investigation_state.confidence_score:.1%} confidence",
-                f"• Evidence collection encompassed {evidence_summary.get('total_items', 0)} artifacts from multiple sources",
-                f"• Geographic verification through satellite imagery of {alert_data.location}"
-            ]
-
-        logger.debug(
-            f"Generated {len(findings_text)} findings (prioritizing web search insights)")
-
-    except Exception as e:
-        logger.warning(f"Error extracting web search findings: {e}")
-        # Fallback to basic findings
-        findings_text = [
-            f"• {alert_data.event_type} investigation at {alert_data.location}",
-            f"• Evidence collection completed with {evidence_summary.get('total_items', 0)} items",
-            f"• Investigation confidence: {investigation_state.confidence_score:.1%}"
-        ]
-
-    # Format the findings for different placeholder names
-    findings_formatted = "\n".join(findings_text)
-
-    # Create executive summary - synthesize from web findings rather than investigation metadata
-    try:
-        executive_summary = _create_executive_summary_from_web_findings(
-            investigation_state, findings_text, evidence_summary, alert_data, news_sources
-        )
-        logger.debug(
-            f"Generated web-focused executive summary: {len(executive_summary)} characters")
-    except Exception as e:
-        logger.warning(f"Error creating web-focused executive summary: {e}")
-        # Fallback executive summary focusing on incident rather than process
-        if len(findings_text) > 0 and not findings_text[0].startswith("• Investigation"):
-            # We have good web findings, use them
-            executive_summary = f"Analysis of {alert_data.event_type} at {alert_data.location} reveals {findings_text[0][2:]}. {'Additional findings include ' + ', '.join([f[2:] for f in findings_text[1:2]]) + '.' if len(findings_text) > 1 else ''} Investigation achieved {investigation_state.confidence_score:.1%} confidence through comprehensive evidence analysis."
+            findings_formatted = synthesis_result.get('key_findings', '')
+            executive_summary = synthesis_result.get('executive_summary', '')
         else:
-            # Generic fallback
-            executive_summary = f"Investigation of {alert_data.event_type} at {alert_data.location} has achieved {investigation_state.confidence_score:.1%} confidence through analysis of {evidence_summary.get('total_items', 0)} evidence items. The investigation reveals significant community activity with implications for public safety and civic engagement in the area."
+            # Fallback if no findings available
+            findings_formatted = f"• Investigation of {alert_data.event_type} at {alert_data.location} completed\n• Evidence analysis encompassed {evidence_summary.get('total_items', 0)} artifacts"
+            executive_summary = f"Investigation of {alert_data.event_type} at {alert_data.location} has been completed with {investigation_state.confidence_score:.1%} confidence through analysis of {evidence_summary.get('total_items', 0)} evidence items."
+
+    except Exception as e:
+        logger.warning(f"Error in LLM synthesis: {e}")
+        # Fallback to basic findings
+        findings_formatted = f"• {alert_data.event_type} investigation at {alert_data.location}\n• Evidence collection completed with {evidence_summary.get('total_items', 0)} items"
+        executive_summary = f"Investigation of {alert_data.event_type} at {alert_data.location} has been completed with analysis of {evidence_summary.get('total_items', 0)} evidence items."
 
     # Prepare base replacements
     replacements = {
@@ -702,7 +539,7 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
         "status": investigation_state.phase.value.title(),
         "confidence_score": f"{investigation_state.confidence_score:.1%}",
         "findings_summary": findings_formatted,
-        "executive_summary": executive_summary,  # New executive summary field
+        "executive_summary": executive_summary,
         "evidence_count": str(evidence_summary.get("total_items", 0)),
         "evidence_types": ", ".join(evidence_summary.get("types_found", ["None"])),
         "high_relevance_count": str(evidence_summary.get("high_relevance_count", 0)),
@@ -713,121 +550,159 @@ def _prepare_replacement_data(investigation_state, evidence_data) -> dict:
 
     # Add alternative placeholder names for template compatibility
     replacements.update({
-        # Template uses {{key_findings}} but we provide {{findings_summary}}
         "key_findings": findings_formatted,
-        # Template uses {{stats}} but we provide {{status}}
         "stats": investigation_state.phase.value.title(),
-        # Template uses {{iteration}} but we provide {{iteration_count}}
-        "iteration": str(investigation_state.iteration_count),
-        # Also provide iteration_count for backwards compatibility
         "iteration_count": str(investigation_state.iteration_count)
     })
 
-    logger.debug(f"Prepared {len(replacements)} placeholder replacements")
-    logger.debug(f"Replacement keys: {list(replacements.keys())}")
-
+    logger.debug(
+        f"Prepared {len(replacements)} placeholder replacements using LLM synthesis")
     return replacements
 
 
-def _create_executive_summary_from_web_findings(investigation_state, findings_text, evidence_summary, alert_data, news_sources) -> str:
-    """Create an executive summary focused on incident findings rather than investigation process."""
+def _llm_synthesize_findings(event_type: str, location: str, raw_findings: list, evidence_count: int, confidence_score: float) -> dict:
+    """Use LLM to intelligently synthesize raw findings into executive summary and key findings."""
     try:
-        # Extract key metrics
-        confidence = investigation_state.confidence_score
-        evidence_count = evidence_summary.get("total_items", 0)
-        event_type = alert_data.event_type
-        location = alert_data.location
-        severity = alert_data.severity
+        # Import here to avoid circular imports
+        from google.genai import types
+        import google.generativeai as genai
+        import os
 
-        # Start with the actual incident rather than investigation process
-        summary_parts = []
-
-        # Opening - focus on what happened, not how we investigated
-        if len(findings_text) > 0 and not findings_text[0].startswith("• Investigation"):
-            # We have substantive findings - use them as the lead
-            main_finding = findings_text[0][2:]  # Remove bullet point
-            summary_parts.append(
-                f"Analysis of {event_type} at {location} reveals {main_finding.lower()}.")
-        else:
-            # Fallback opening
-            summary_parts.append(
-                f"Investigation of {event_type} at {location} has been completed.")
-
-        # Key incident characteristics from web findings
-        incident_details = []
-        for finding in findings_text[1:]:
-            # Remove bullet and convert to lowercase
-            finding_text = finding[2:].lower()
-
-            if 'peaceful' in finding_text and 'arrest' in finding_text:
-                incident_details.append("peaceful nature with no arrests")
-            elif 'thousands' in finding_text and 'participants' in finding_text:
-                incident_details.append("large-scale participation")
-            elif 'multi-location' in finding_text or 'route' in finding_text:
-                incident_details.append(
-                    "organized multi-location coordination")
-            elif 'news' in finding_text and ('coverage' in finding_text or 'outlets' in finding_text):
-                incident_details.append("significant media attention")
-            elif 'social media' in finding_text:
-                incident_details.append("extensive social media documentation")
-
-        if incident_details:
-            if len(incident_details) == 1:
-                summary_parts.append(
-                    f"The event demonstrated {incident_details[0]}.")
-            elif len(incident_details) == 2:
-                summary_parts.append(
-                    f"Key characteristics include {incident_details[0]} and {incident_details[1]}.")
+        # Initialize Gemini if not already done
+        if not genai.get_model:
+            api_key = os.getenv("GOOGLE_API_KEY") or os.getenv(
+                "GEMINI_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
             else:
-                summary_parts.append(
-                    f"Notable features include {', '.join(incident_details[:2])}, and {incident_details[2]}.")
+                logger.warning("No Google API key found for LLM synthesis")
+                return _fallback_synthesis(event_type, location, raw_findings, evidence_count, confidence_score)
 
-        # Media and source verification (if we have news sources)
-        if news_sources:
-            if len(news_sources) >= 3:
-                summary_parts.append(
-                    f"Event received comprehensive coverage from major news outlets including {', '.join(list(news_sources)[:3])}, indicating significant public interest.")
-            elif len(news_sources) >= 1:
-                summary_parts.append(
-                    f"Coverage by {', '.join(news_sources)} confirms the event's newsworthiness and public impact.")
+        # Prepare the synthesis prompt
+        findings_text = "\n".join([f"- {finding}" for finding in raw_findings])
 
-        # Evidence quality and investigation confidence (keep this brief)
-        if confidence >= 0.8:
-            confidence_phrase = "high confidence"
-        elif confidence >= 0.7:
-            confidence_phrase = "substantial confidence"
+        prompt = f"""You are an expert investigative analyst. Analyze the following findings about a {event_type} at {location} and create:
+
+1. **Key Findings** (4-5 bullet points with specific, factual insights)
+2. **Executive Summary** (2-3 sentences focusing on what actually happened)
+
+**Raw Investigation Findings:**
+{findings_text}
+
+**Investigation Context:**
+- Event Type: {event_type}
+- Location: {location}
+- Evidence Items Analyzed: {evidence_count}
+- Investigation Confidence: {confidence_score:.1%}
+
+**Requirements:**
+- Focus on WHAT HAPPENED, not how it was investigated
+- Include specific details like scale, nature, timeline, media coverage
+- Avoid generic language like "investigation completed" or "evidence collected"
+- Extract concrete facts about participants, behavior, scope, impact
+- Synthesize information across sources rather than just listing them
+
+**Output Format:**
+```json
+{{
+    "key_findings": "• [First key finding with specific details]\\n• [Second key finding]\\n• [Third key finding]\\n• [Fourth key finding]",
+    "executive_summary": "[2-3 sentences describing what actually happened during the {event_type}, focusing on scale, nature, and significance]"
+}}
+```
+
+Analyze the findings and synthesize them into meaningful insights:"""
+
+        # Generate synthesis using Gemini
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+
+        # Parse the JSON response
+        import json
+        import re
+
+        # Extract JSON from response
+        response_text = response.text
+        json_match = re.search(
+            r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        if json_match:
+            json_text = json_match.group(1)
         else:
-            confidence_phrase = "moderate confidence"
+            # Try to find JSON without code blocks
+            json_match = re.search(r'(\{.*?\})', response_text, re.DOTALL)
+            if json_match:
+                json_text = json_match.group(1)
+            else:
+                raise ValueError("No JSON found in response")
 
-        summary_parts.append(
-            f"Investigation achieved {confidence_phrase} ({confidence:.1%}) through analysis of {evidence_count} evidence items.")
+        synthesis_result = json.loads(json_text)
 
-        # Implications and context (focus on the incident's significance)
-        if severity >= 7:
-            summary_parts.append(
-                "The scale and documentation level suggest significant implications for local civic engagement and public safety planning.")
-        elif any('protest' in f.lower() or 'demonstration' in f.lower() for f in findings_text):
-            summary_parts.append(
-                "The event represents notable civic engagement activity within the broader context of public discourse in the area.")
-        else:
-            summary_parts.append(
-                "Findings provide valuable insights for understanding community response patterns and public safety considerations.")
+        logger.info("✅ LLM synthesis completed successfully")
+        logger.debug(
+            f"Generated executive summary: {len(synthesis_result.get('executive_summary', ''))} chars")
+        logger.debug(
+            f"Generated key findings: {synthesis_result.get('key_findings', '').count('•')} items")
 
-        # Combine into flowing narrative
-        executive_summary = " ".join(summary_parts)
-
-        # Ensure reasonable length (target 150-250 words)
-        if len(executive_summary) > 800:
-            # Trim to essential elements if too long
-            essential_parts = summary_parts[:3]
-            executive_summary = " ".join(essential_parts)
-
-        return executive_summary
+        return synthesis_result
 
     except Exception as e:
-        logger.error(f"Failed to create web-focused executive summary: {e}")
-        # Simple incident-focused fallback
-        return f"Analysis of {alert_data.event_type} at {alert_data.location} has been completed with {investigation_state.confidence_score:.1%} confidence. Findings indicate significant community activity with documented public safety and civic engagement implications for the area."
+        logger.warning(f"LLM synthesis failed: {e}, using fallback")
+        return _fallback_synthesis(event_type, location, raw_findings, evidence_count, confidence_score)
+
+
+def _fallback_synthesis(event_type: str, location: str, raw_findings: list, evidence_count: int, confidence_score: float) -> dict:
+    """Fallback synthesis when LLM is not available."""
+    # Simple extraction of key information
+    scale_info = ""
+    nature_info = ""
+    media_info = ""
+
+    findings_text = " ".join(raw_findings).lower()
+
+    # Extract key details
+    if "tens of thousands" in findings_text:
+        scale_info = "tens of thousands of participants"
+    elif "thousands" in findings_text:
+        scale_info = "thousands of participants"
+
+    if "peaceful" in findings_text and ("no arrests" in findings_text or "no incidents" in findings_text):
+        nature_info = "peaceful with no law enforcement incidents"
+    elif "peaceful" in findings_text:
+        nature_info = "peaceful in nature"
+
+    if "cnn" in findings_text or "reuters" in findings_text or "news" in findings_text:
+        media_info = "documented by major news outlets"
+
+    # Generate fallback key findings
+    key_findings_list = []
+    if scale_info:
+        key_findings_list.append(f"• Event involved {scale_info}")
+    if nature_info:
+        key_findings_list.append(f"• Demonstration was {nature_info}")
+    if media_info:
+        key_findings_list.append(f"• Activity {media_info}")
+    key_findings_list.append(
+        f"• Investigation achieved {confidence_score:.1%} confidence through {evidence_count} evidence items")
+
+    # Generate fallback executive summary
+    summary_parts = []
+    if scale_info and nature_info:
+        summary_parts.append(
+            f"Analysis of {event_type} at {location} reveals a {nature_info} demonstration involving {scale_info}.")
+    else:
+        summary_parts.append(
+            f"Investigation of {event_type} at {location} has been completed.")
+
+    if media_info:
+        summary_parts.append(
+            f"The event was {media_info}, indicating public interest.")
+
+    summary_parts.append(
+        f"Investigation achieved {confidence_score:.1%} confidence through analysis of {evidence_count} evidence items.")
+
+    return {
+        "key_findings": "\n".join(key_findings_list),
+        "executive_summary": " ".join(summary_parts)
+    }
 
 
 def _create_evidence_image_requests(evidence_data, slides_service, presentation_id: str) -> List[dict]:

@@ -543,11 +543,20 @@ def collect_media_content_simple_func(
                             continue
 
                         try:
+                            # Extract metadata from image URL for better captions
+                            image_metadata = _extract_image_metadata(image_url)
+
+                            # Generate intelligent caption using LLM and metadata
+                            enhanced_query = query
+                            if image_metadata.get('likely_content'):
+                                enhanced_query = f"{query} {' '.join(image_metadata['likely_content'])}"
+
                             # Download and save to GCS
                             success = artifact_manager.download_and_save_image(
                                 investigation_id=investigation_id,
                                 image_url=image_url,
-                                description=f"Image related to {query}"
+                                description=_generate_meaningful_caption(
+                                    enhanced_query, investigation_id)
                             )
 
                             if success and success.get("success"):
@@ -566,7 +575,7 @@ def collect_media_content_simple_func(
                                         "gcs_url": success["gcs_url"],
                                         "public_url": success["public_url"],
                                         "signed_url": success["signed_url"],
-                                        "description": f"Image related to {query}",
+                                        "description": _generate_meaningful_caption(query, investigation_id),
                                         "source": "image_search",
                                         "search_query": query,
                                         "source_url": image_url,
@@ -1540,3 +1549,242 @@ def _search_web_with_fallback(query: str, max_results: int = 10, search_type: st
     logger.warning(
         f"❌ Both DuckDuckGo and Google Custom Search failed for web search: {query}")
     return []
+
+
+def _generate_meaningful_caption(query: str, investigation_id: str) -> str:
+    """
+    Generate meaningful, context-aware image captions using LLM analysis.
+
+    Args:
+        query: The search query used to find the image
+        investigation_id: Investigation ID to get context
+
+    Returns:
+        Meaningful caption describing the image in context
+    """
+    try:
+        # Get investigation context
+        investigation_state = state_manager.get_investigation(investigation_id)
+        if investigation_state:
+            event_type = investigation_state.alert_data.event_type
+            location = investigation_state.alert_data.location
+        else:
+            event_type = "incident"
+            location = "NYC"
+
+        # Try LLM-powered caption generation first
+        try:
+            return _llm_generate_image_caption(query, event_type, location, investigation_state)
+        except Exception as e:
+            logger.warning(
+                f"LLM caption generation failed: {e}, using intelligent fallback")
+            return _intelligent_fallback_caption(query, event_type, location)
+
+    except Exception as e:
+        logger.error(f"Caption generation failed: {e}")
+        return f"Visual evidence related to {query}"
+
+
+def _llm_generate_image_caption(query: str, event_type: str, location: str, investigation_state=None) -> str:
+    """Use LLM to generate intelligent image captions based on context."""
+    try:
+        import google.generativeai as genai
+        import os
+
+        # Initialize Gemini if not already done
+        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("No Google API key available")
+
+        genai.configure(api_key=api_key)
+
+        # Build context from investigation findings
+        context_info = []
+        if investigation_state and hasattr(investigation_state, 'agent_findings'):
+            for agent_name, findings in investigation_state.agent_findings.items():
+                if isinstance(findings, list):
+                    # Limit to avoid long prompts
+                    context_info.extend(findings[:3])
+
+        context_text = " ".join(
+            context_info[:5]) if context_info else "No additional context available"
+
+        prompt = f"""You are generating a precise, informative caption for an image found during an investigation.
+
+**Investigation Context:**
+- Event Type: {event_type}
+- Location: {location}  
+- Search Query Used: "{query}"
+- Investigation Findings: {context_text[:300]}
+
+**Requirements:**
+- Create a 3-8 word caption that describes what the image likely shows
+- Focus on the CONTENT of the image, not the investigation process
+- Use specific, concrete language
+- Include location if relevant
+- Avoid words like "documentation", "evidence", "investigation"
+- Make it sound like a news photo caption
+
+**Examples:**
+- Query "protest Bryant Park" → "Crowd gathered at Bryant Park demonstration"
+- Query "fire building Manhattan" → "Building fire in Lower Manhattan"  
+- Query "traffic accident Brooklyn Bridge" → "Vehicle collision on Brooklyn Bridge"
+- Query "flood street Queens" → "Flooded street in Queens neighborhood"
+
+**Your caption for "{query}":**"""
+
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+
+        caption = response.text.strip()
+
+        # Clean up the response (remove quotes, extra text)
+        if '"' in caption:
+            caption = caption.split('"')[1] if caption.count(
+                '"') >= 2 else caption.replace('"', '')
+
+        # Ensure it's not too long
+        if len(caption) > 60:
+            caption = caption[:60] + "..."
+
+        # Fallback if caption is too generic or empty
+        if not caption or len(caption) < 10 or any(word in caption.lower() for word in ['documentation', 'evidence', 'investigation']):
+            raise ValueError("Generated caption too generic")
+
+        logger.debug(
+            f"LLM generated caption: '{caption}' for query: '{query}'")
+        return caption
+
+    except Exception as e:
+        logger.warning(f"LLM caption generation failed: {e}")
+        raise
+
+
+def _intelligent_fallback_caption(query: str, event_type: str, location: str) -> str:
+    """Intelligent fallback when LLM is not available."""
+
+    # Parse query to extract key information
+    query_lower = query.lower()
+
+    # Extract time/urgency indicators
+    time_indicators = {
+        'recent': 'Recent',
+        'breaking': 'Breaking',
+        'live': 'Live',
+        'urgent': 'Urgent',
+        'now': 'Current'
+    }
+
+    # Extract scene/content indicators
+    scene_indicators = {
+        'crowd': 'crowd',
+        'fire': 'fire scene',
+        'accident': 'accident scene',
+        'flood': 'flooding',
+        'construction': 'construction work',
+        'emergency': 'emergency response',
+        'police': 'police activity',
+        'protest': 'demonstration',
+        'march': 'march',
+        'rally': 'rally',
+        'gathering': 'gathering'
+    }
+
+    # Extract location specifics
+    location_specifics = {
+        'street': 'street',
+        'bridge': 'bridge',
+        'park': 'park',
+        'building': 'building',
+        'station': 'station',
+        'square': 'square',
+        'avenue': 'avenue'
+    }
+
+    # Build caption components
+    time_prefix = ""
+    scene_description = event_type
+    location_suffix = location
+
+    # Find time indicator
+    for indicator, prefix in time_indicators.items():
+        if indicator in query_lower:
+            time_prefix = prefix + " "
+            break
+
+    # Find scene description
+    for indicator, description in scene_indicators.items():
+        if indicator in query_lower:
+            scene_description = description
+            break
+
+    # Find location specifics
+    for indicator, specific in location_specifics.items():
+        if indicator in query_lower:
+            location_suffix = f"{specific} in {location}"
+            break
+
+    # Construct intelligent caption
+    if time_prefix:
+        caption = f"{time_prefix}{scene_description} at {location_suffix}"
+    else:
+        caption = f"{scene_description.title()} at {location_suffix}"
+
+    # Clean up and validate
+    caption = caption.replace("  ", " ").strip()
+
+    # Ensure it's descriptive enough
+    if len(caption) < 15:
+        caption = f"{event_type.title()} scene at {location}"
+
+    return caption
+
+
+def _extract_image_metadata(image_url: str, image_data: bytes = None) -> dict:
+    """Extract metadata from image URL and optionally image data."""
+    metadata = {
+        'source_domain': '',
+        'filename': '',
+        'image_type': '',
+        'likely_content': []
+    }
+
+    try:
+        from urllib.parse import urlparse, unquote
+        parsed_url = urlparse(image_url)
+
+        # Extract source domain
+        metadata['source_domain'] = parsed_url.netloc
+
+        # Extract filename from URL
+        path = unquote(parsed_url.path)
+        if '/' in path:
+            filename = path.split('/')[-1]
+            metadata['filename'] = filename
+
+            # Infer content from filename
+            filename_lower = filename.lower()
+            if any(word in filename_lower for word in ['protest', 'demo', 'rally']):
+                metadata['likely_content'].append('protest')
+            if any(word in filename_lower for word in ['fire', 'emergency']):
+                metadata['likely_content'].append('emergency')
+            if any(word in filename_lower for word in ['traffic', 'accident', 'crash']):
+                metadata['likely_content'].append('traffic_incident')
+
+        # Infer image type from URL patterns
+        if any(domain in metadata['source_domain'] for domain in ['instagram', 'twitter', 'facebook']):
+            metadata['image_type'] = 'social_media'
+        elif any(domain in metadata['source_domain'] for domain in ['cnn', 'reuters', 'nytimes', 'ap']):
+            metadata['image_type'] = 'news_media'
+        elif 'gov' in metadata['source_domain']:
+            metadata['image_type'] = 'official'
+        else:
+            metadata['image_type'] = 'web'
+
+        # TODO: If image_data is provided, could extract EXIF data
+        # This would require pillow: from PIL import Image, ExifTags
+
+    except Exception as e:
+        logger.warning(f"Could not extract image metadata: {e}")
+
+    return metadata
