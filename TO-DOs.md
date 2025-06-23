@@ -48,6 +48,12 @@ These are basically the agents. The search one will do most of the work, so mayb
     - [x] filtering by day range
     - [x] filtering by source
     - [x] filtering by severity
+- [x] Insights tab: rollup incident categories (311) using /stats & categories endpoints
+    - [x] pie chart of category types
+    - [x] scatterplot with time patterns (day vs hour), colored by category
+    - [x] clickable markers showing alert details
+    - [x] priority breakdown charts
+    - [x] category information display
 
 ## Critical path
 - [x] ensure 311 daily collector works
@@ -63,9 +69,9 @@ These are basically the agents. The search one will do most of the work, so mayb
     - [x] display location
     - [x] display link to report, if it exists
     - [x] display link to agent investigation
-- [ ] ensure twitter collector is actually working?
-- [ ] collector improvements: no duplicates
-- [ ] reddit strategies: other search terms?
+- [x] ensure twitter collector is actually working?
+- [x] collector improvements: no duplicates
+- [x] reddit strategies: other search terms?
 - [x] ensure 'create report' button works for certain (non 311) alerts, and when a report doesnt already exist
 - [x] ensure when a report is created, it is linked back to an alert, so that no duppicate reports can be created for an alert
 - [x] when a report is created, have it persist to the alert card, not just an in session persistence
@@ -73,7 +79,6 @@ These are basically the agents. The search one will do most of the work, so mayb
     - [x] once a report is created, a 'reportLink' field should be created in the alert object in firestore.
 - [x] loading spinner during login
 - [x] improved reports with actual insights and a useful executive summary
-- [ ] insights tab: should rollup incident categories (311) using /stats & categories endpoints
 - [ ] in the alerts & report cards in the UI, there should be a link to the agent logs which can be rendered in place (markdown)
 - [ ] when an adhoc report is triggered via a button, figure out how to display that in a non-blocking way to indicate that the report us underway. _ideally_ with streaming of the report state.
 - [ ] 'daily report' agent
