@@ -29,13 +29,15 @@ const Insights: React.FC = () => {
     alertCategories, 
     isLoading: statsLoading, 
     error: statsError,
-    timeRange
   } = useAlertStats();
   
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
   // Overall loading state
   const isLoading = alertsLoading || statsLoading;
+
+  // Day names array - moved before chartData useMemo
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   // Category colors for consistent theming
   const categoryColors = {
@@ -51,7 +53,12 @@ const Insights: React.FC = () => {
 
   // Process alerts data for charts
   const chartData = useMemo(() => {
-    if (!alerts.length) return { categoryData: [], timeData: [], priorityData: [] };
+    if (!alerts.length) return { categoryData: [], timeData: [], priorityData: [], dateInfo: [], debugInfo: null };
+
+    // Debug: Log alert timestamps to understand date range
+    const timestamps = alerts.map(alert => new Date(alert.timestamp));
+    const minDate = new Date(Math.min(...timestamps.map(d => d.getTime())));
+    const maxDate = new Date(Math.max(...timestamps.map(d => d.getTime())));
 
     // Category breakdown
     const categoryCount = alerts.reduce((acc, alert) => {
@@ -66,20 +73,79 @@ const Insights: React.FC = () => {
       color: categoryColors[category as keyof typeof categoryColors] || '#6b7280'
     }));
 
-    // Time-based scatter plot data
-    const timeData = alerts.map(alert => {
+    // Get unique dates from alerts and sort them chronologically
+    const uniqueDates = [...new Set(alerts.map(alert => {
       const date = new Date(alert.timestamp);
-      const dayOfWeek = date.getDay(); // 0 = Sunday, 6 = Saturday
+      return date.toDateString(); // This gives us "Mon Jan 01 2024" format
+    }))].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+    // Create date info for X-axis
+    const dateInfo = uniqueDates.map((dateStr, index) => {
+      const date = new Date(dateStr);
+      const alertsOnThisDate = alerts.filter(alert => 
+        new Date(alert.timestamp).toDateString() === dateStr
+      ).length;
+      
+      return {
+        index,
+        dateStr,
+        shortLabel: `${date.getMonth() + 1}/${date.getDate()}`, // MM/DD format
+        dayName: dayNames[date.getDay()],
+        alertCount: alertsOnThisDate
+      };
+    });
+
+    // Time-based scatter plot data with intelligent clustering prevention
+    const timeData = alerts.map((alert, alertIndex) => {
+      const date = new Date(alert.timestamp);
+      const dateStr = date.toDateString();
+      const dateIndex = uniqueDates.indexOf(dateStr);
       const hourOfDay = date.getHours();
       
       return {
-        x: dayOfWeek,
-        y: hourOfDay,
+        originalX: dateIndex,
+        originalY: hourOfDay,
         category: alert.category || 'general',
         title: alert.title,
         priority: alert.priority,
         color: categoryColors[alert.category as keyof typeof categoryColors] || '#6b7280',
-        alert: alert // Store full alert for click handling
+        alert: alert,
+        alertIndex // Store original index for stable jitter
+      };
+    });
+
+    // Apply intelligent spreading to prevent clustering
+    const spreadTimeData = timeData.map((point, index) => {
+      // Find all points with same or very similar coordinates
+      const similarPoints = timeData.filter(p => 
+        Math.abs(p.originalX - point.originalX) < 0.1 && 
+        Math.abs(p.originalY - point.originalY) < 0.5 // Smaller tolerance for hour grouping
+      );
+      
+      if (similarPoints.length <= 1) {
+        // If no clustering, just add small horizontal jitter only
+        return {
+          ...point,
+          x: point.originalX + (Math.random() - 0.5) * 0.3,
+          y: point.originalY // Keep exact hour - no vertical jitter
+        };
+      }
+      
+      // For clustered points, spread them out horizontally only
+      const pointIndex = similarPoints.findIndex(p => p.alertIndex === point.alertIndex);
+      const totalSimilar = similarPoints.length;
+      
+      // Create horizontal spread pattern for clustered points
+      const horizontalSpread = (pointIndex - totalSimilar / 2) * 0.08; // Systematic horizontal spacing
+      const additionalSpread = Math.min(0.4, totalSimilar * 0.03); // Additional spread for large clusters
+      
+      // Add some horizontal randomness to avoid perfect lines
+      const randomX = (Math.random() - 0.5) * 0.15;
+      
+      return {
+        ...point,
+        x: point.originalX + horizontalSpread + randomX,
+        y: point.originalY // Keep exact hour - preserve time accuracy
       };
     });
 
@@ -97,7 +163,14 @@ const Insights: React.FC = () => {
              priority === 'medium' ? '#eab308' : '#10b981'
     }));
 
-    return { categoryData, timeData, priorityData };
+    const debugInfo = {
+      totalAlerts: alerts.length,
+      dateRange: { minDate: minDate.toDateString(), maxDate: maxDate.toDateString() },
+      uniqueDates: uniqueDates.length,
+      pointsGenerated: spreadTimeData.length
+    };
+
+    return { categoryData, timeData: spreadTimeData, priorityData, dateInfo, debugInfo };
   }, [alerts]);
 
   const handleScatterClick = (data: any) => {
@@ -110,19 +183,18 @@ const Insights: React.FC = () => {
     setSelectedAlert(null);
   };
 
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
   // Custom tooltip for scatter plot
   const ScatterTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length > 0) {
       const data = payload[0].payload;
+      const dateInfo = chartData.dateInfo[data.x];
       return (
         <div className="bg-zinc-800 p-3 rounded-lg border border-zinc-700 shadow-lg">
           <p className="text-white font-medium">{data.title}</p>
           <p className="text-zinc-300 text-sm">Category: {data.category}</p>
           <p className="text-zinc-300 text-sm">Priority: {data.priority}</p>
           <p className="text-zinc-300 text-sm">
-            {dayNames[data.x]} at {data.y}:00
+            {dateInfo?.dayName} {dateInfo?.shortLabel} at {data.y}:00
           </p>
         </div>
       );
@@ -268,23 +340,37 @@ const Insights: React.FC = () => {
         <div className="card mb-8">
           <h3 className="text-xl font-semibold mb-4">Alert Timing Patterns</h3>
           <p className="text-sm text-zinc-400 mb-4">
-            Click on dots to see alert details. X-axis: Day of week, Y-axis: Hour of day
+            Click on dots to see alert details. X-axis: Date, Y-axis: Hour of day (Last 3 days)
           </p>
+          {chartData.debugInfo && (
+            <p className="text-xs text-zinc-500 mb-2">
+              Debug: {chartData.debugInfo.totalAlerts} alerts across {chartData.debugInfo.uniqueDates} days 
+              ({chartData.debugInfo.dateRange.minDate} to {chartData.debugInfo.dateRange.maxDate})
+            </p>
+          )}
           {chartData.timeData.length > 0 ? (
-            <div className="h-96">
+            <div className="h-[600px]">
               <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart>
+                <ScatterChart margin={{ top: 20, right: 20, bottom: 80, left: 40 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis
                     dataKey="x"
-                    domain={[0, 6]}
-                    ticks={[0, 1, 2, 3, 4, 5, 6]}
-                    tickFormatter={(value) => dayNames[value]}
+                    type="number"
+                    domain={[-0.8, chartData.dateInfo.length - 0.2]}
+                    ticks={chartData.dateInfo.map((_, index) => index)}
+                    tickFormatter={(value) => {
+                      const dateInfo = chartData.dateInfo[value];
+                      return dateInfo ? `${dateInfo.dayName} ${dateInfo.shortLabel}` : '';
+                    }}
                     stroke="#9ca3af"
+                    interval={0}
+                    angle={-45}
+                    tick={{ textAnchor: 'end', fontSize: 12 }}
                   />
                   <YAxis
                     dataKey="y"
-                    domain={[0, 23]}
+                    type="number"
+                    domain={[-2, 25]}
                     stroke="#9ca3af"
                     label={{ value: 'Hour of Day', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } }}
                   />
@@ -307,7 +393,7 @@ const Insights: React.FC = () => {
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="h-96 relative">
+            <div className="h-[600px] relative">
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
               </div>

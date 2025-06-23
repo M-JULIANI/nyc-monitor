@@ -9,6 +9,7 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 import time
+import difflib
 
 # Import the new categorization system
 import sys
@@ -326,17 +327,98 @@ async def get_recent_alerts(
 
         total_time = (datetime.utcnow() - start_time).total_seconds()
 
+        # Deduplicate alerts by title (linear time) - EXCLUDE 311 alerts
+        dedup_start = datetime.utcnow()
+
+        # Separate 311 and non-311 alerts
+        alerts_311 = [
+            alert for alert in all_alerts if alert.get('source') == '311']
+        alerts_non_311 = [
+            alert for alert in all_alerts if alert.get('source') != '311']
+
+        # Keep all 311 alerts (no deduplication)
+        deduplicated_alerts = alerts_311.copy()
+
+        # Deduplicate non-311 alerts using similarity detection
+        seen_titles = []  # List of normalized titles for similarity comparison
+        duplicate_count = 0
+        similarity_threshold = 0.85  # 85% similarity threshold
+
+        for alert in alerts_non_311:
+            # Normalize title for comparison (lowercase, stripped, truncated)
+            normalized_title = alert.get('title', '').lower().strip()[:150]
+
+            if not normalized_title:
+                continue
+
+            is_duplicate = False
+
+            # Check similarity against all seen titles
+            for seen_title in seen_titles:
+                similarity = difflib.SequenceMatcher(
+                    None, normalized_title, seen_title).ratio()
+                if similarity >= similarity_threshold:
+                    is_duplicate = True
+                    duplicate_count += 1
+                    break
+
+            if not is_duplicate:
+                seen_titles.append(normalized_title)
+                deduplicated_alerts.append(alert)
+
+        dedup_time = (datetime.utcnow() - dedup_start).total_seconds()
+
+        # Sort deduplicated alerts to prioritize Reddit first
+        sort_start = datetime.utcnow()
+
+        def get_source_priority(alert):
+            """Return sort priority for sources (lower = higher priority)"""
+            source = alert.get('source', 'unknown')
+            if source == 'reddit':
+                return 0  # Highest priority
+            elif source == '311':
+                return 1  # Second priority
+            elif source == 'twitter':
+                return 2  # Third priority
+            else:
+                return 3  # Everything else
+
+        # Sort by source priority, then by timestamp (newest first)
+        deduplicated_alerts.sort(key=lambda alert: (
+            get_source_priority(alert),
+            -int(datetime.fromisoformat(alert.get('timestamp',
+                 '1970-01-01T00:00:00').replace('Z', '+00:00')).timestamp())
+        ))
+
+        sort_time = (datetime.utcnow() - sort_start).total_seconds()
+
         logger.info(
-            f"🎯 MINIMAL: {len(all_alerts)} alerts in {total_time:.3f}s ({len(all_alerts)/total_time:.0f} alerts/sec)")
+            f"🔍 DEDUP: {len(all_alerts)} → {len(deduplicated_alerts)} alerts "
+            f"({duplicate_count} non-311 duplicates removed, {len(alerts_311)} 311 alerts kept) "
+            f"in {dedup_time:.3f}s")
+
+        logger.info(
+            f"📊 SORT: Prioritized Reddit alerts in {sort_time:.3f}s")
+
+        logger.info(
+            f"🎯 MINIMAL: {len(deduplicated_alerts)} alerts in {total_time:.3f}s ({len(deduplicated_alerts)/total_time:.0f} alerts/sec)")
 
         result = {
-            'alerts': all_alerts,
-            'count': len(all_alerts),
+            'alerts': deduplicated_alerts,
+            'count': len(deduplicated_alerts),
             'performance': {
                 'total_time_seconds': round(total_time, 3),
-                'alerts_per_second': round(len(all_alerts) / total_time if total_time > 0 else 0, 1),
+                'alerts_per_second': round(len(deduplicated_alerts) / total_time if total_time > 0 else 0, 1),
                 'query_breakdown': query_stats,
-                'optimizations': ['ultra_minimal_fields', 'no_sorting', 'minimal_transform'],
+                'deduplication': {
+                    'original_count': len(all_alerts),
+                    'final_count': len(deduplicated_alerts),
+                    'duplicates_removed': duplicate_count,
+                    'alerts_311_kept': len(alerts_311),
+                    'similarity_threshold': similarity_threshold,
+                    'dedup_time_seconds': round(dedup_time, 3)
+                },
+                'optimizations': ['ultra_minimal_fields', 'no_sorting', 'minimal_transform', 'similarity_deduplication_non_311'],
                 'cached': False,
                 'cache_ttl_seconds': CACHE_TTL_SECONDS
             }

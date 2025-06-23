@@ -7,6 +7,7 @@ import { useMapState } from '../contexts/MapStateContext';
 import Spinner from './Spinner';
 import AgentTraceModal from './AgentTraceModal';
 import { useAuth } from '@/contexts/AuthContext';
+import { ReportService } from '../services/reportService';
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA';
 
@@ -332,20 +333,10 @@ const MapView: React.FC = () => {
   };
 
   const handleGenerateReport = async (alert: Alert) => {
-    if (!isConnected) return;
-    
-    try {
-      const result = await generateReport(alert.id);
-      if (result.success) {
-        console.log('Report generation started:', result.investigationId);
-        // The UI will update automatically via polling
-      } else {
-        window.alert(`Failed to generate report: ${result.message}`);
-      }
-    } catch (err) {
-      console.error('Error generating report:', err);
-      window.alert('Failed to generate report');
-    }
+    await ReportService.handleGenerateReportForMap(alert, {
+      generateReport,
+      isConnected
+    });
   };
 
   const handleViewTrace = (alert: Alert) => {
@@ -878,7 +869,7 @@ const MapView: React.FC = () => {
                     
                     // Determine disabled state - "View Report" is never disabled by role
                     const isDisabledForInvestigation = isInvestigationDisabled(selectedAlert);
-                    const isDisabledForRole = !isViewReportMode && (user?.role !== 'admin'); // Only restrict role for "Generate Report"
+                    const isDisabledForRole = !isViewReportMode && (user?.role === 'viewer'); // Only restrict role for "Generate Report"
                     const isDisabled = isDisabledForInvestigation || isDisabledForRole;
                     
                     // Determine button styling based on state
@@ -887,7 +878,7 @@ const MapView: React.FC = () => {
                         // Always green and accessible for "View Report"
                         return 'btn-success';
                       } else if (isDisabledForRole) {
-                        // Halftone gray for non-admin users trying to generate reports
+                        // Halftone gray for viewer users trying to generate reports
                         return 'bg-gray-500 text-gray-300 cursor-not-allowed opacity-60';
                       } else if (isDisabledForInvestigation) {
                         // Yellow for investigation-level restrictions (existing behavior)
