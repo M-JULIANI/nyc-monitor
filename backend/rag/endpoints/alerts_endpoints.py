@@ -214,7 +214,7 @@ async def get_recent_alerts(
         try:
             alerts_ref = db.collection('nyc_monitor_alerts')
             monitor_query = (alerts_ref
-                             .where('event_date', '>=', cutoff_time)
+                             .where('created_at', '>=', cutoff_time)
                              .limit(monitor_limit))
 
             for doc in monitor_query.stream():
@@ -753,7 +753,7 @@ async def get_alert_stats(
         try:
             monitor_ref = db.collection('nyc_monitor_alerts')
             monitor_docs = monitor_ref.where(
-                'event_date', '>=', cutoff_time).stream()
+                'created_at', '>=', cutoff_time).stream()
             stats['monitor_alerts'] = sum(1 for _ in monitor_docs)
         except Exception as e:
             logger.error(f"Error counting monitor alerts: {e}")

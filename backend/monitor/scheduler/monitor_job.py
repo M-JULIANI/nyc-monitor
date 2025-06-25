@@ -72,13 +72,16 @@ class MonitorJob:
                     f"⚠️  HackerNews collector not initialized: {str(e)}")
 
             # Twitter collector (only if credentials are available)
-            try:
-                twitter_collector = TwitterCollector()
-                self.collectors.append(twitter_collector)
-                logger.info("✅ Twitter collector initialized successfully")
-            except ValueError as e:
-                logger.warning(
-                    f"⚠️  Twitter collector not initialized: {str(e)}")
+            # TEMPORARILY DISABLED: Twitter collector causes hanging issues
+            # try:
+            #     twitter_collector = TwitterCollector()
+            #     self.collectors.append(twitter_collector)
+            #     logger.info("✅ Twitter collector initialized successfully")
+            # except ValueError as e:
+            #     logger.warning(
+            #         f"⚠️  Twitter collector not initialized: {str(e)}")
+            logger.info(
+                "⚠️  Twitter collector temporarily disabled to prevent hanging issues")
 
             # Initialize triage agent
             self.triage_agent = TriageAgent()
