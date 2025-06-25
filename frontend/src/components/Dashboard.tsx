@@ -6,8 +6,6 @@ const Dashboard: React.FC = () => {
   const isConnected = !isLoading;
 
   const handleViewReport = (reportUrl: string) => {
-    console.log('reportUrl', reportUrl);
-    
     // Convert edit URLs to view URLs for better public access
     let viewUrl = reportUrl;
     if (reportUrl.includes('/edit')) {
@@ -16,7 +14,6 @@ const Dashboard: React.FC = () => {
       viewUrl = reportUrl.replace('/edit?usp=sharing', '/preview').replace('/edit', '/preview');
     }
     
-    console.log('Opening URL:', viewUrl);
     window.open(viewUrl, '_blank');
   };
 
