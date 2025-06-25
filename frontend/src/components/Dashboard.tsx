@@ -1,95 +1,20 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useAlerts } from '../contexts/AlertsContext';
-import { ReportService } from '../services/reportService';
-import { useAuth } from '@/contexts/AuthContext';
 
 const Dashboard: React.FC = () => {
-  const { alerts, stats, error, isLoading, generateReport } = useAlerts();
-  const { user } = useAuth();
-  const [generatingReports, setGeneratingReports] = useState<Set<string>>(new Set());
+  const { alertsWithReports, stats, error, isLoading, isLoadingReports } = useAlerts();
   const isConnected = !isLoading;
 
-  const handleGenerateReport = async (alertId: string) => {
-    await ReportService.handleGenerateReportForDashboard(alertId, {
-      generateReport,
-      generatingReports,
-      setGeneratingReports,
-      isConnected
-    });
-  };
-
   const handleViewReport = (reportUrl: string) => {
-    window.open(reportUrl, '_blank');
-  };
-
-  const getReportButtonContent = (alert: any) => {
-    if (alert.status === 'investigating') {
-      return 'Generating...';
+    // Convert edit URLs to view URLs for better public access
+    let viewUrl = reportUrl;
+    if (reportUrl.includes('/edit')) {
+      // Convert from: https://docs.google.com/presentation/d/{id}/edit?usp=sharing
+      // To: https://docs.google.com/presentation/d/{id}/preview
+      viewUrl = reportUrl.replace('/edit?usp=sharing', '/preview').replace('/edit', '/preview');
     }
     
-    // Only show "View Report" if BOTH status is resolved AND reportUrl exists
-    if (alert.status === 'resolved' && alert.reportUrl) {
-      return 'View Report';
-    }
-    
-    // Default to "Generate Report" for all other cases
-    return 'Generate Report';
-  };
-
-  const handleReportButtonClick = async (alert: any) => {
-    // Check if this is a "View Report" scenario (completed investigation with report URL)
-    const isViewReportMode = alert.status === 'resolved' && alert.reportUrl;
-    
-    if (alert.status === 'investigating') {
-      // Do nothing - investigation in progress, button should be disabled
-      return;
-    }
-    
-    // STRICT CHECK: Only open report if BOTH conditions are true
-    if (isViewReportMode) {
-      // Open report in new tab
-      handleViewReport(alert.reportUrl);
-      return; // Early return to prevent fallback
-    }
-    
-    // Generate new report for all other cases
-    await handleGenerateReport(alert.id);
-  };
-
-  const isInvestigationDisabled = (alert: any) => {
-    // Button should be disabled when investigating or when not connected
-    return !isConnected || alert.status === 'investigating';
-  };
-
-  const getButtonClasses = (alert: any) => {
-    // Check if this is a "View Report" scenario (completed investigation with report URL)
-    const isViewReportMode = alert.status === 'resolved' && alert.reportUrl;
-    
-    // Determine disabled state - "View Report" is never disabled by role
-    const isDisabledForInvestigation = isInvestigationDisabled(alert);
-    const isDisabledForRole = !isViewReportMode && (user?.role === 'viewer'); // Only restrict role for "Generate Report"
-    
-    if (isViewReportMode) {
-      // Always green and accessible for "View Report"
-      return 'bg-green-600 hover:bg-green-700 text-white';
-    } else if (isDisabledForRole) {
-      // Halftone gray for viewer users trying to generate reports
-      return 'bg-gray-500 text-gray-300 cursor-not-allowed opacity-60';
-    } else if (isDisabledForInvestigation) {
-      // Yellow for investigation-level restrictions
-      return 'bg-yellow-600 cursor-not-allowed text-white';
-    } else {
-      // Default primary state for "Generate Report"
-      return 'bg-blue-600 hover:bg-blue-700 text-white';
-    }
-  };
-
-  const isButtonDisabled = (alert: any) => {
-    const isViewReportMode = alert.status === 'resolved' && alert.reportUrl;
-    const isDisabledForInvestigation = isInvestigationDisabled(alert);
-    const isDisabledForRole = !isViewReportMode && (user?.role === 'viewer');
-    
-    return isDisabledForInvestigation || isDisabledForRole;
+    window.open(viewUrl, '_blank');
   };
 
   return (
@@ -214,23 +139,38 @@ const Dashboard: React.FC = () => {
             {/* Alert Reports Section */}
             <div className="card">
               <div className="p-4">
-                <h3 className="text-xl font-semibold mb-4 text-white">Alert Reports</h3>
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h3 className="text-xl font-semibold text-white">Completed Investigation Reports</h3>
+                    <p className="text-sm text-zinc-400 mt-1">View detailed reports from completed investigations</p>
+                  </div>
+                  <span className="text-sm text-zinc-400">
+                    {isLoadingReports ? 'Loading...' : `${alertsWithReports.length} reports available`}
+                  </span>
+                </div>
                 
-                {alerts.length === 0 ? (
+                {isLoadingReports ? (
                   <div className="py-8 text-center">
-                    <p className="text-zinc-400">No alerts available</p>
-                    {!isConnected && (
-                      <p className="text-sm text-zinc-500 mt-2">Waiting for connection...</p>
-                    )}
+                    <p className="text-zinc-400">Loading alert reports...</p>
+                  </div>
+                ) : alertsWithReports.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <p className="text-zinc-400">No completed investigation reports available</p>
+                    <p className="text-sm text-zinc-500 mt-2">Investigation reports will appear here after alerts are investigated and completed</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    {alerts.slice(0, 24).map((alert) => (
+                    {alertsWithReports.slice(0, 24).map((alert) => {
+                      // Debug: log each alert to see its structure
+                      console.log('Alert object:', alert);
+                      console.log('Alert reportUrl:', alert.reportUrl);
+                      
+                      return (
                       <div key={alert.id} className="bg-zinc-800 rounded-lg p-4 border border-zinc-700">
                         <div className="flex items-start justify-between mb-3">
-                          <div className={`w-3 h-3 rounded-full mt-1 priority-${alert.priority}`}></div>
-                          <span className={`text-xs px-2 py-1 rounded priority-badge priority-${alert.priority}`}>
-                            {alert.priority}
+                          <div className="w-3 h-3 rounded-full mt-1 bg-green-600"></div>
+                          <span className="text-xs px-2 py-1 rounded bg-green-900 text-green-300">
+                            Resolved
                           </span>
                         </div>
                         
@@ -238,36 +178,32 @@ const Dashboard: React.FC = () => {
                           {alert.title}
                         </h4>
                         <p className="text-xs text-zinc-300 mb-3 line-clamp-2">
-                          {alert.description}
+                          {alert.description || 'Investigation report available'}
                         </p>
                         
                         <div className="text-xs text-zinc-400 mb-3">
-                          <div>{alert.neighborhood}, {alert.borough}</div>
+                          <div>{alert.source}</div>
                           <div className="flex justify-between mt-1">
-                            <span>{alert.source}</span>
-                            <span>{new Date(alert.timestamp).toLocaleDateString()}</span>
+                            <span>Status: {alert.status}</span>
+                            <span>{alert.date ? new Date(alert.date).toLocaleDateString() : 'No date'}</span>
                           </div>
                         </div>
                         
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleReportButtonClick(alert)}
-                            disabled={isButtonDisabled(alert)}
-                            className={`flex-1 text-xs px-3 py-2 rounded transition-colors ${getButtonClasses(alert)}`}
+                            onClick={() => handleViewReport(alert.reportUrl!)}
+                            title="Open investigation report in new tab"
+                            className="flex-1 text-xs px-3 py-2 rounded transition-colors bg-green-600 hover:bg-green-700 text-white flex items-center justify-center gap-1"
                           >
-                            {getReportButtonContent(alert)}
+                            <span>View Report</span>
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
                           </button>
-                          
-                          <div className={`text-xs px-2 py-2 rounded text-center min-w-16 ${
-                            alert.status === 'resolved' ? 'bg-green-900 text-green-300' :
-                            alert.status === 'investigating' ? 'bg-blue-900 text-blue-300' :
-                            'bg-zinc-700 text-zinc-300'
-                          }`}>
-                            {alert.status}
-                          </div>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

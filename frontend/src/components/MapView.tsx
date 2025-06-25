@@ -274,7 +274,7 @@ const MapView: React.FC = () => {
       // This ensures the popup is fully visible without top clipping
       const map = mapRef.current.getMap();
       const containerHeight = map.getContainer().clientHeight;
-      const popupOffset = -200; // Approximate popup height in pixels
+      const popupOffset = -100; // Approximate popup height in pixels
       const offsetInDegrees = (popupOffset / containerHeight) * (map.getBounds().getNorth() - map.getBounds().getSouth());
       
       mapRef.current.flyTo({
@@ -420,6 +420,19 @@ const MapView: React.FC = () => {
   const isInvestigationDisabled = (alert: Alert) => {
     // Button should be disabled when investigating or when not connected
     return !isConnected || alert.status === 'investigating';
+  };
+
+  // Helper function to convert timeRangeHours to human-readable label
+  const getTimeLabel = (hours: number): string => {
+    if (hours <= 1) return `${hours} hour${hours !== 1 ? 's' : ''}`;
+    if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''}`;
+    
+    const days = Math.round(hours / 24 * 10) / 10;
+    if (days === Math.floor(days)) {
+      return `${Math.floor(days)} day${Math.floor(days) !== 1 ? 's' : ''}`;
+    } else {
+      return `${days} day${days !== 1 ? 's' : ''}`;
+    }
   };
 
   return (
@@ -662,14 +675,20 @@ const MapView: React.FC = () => {
         </div>
         
         <div className="relative">
-          {/* Hour markers - responsive sizing */}
-          <div className="flex justify-between text-[10px] sm:text-xs text-zinc-400 mb-1 sm:mb-2 px-1">
-            <span>-7d</span>
-            <span className="hidden sm:inline">-5d</span>
-            <span>-3d</span>
-            <span className="hidden sm:inline">-1d</span>
-            <span>-12h</span>
-            <span>-1h</span>
+          {/* Hour markers - positioned to align with actual slider values */}
+          <div className="relative text-[10px] sm:text-xs text-zinc-400 mb-1 sm:mb-2 h-4">
+            {/* -7d at position 1 = 0% */}
+            <span className="absolute left-0 transform -translate-x-1/2">-7d</span>
+            {/* -5d at position 49 = 28.7% */}
+            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: '28.7%' }}>-5d</span>
+            {/* -3d at position 97 = 57.5% */}
+            <span className="absolute transform -translate-x-1/2" style={{ left: '57.5%' }}>-3d</span>
+            {/* -1d at position 145 = 86.3% */}
+            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: '86.3%' }}>-1d</span>
+            {/* -12h at position 157 = 93.4% */}
+            <span className="absolute transform -translate-x-1/2" style={{ left: '93.4%' }}>-12h</span>
+            {/* -1h at position 168 = 100% */}
+            <span className="absolute right-0 transform translate-x-1/2">-1h</span>
           </div>
           
           {/* Slider - inverted so right side = fewer hours (more recent) */}
@@ -687,12 +706,7 @@ const MapView: React.FC = () => {
           {/* Current value indicator - responsive text */}
           <div className="text-center">
             <h3 className="text-xs font-semibold mt-3 sm:mt-4 text-white">
-              Last {filter.timeRangeHours} hour{filter.timeRangeHours !== 1 ? 's' : ''}
-              {filter.timeRangeHours >= 24 && (
-                <span className="text-zinc-400 ml-1 hidden sm:inline">
-                  ({Math.round(filter.timeRangeHours / 24 * 10) / 10} day{filter.timeRangeHours >= 48 ? 's' : ''})
-                </span>
-              )}
+              Last {getTimeLabel(filter.timeRangeHours)}
             </h3>
           </div>
         </div>

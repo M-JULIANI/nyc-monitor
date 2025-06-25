@@ -200,8 +200,8 @@ async def get_recent_alerts(
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
 
         # Allocate limits
-        monitor_limit = min(100, limit // 20)  # 5% for monitor
-        signals_limit = limit - monitor_limit   # 95% for 311
+        monitor_limit = min(600, int(limit * 0.3))  # 30% for monitor
+        signals_limit = limit - monitor_limit   # 70% for 311
 
         logger.info(
             f"🚀 MINIMAL FETCH: {monitor_limit} monitor + {signals_limit} 311")
@@ -911,3 +911,231 @@ def format_trace_as_markdown(trace_data: dict) -> str:
     except Exception as e:
         logger.error(f"Error formatting trace: {e}")
         return f"Error formatting trace data: {str(e)}"
+
+
+@alerts_router.get('/reports')
+async def get_alerts_with_reports(
+    limit: int = Query(100, ge=1, le=500,
+                       description="Number of alerts with reports to return"),
+    user=Depends(verify_google_token)
+):
+    """
+    Get alerts that have reports (status='resolved' and reportUrl exists)
+    Ordered by most recently updated/created
+
+    Returns only alerts that have completed investigations with report URLs
+
+    **Requires authentication**: Valid Google OAuth token
+    """
+    try:
+        logger.info(
+            f"🔒 Authenticated user {user.get('email')} accessing alerts with reports")
+
+        # Check cache first
+        cache_key = f"reports:{limit}"
+
+        if cache_key in _cache:
+            entry = _cache[cache_key]
+            if is_cache_valid(entry['timestamp']):
+                logger.info(f"✅ Cache HIT for {cache_key}")
+                cached_data = entry['data'].copy()
+                if 'performance' in cached_data:
+                    cached_data['performance']['cached'] = True
+                    cached_data['performance']['cache_age_seconds'] = round(
+                        time.time() - entry['timestamp'], 2)
+                return cached_data
+
+        start_time = datetime.utcnow()
+        db = get_db()
+
+        all_alerts_with_reports = []
+        query_stats = {}
+
+        # Query monitor alerts with reports - SIMPLIFIED APPROACH
+        monitor_start = datetime.utcnow()
+        try:
+            alerts_ref = db.collection('nyc_monitor_alerts')
+
+            # STRATEGY 1: First try simple status filter, then check report_url in code
+            # This avoids composite index issues
+            logger.info("🔍 Querying resolved alerts...")
+
+            resolved_query = (alerts_ref
+                              .where('status', '==', 'resolved')
+                              .limit(limit * 2))  # Get more to account for filtering
+
+            monitor_count = 0
+            total_resolved = 0
+
+            for doc in resolved_query.stream():
+                data = doc.to_dict()
+                total_resolved += 1
+
+                # Check if report_url exists and is not empty (multiple field name variations)
+                report_url = None
+                for field_name in ['report_url', 'reportUrl', 'reportURL', 'report_URL']:
+                    if field_name in data and data[field_name]:
+                        report_url = data[field_name]
+                        break
+
+                if not report_url:
+                    logger.debug(
+                        f"Skipping alert {doc.id} - no report URL found")
+                    continue
+
+                logger.info(
+                    f"✅ Found alert with report: {doc.id} - {report_url}")
+
+                # Extract the real source from the nested structure
+                real_source = 'monitor'  # Default fallback
+                try:
+                    original_alert = data.get('original_alert', {})
+                    if original_alert:
+                        original_alert_data = original_alert.get(
+                            'original_alert_data', {})
+                        if original_alert_data:
+                            signals = original_alert_data.get('signals', [])
+                            if signals and len(signals) > 0:
+                                real_source = signals[0]
+                except Exception as e:
+                    logger.warning(
+                        f"Could not extract source for alert {doc.id}: {e}")
+
+                # Create alert object with report information - MINIMAL PAYLOAD
+                alert = {
+                    'id': doc.id,
+                    'title': data.get('title', 'NYC Alert'),
+                    'status': data.get('status', 'resolved'),
+                    'source': real_source,
+                    # Use updated_at as primary date
+                    'date': data.get('updated_at', data.get('created_at')),
+                    'reportUrl': report_url,
+                }
+                all_alerts_with_reports.append(alert)
+                monitor_count += 1
+
+                # Stop if we have enough
+                if monitor_count >= limit:
+                    break
+
+            monitor_time = (datetime.utcnow() - monitor_start).total_seconds()
+            query_stats['monitor'] = {
+                'count': monitor_count,
+                'total_resolved_checked': total_resolved,
+                'time_seconds': round(monitor_time, 3),
+                'sources_found': list(set([a['source'] for a in all_alerts_with_reports if a['source'] != '311']))
+            }
+
+            logger.info(
+                f"📊 Monitor query: {monitor_count} alerts with reports from {total_resolved} resolved alerts")
+
+        except Exception as e:
+            logger.error(f"Monitor reports error: {e}")
+            query_stats['monitor'] = {'error': str(e)}
+
+        # Query 311 signals with reports (similar approach)
+        signals_start = datetime.utcnow()
+        try:
+            signals_ref = db.collection('nyc_311_signals')
+
+            # Simple approach for 311 as well
+            resolved_311_query = (signals_ref
+                                  .where('status', '==', 'resolved')
+                                  .limit(limit // 4))  # Smaller limit for 311
+
+            signals_count = 0
+            total_311_resolved = 0
+
+            for doc in resolved_311_query.stream():
+                data = doc.to_dict()
+                total_311_resolved += 1
+
+                # Check if report_url exists and is not empty
+                report_url = None
+                for field_name in ['report_url', 'reportUrl', 'reportURL', 'report_URL']:
+                    if field_name in data and data[field_name]:
+                        report_url = data[field_name]
+                        break
+
+                if not report_url:
+                    continue
+
+                # Create minimal 311 alert object - MINIMAL PAYLOAD
+                alert = {
+                    'id': doc.id,
+                    'title': f"{data.get('complaint_type', 'NYC 311')}: {(data.get('descriptor', '') or '')[:50]}",
+                    'status': data.get('status', 'resolved'),
+                    'source': '311',
+                    'date': data.get('updated_at', data.get('created_at')),
+                    'reportUrl': report_url,
+                }
+                all_alerts_with_reports.append(alert)
+                signals_count += 1
+
+            signals_time = (datetime.utcnow() - signals_start).total_seconds()
+            query_stats['311'] = {
+                'count': signals_count,
+                'total_resolved_checked': total_311_resolved,
+                'time_seconds': round(signals_time, 3)
+            }
+
+        except Exception as e:
+            logger.error(f"311 reports error: {e}")
+            query_stats['311'] = {'error': str(e)}
+
+        # Sort all alerts by updated_at descending (most recent first)
+        sort_start = datetime.utcnow()
+
+        def get_sort_timestamp(alert):
+            """Get timestamp for sorting (date field from minimal payload)"""
+            date_value = alert.get('date')
+            if date_value:
+                if isinstance(date_value, datetime):
+                    return date_value.timestamp()
+                elif isinstance(date_value, str):
+                    try:
+                        return datetime.fromisoformat(date_value.replace('Z', '+00:00')).timestamp()
+                    except:
+                        pass
+
+            # Fallback to epoch if no valid date
+            return 0
+
+        all_alerts_with_reports.sort(key=get_sort_timestamp, reverse=True)
+
+        # Apply final limit
+        final_alerts = all_alerts_with_reports[:limit]
+
+        sort_time = (datetime.utcnow() - sort_start).total_seconds()
+        total_time = (datetime.utcnow() - start_time).total_seconds()
+
+        logger.info(
+            f"📊 REPORTS: Found {len(final_alerts)} alerts with reports in {total_time:.3f}s")
+
+        result = {
+            'alerts': final_alerts,
+            'count': len(final_alerts),
+            'performance': {
+                'total_time_seconds': round(total_time, 3),
+                'query_breakdown': query_stats,
+                'sort_time_seconds': round(sort_time, 3),
+                'alerts_per_second': round(len(final_alerts) / total_time if total_time > 0 else 0, 1),
+                'optimizations': ['resolved_status_filter_only', 'report_url_code_filter', 'no_composite_index_needed'],
+                'cached': False,
+                'cache_ttl_seconds': CACHE_TTL_SECONDS,
+                'accessed_by': user.get('email')
+            }
+        }
+
+        # Cache the result
+        _cache[cache_key] = {
+            'data': result,
+            'timestamp': time.time()
+        }
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error fetching alerts with reports: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch alerts with reports")

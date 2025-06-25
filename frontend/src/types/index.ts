@@ -46,6 +46,7 @@ export interface Alert {
   event_date: string;
   created_at: string;
   updated_at: string;
+  date?: string;  // New minimal field for reports endpoint
   
   // Location data
   coordinates: {
