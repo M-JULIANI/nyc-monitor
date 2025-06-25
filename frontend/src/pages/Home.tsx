@@ -33,13 +33,21 @@ const HomeContent = () => {
         flexDirection: 'column',
         background: '#111827'
       }}>
-        <TabNavigation 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab} 
-        />
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+          backgroundColor: '#111827'
+        }}>
+          <TabNavigation 
+            activeTab={activeTab} 
+            onTabChange={setActiveTab} 
+          />
+        </div>
         <div style={{
           flex: 1,
-          overflow: 'hidden'
+          overflow: 'hidden',
+          position: 'relative'
         }}>
           {renderActiveTab()}
         </div>
