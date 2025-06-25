@@ -200,8 +200,8 @@ async def get_recent_alerts(
         cutoff_time = datetime.utcnow() - timedelta(hours=hours)
 
         # Allocate limits
-        monitor_limit = min(100, limit // 20)  # 5% for monitor
-        signals_limit = limit - monitor_limit   # 95% for 311
+        monitor_limit = min(600, int(limit * 0.3))  # 30% for monitor
+        signals_limit = limit - monitor_limit   # 70% for 311
 
         logger.info(
             f"🚀 MINIMAL FETCH: {monitor_limit} monitor + {signals_limit} 311")
