@@ -416,86 +416,6 @@ class NYC311Job:
 
         return stored_count
 
-    def _calculate_311_severity(self, signal: Dict) -> int:
-        """
-        Calculate severity score for 311 signals using rule-based logic
-        Returns score from 1-10 (consistent with monitor alert triage)
-
-        This is much cheaper than AI triage but still provides useful prioritization
-        """
-        try:
-            metadata = signal.get('metadata', {})
-            complaint_type = metadata.get('complaint_type', '').lower()
-            descriptor = metadata.get('descriptor', '').lower()
-            is_emergency = metadata.get('is_emergency', False)
-            is_event = metadata.get('is_event', False)
-            agency = metadata.get('agency_name', '').lower()
-
-            # Start with base score
-            severity = 3  # Default: Low priority
-
-            # Emergency flag override (highest priority)
-            if is_emergency:
-                return 9  # Critical
-
-            # Critical infrastructure and safety issues (8-9)
-            critical_keywords = [
-                'fire', 'explosion', 'gas leak', 'water main break', 'power outage',
-                'building collapse', 'sinkhole', 'bridge', 'tunnel', 'subway',
-                'emergency', 'urgent', 'immediate', 'danger', 'hazard', 'toxic'
-            ]
-
-            if any(keyword in complaint_type or keyword in descriptor for keyword in critical_keywords):
-                severity = max(severity, 8)
-
-            # High priority complaint types (6-7)
-            high_priority_types = [
-                'water system', 'sewer', 'street condition', 'traffic signal',
-                'street light', 'sidewalk condition', 'pothole', 'construction',
-                'blocked driveway', 'illegal parking', 'noise', 'air quality'
-            ]
-
-            if any(hp_type in complaint_type for hp_type in high_priority_types):
-                severity = max(severity, 6)
-
-            # Event-related (can be medium to high depending on type)
-            if is_event:
-                event_keywords = ['parade', 'festival',
-                                  'concert', 'protest', 'march', 'gathering']
-                if any(keyword in complaint_type or keyword in descriptor for keyword in event_keywords):
-                    severity = max(severity, 5)  # Medium priority for events
-
-            # Agency-based adjustments
-            high_priority_agencies = [
-                'fdny', 'fire', 'police', 'nypd', 'emergency']
-            if any(agency_name in agency for agency_name in high_priority_agencies):
-                severity = max(severity, 7)
-
-            # Time-sensitive keywords boost
-            urgent_keywords = ['now', 'currently',
-                               'ongoing', 'active', 'in progress']
-            if any(keyword in descriptor for keyword in urgent_keywords):
-                severity = min(severity + 1, 10)  # Boost by 1, cap at 10
-
-            # Location-based adjustments (high-traffic areas)
-            high_traffic_keywords = [
-                'broadway', 'times square', 'union square', 'penn station',
-                'grand central', 'brooklyn bridge', 'manhattan bridge',
-                'fdr drive', 'west side highway', 'bqe'
-            ]
-
-            if any(keyword in descriptor for keyword in high_traffic_keywords):
-                severity = min(severity + 1, 10)  # Boost by 1
-
-            # Cap severity between 1-10
-            severity = max(1, min(severity, 10))
-
-            return severity
-
-        except Exception as e:
-            logger.warning(f"Error calculating 311 severity: {e}")
-            return 3  # Default to low priority on error
-
     def _map_severity_to_priority(self, severity: int) -> str:
         """
         Map numeric severity to priority string (consistent with monitor alerts)
@@ -624,56 +544,124 @@ class NYC311Job:
     def _map_triage_results_to_signals(self, original_signals: List[Dict], triage_results: Dict) -> List[Dict]:
         """
         Map triage analysis results back to original 311 signals
+        Enhanced mapping to better utilize AI severity assessment
 
         Args:
             original_signals: Original 311 signals
             triage_results: Results from triage agent
 
         Returns:
-            Signals with severity scores added
+            Signals with AI-determined severity scores added
         """
         try:
             alerts = triage_results.get('alerts', [])
             scored_signals = []
 
-            # Create a mapping from signal content to triage results
-            for signal in original_signals:
-                # Default severity for signals not analyzed
-                severity = 3  # Low priority default
+            logger.info(
+                f"🔍 Mapping {len(alerts)} AI alerts to {len(original_signals)} 311 signals")
 
-                # Try to match signal with triage results
-                signal_text = f"{signal.get('metadata', {}).get('complaint_type', '')} {signal.get('metadata', {}).get('descriptor', '')}"
-
-                # Find matching alert from triage results
+            # If we have AI alerts, use them as the basis for severity scoring
+            if alerts:
+                # Create signals based on AI analysis
                 for alert in alerts:
-                    alert_desc = alert.get('description', '').lower()
-                    if signal_text.lower() in alert_desc or any(
-                        keyword in signal_text.lower()
-                        for keyword in alert.get('keywords', [])
-                    ):
-                        severity = alert.get('severity', 3)
-                        break
+                    # Find the best matching original signal for this AI alert
+                    best_match = None
+                    best_score = 0
 
-                # Add severity to signal
+                    alert_keywords = set((alert.get('description', '') + ' ' +
+                                          ' '.join(alert.get('keywords', []))).lower().split())
+
+                    for signal in original_signals:
+                        metadata = signal.get('metadata', {})
+                        signal_text = f"{metadata.get('complaint_type', '')} {metadata.get('descriptor', '')}".lower(
+                        )
+                        signal_keywords = set(signal_text.split())
+
+                        # Calculate similarity score
+                        common_keywords = alert_keywords.intersection(
+                            signal_keywords)
+                        if common_keywords:
+                            score = len(common_keywords) / \
+                                max(len(alert_keywords), len(signal_keywords))
+                            if score > best_score:
+                                best_score = score
+                                best_match = signal
+
+                    if best_match:
+                        # Create enhanced signal with AI severity
+                        signal_copy = best_match.copy()
+                        signal_copy['severity'] = alert.get(
+                            'severity', 5)  # Use AI severity
+                        signal_copy['priority'] = self._map_severity_to_priority(
+                            alert.get('severity', 5))
+                        signal_copy['triage_method'] = 'ai_triage'
+                        signal_copy['ai_alert_match'] = alert.get(
+                            'title', 'Unknown')
+                        signal_copy['ai_confidence'] = best_score
+
+                        scored_signals.append(signal_copy)
+                        # Remove from unmatched list
+                        original_signals.remove(best_match)
+
+            # For any remaining unmatched signals, apply simple defaults
+            for signal in original_signals:
+                metadata = signal.get('metadata', {})
+                is_emergency = metadata.get('is_emergency', False)
+
+                # Use metadata hints for unmatched signals
+                severity = 8 if is_emergency else 4  # Emergency or medium default
+
                 signal_copy = signal.copy()
                 signal_copy['severity'] = severity
                 signal_copy['priority'] = self._map_severity_to_priority(
                     severity)
-                signal_copy['triage_method'] = 'ai_triage'
+                signal_copy['triage_method'] = 'metadata_based'
+                signal_copy['ai_alert_match'] = None
+                signal_copy['ai_confidence'] = 0.0
 
                 scored_signals.append(signal_copy)
 
-            logger.info(
-                f"✅ Mapped severity scores to {len(scored_signals)} signals")
+            # Log severity distribution from AI analysis
+            severity_counts = {}
+            for signal in scored_signals:
+                priority = signal.get('priority', 'unknown')
+                severity_counts[priority] = severity_counts.get(
+                    priority, 0) + 1
+
+            logger.info(f"✅ AI-based severity mapping complete:")
+            logger.info(f"   Matched to AI alerts: {len(alerts)}")
+            logger.info(f"   Metadata-based defaults: {len(original_signals)}")
+            logger.info(f"   Severity distribution: {severity_counts}")
+
+            self.stats['severity_distribution'] = severity_counts
             return scored_signals
 
         except Exception as e:
-            logger.error(f"❌ Error mapping triage results: {str(e)}")
-            return original_signals
+            logger.error(f"❌ Error mapping AI triage results: {str(e)}")
+            # Fallback to simple default scoring
+            return self._apply_simple_defaults(original_signals)
+
+    def _apply_simple_defaults(self, signals: List[Dict]) -> List[Dict]:
+        """Apply simple default severity when AI mapping fails"""
+        scored_signals = []
+        for signal in signals:
+            metadata = signal.get('metadata', {})
+            is_emergency = metadata.get('is_emergency', False)
+
+            severity = 8 if is_emergency else 3
+            signal_copy = signal.copy()
+            signal_copy['severity'] = severity
+            signal_copy['priority'] = self._map_severity_to_priority(severity)
+            signal_copy['triage_method'] = 'error_fallback'
+
+            scored_signals.append(signal_copy)
+
+        return scored_signals
 
     def _apply_fallback_severity(self, signals: List[Dict]) -> List[Dict]:
         """
-        Apply fallback rule-based severity scoring when AI triage fails
+        Apply simple fallback severity scoring when AI triage fails
+        Uses simple default values instead of complex rules
 
         Args:
             signals: List of 311 signals
@@ -681,25 +669,36 @@ class NYC311Job:
         Returns:
             Signals with fallback severity scores
         """
-        logger.info("🔄 Applying fallback rule-based severity scoring")
+        logger.info(
+            "🔄 Applying simple fallback severity scoring (AI triage failed)")
 
         scored_signals = []
         severity_counts = {}
 
         for signal in signals:
-            # Use the rule-based calculation as fallback
-            severity = self._calculate_311_severity(signal)
+            # Simple fallback: use metadata hints if available, otherwise default to 3
+            metadata = signal.get('metadata', {})
+            is_emergency = metadata.get('is_emergency', False)
+
+            if is_emergency:
+                severity = 8  # High priority for emergencies
+            else:
+                severity = 3  # Default low priority for everything else
+
             priority = self._map_severity_to_priority(severity)
 
             signal_copy = signal.copy()
             signal_copy['severity'] = severity
             signal_copy['priority'] = priority
-            signal_copy['triage_method'] = 'rule_based_fallback'
+            signal_copy['triage_method'] = 'simple_fallback'
 
             scored_signals.append(signal_copy)
             severity_counts[priority] = severity_counts.get(priority, 0) + 1
 
-        logger.info(f"📊 Fallback severity distribution: {severity_counts}")
+        logger.info(
+            f"📊 Simple fallback severity distribution: {severity_counts}")
+        logger.info(
+            "ℹ️  Note: AI triage agent should be the primary severity scoring method")
         self.stats['severity_distribution'] = severity_counts
 
         return scored_signals

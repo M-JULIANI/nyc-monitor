@@ -104,6 +104,15 @@ class TriageAgent:
                     # Parse structured response
                     analysis = json.loads(response_text)
 
+                    # Debug: Log what we got from the AI
+                    alerts = analysis.get('alerts', [])
+                    logger.info(
+                        f"🔍 AI Response: {len(alerts)} alerts generated")
+                    # Log first 3 alerts
+                    for i, alert in enumerate(alerts[:3]):
+                        logger.info(
+                            f"   Alert {i+1}: {alert.get('title', 'No title')} - Severity: {alert.get('severity', 'MISSING')}")
+
                     # Add metadata
                     analysis['timestamp'] = datetime.utcnow().isoformat()
                     analysis['sources_analyzed'] = list(raw_signals.keys())
@@ -403,7 +412,8 @@ IMPORTANT:
         }
 
         for alert in alerts:
-            severity = alert.get('severity', 0)
+            # Default to medium severity (5) instead of 0
+            severity = alert.get('severity', 5)
 
             if severity >= self.severity_thresholds['urgent_investigation']:
                 categorized['urgent_investigation'].append(alert)

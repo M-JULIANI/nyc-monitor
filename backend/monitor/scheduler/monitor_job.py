@@ -254,10 +254,19 @@ class MonitorJob:
             severity_counts = {}
             event_type_counts = {}
             for alert in alerts:
-                severity = alert.get('severity', 0)
+                # Default to medium severity (5) instead of 0
+                ai_severity = alert.get('severity')
+                if ai_severity is not None:
+                    logger.info(
+                        f"✅ Alert '{alert.get('title', 'Unknown')}' has AI triage severity: {ai_severity}")
+                    final_severity = ai_severity
+                else:
+                    logger.warning(
+                        f"⚠️  Alert '{alert.get('title', 'Unknown')}' missing severity from triage agent, using default: {alert_type_info.default_severity}")
+                    final_severity = alert_type_info.default_severity
                 event_type = alert.get('event_type', 'unknown')
-                severity_counts[severity] = severity_counts.get(
-                    severity, 0) + 1
+                severity_counts[final_severity] = severity_counts.get(
+                    final_severity, 0) + 1
                 event_type_counts[event_type] = event_type_counts.get(
                     event_type, 0) + 1
 
@@ -474,6 +483,17 @@ class MonitorJob:
                 # Get alert type information for metadata
                 alert_type_info = get_alert_type_info(categorized_event_type)
 
+                # Debug: Check if alert has severity from triage agent
+                ai_severity = alert.get('severity')
+                if ai_severity is not None:
+                    logger.info(
+                        f"✅ Alert '{alert.get('title', 'Unknown')}' has AI triage severity: {ai_severity}")
+                    final_severity = ai_severity
+                else:
+                    logger.warning(
+                        f"⚠️  Alert '{alert.get('title', 'Unknown')}' missing severity from triage agent, using default: {alert_type_info.default_severity}")
+                    final_severity = alert_type_info.default_severity
+
                 # Enhance alert with additional metadata and frontend-compatible format
                 enhanced_alert = {
                     # Frontend-expected fields (no transformation needed)
@@ -486,10 +506,10 @@ class MonitorJob:
                     'longitude': self._safe_float_conversion(alert.get('coordinates', {}).get('lng'), -74.0060),
 
                     # Store both numeric severity AND text priority
-                    # Numeric 1-10 scale from triage agent
-                    'severity': alert.get('severity', alert_type_info.default_severity),
+                    # Use AI-assigned severity when available, default only as fallback
+                    'severity': final_severity,
                     # Text priority for frontend
-                    'priority': self._map_severity_to_priority(alert.get('severity', alert_type_info.default_severity)),
+                    'priority': self._map_severity_to_priority(final_severity),
 
                     'source': self._map_source(alert.get('source', 'reddit')),
                     'status': self._map_status(alert.get('status', 'pending')),
