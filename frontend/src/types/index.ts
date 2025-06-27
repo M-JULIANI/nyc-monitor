@@ -1,5 +1,5 @@
 // Priority and Severity Types
-export type AlertPriority = 'critical' | 'high' | 'medium' | 'low';
+export type AlertPriority = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type AlertSource = 'reddit' | '311' | 'twitter' | 'unknown';
 export type AlertStatus = 'new' | 'investigating' | 'resolved' | 'active';
 
@@ -9,21 +9,15 @@ export interface SeverityConfig {
   high: { min: 7; max: 8; color: '#ea580c'; };
   medium: { min: 5; max: 6; color: '#d97706'; };
   low: { min: 1; max: 4; color: '#65a30d'; };
+  info: { min: 0; max: 0; color: '#000000'; };
 }
 
 export const SEVERITY_CONFIG: SeverityConfig = {
   critical: { min: 9, max: 10, color: '#dc2626' },
   high: { min: 7, max: 8, color: '#ea580c' },
   medium: { min: 5, max: 6, color: '#d97706' },
-  low: { min: 1, max: 4, color: '#65a30d' }
-};
-
-// Helper function to map severity to priority
-export const severityToPriority = (severity: number): AlertPriority => {
-  if (severity >= 9) return 'critical';
-  if (severity >= 7) return 'high';
-  if (severity >= 5) return 'medium';
-  return 'low';
+  low: { min: 1, max: 4, color: '#65a30d' },
+  info: { min: 0, max: 0, color: '#000000' }
 };
 
 // Helper function to get priority color

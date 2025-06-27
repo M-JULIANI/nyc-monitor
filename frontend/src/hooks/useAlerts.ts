@@ -10,8 +10,9 @@ interface UseAlertsOptions {
 
 // Function to normalize alert objects
 const normalizeAlert = (rawAlert: any): Alert => {
-  const original = rawAlert.original_alert || {};
-  const originalData = original.original_alert_data || {};
+  const og = structuredClone(rawAlert);
+  const original = og.original_alert || {};
+  const originalData = og.original_alert_data || {};
   
   // Extract coordinates from wherever they exist
   let coordinates = {
@@ -28,60 +29,60 @@ const normalizeAlert = (rawAlert: any): Alert => {
   } else if (originalData.coordinates?.lat && originalData.coordinates?.lng &&
              originalData.coordinates.lat !== null && originalData.coordinates.lng !== null) {
     coordinates = originalData.coordinates;
-  } else if (rawAlert.coordinates?.lat && rawAlert.coordinates?.lng) {
-    coordinates = rawAlert.coordinates;
+  } else if (og.coordinates?.lat && og.coordinates?.lng) {
+    coordinates = og.coordinates;
   }
+
+  const priorityValue = og.priority;
 
   // Use the most complete/accurate data available
   const normalizedAlert = {
-    id: rawAlert.id || original.id || rawAlert.alert_id,
-    title: rawAlert.title || original.title || rawAlert.topic,
-    description: original.description || rawAlert.description || '',
-    source: original.source || rawAlert.source === 'unknown' ? originalData.signals?.[0] || 'unknown' : rawAlert.source,
-    priority: original.priority || rawAlert.priority || 'medium',
-    status: rawAlert.status || original.status || 'active', // PRIORITIZE rawAlert.status
+    id: og.id || original.id || og.alert_id,
+    title: og.title || original.title || og.topic,
+    description: original.description || og.description || '',
+    source: original.source || og.source === 'unknown' ? originalData.signals?.[0] || 'unknown' : og.source,
+    priority: priorityValue || 'medium',
+    status: og.status || original.status || 'active', // PRIORITIZE og.status
     
-    timestamp: original.timestamp || original.created_at || rawAlert.created_at || rawAlert.timestamp || new Date().toISOString(),
-    neighborhood: original.neighborhood || originalData.area || rawAlert.area || rawAlert.neighborhood || 'Unknown',
-    borough: original.borough || original.borough_primary || rawAlert.borough || 'Unknown',
+    timestamp: original.timestamp || original.created_at || og.created_at || og.timestamp || new Date().toISOString(),
+    neighborhood: original.neighborhood || originalData.area || og.area || og.neighborhood || 'Unknown',
+    borough: original.borough || original.borough_primary || og.borough || 'Unknown',
     
     // Additional date/time fields
-    event_date: original.event_date || rawAlert.event_date,
-    created_at: original.created_at || rawAlert.created_at,
-    updated_at: rawAlert.updated_at,
+    event_date: original.event_date || og.event_date,
+    created_at: original.created_at || og.created_at,
+    updated_at: og.updated_at,
     
     // Location data
     coordinates: coordinates as { lat: number; lng: number },
-    area: originalData.area || original.neighborhood || rawAlert.area || rawAlert.neighborhood || 'Unknown',
-    venue_address: originalData.venue_address || rawAlert.venue_address || '',
-    specific_streets: originalData.specific_streets || rawAlert.specific_streets || [],
-    cross_streets: originalData.cross_streets || rawAlert.cross_streets || [],
+    area: originalData.area || original.neighborhood || og.area || og.neighborhood || 'Unknown',
+    venue_address: originalData.venue_address || og.venue_address || '',
+    specific_streets: originalData.specific_streets || og.specific_streets || [],
+    cross_streets: originalData.cross_streets || og.cross_streets || [],
     
     // Impact data
-    crowd_impact: originalData.crowd_impact || rawAlert.crowd_impact || 'unknown',
-    transportation_impact: originalData.transportation_impact || rawAlert.transportation_impact || '',
-    estimated_attendance: originalData.estimated_attendance || rawAlert.estimated_attendance || '',
-    severity: originalData.severity || rawAlert.severity || 0,
+    crowd_impact: originalData.crowd_impact || og.crowd_impact || 'unknown',
+    transportation_impact: originalData.transportation_impact || og.transportation_impact || '',
+    estimated_attendance: originalData.estimated_attendance || og.estimated_attendance || '',
+    severity: originalData.severity || og.severity || 0,
     
     // Categorization fields (simplified to just main category)
-    category: rawAlert.category || original.category || 'general',
+    category: og.category || original.category || 'general',
     
     // Additional data
-    keywords: originalData.keywords || rawAlert.keywords || [],
-    signals: originalData.signals || rawAlert.signals || [],
-    url: rawAlert.url || '',
+    keywords: originalData.keywords || og.keywords || [],
+    signals: originalData.signals || og.signals || [],
+    url: og.url || '',
     
-    // Investigation & Report fields - PRIORITIZE rawAlert fields
-    reportUrl: rawAlert.report_url || original.report_url,
-    traceId: rawAlert.trace_id || original.trace_id,
-    investigationId: rawAlert.investigation_id || original.investigation_id,
+    // Investigation & Report fields - PRIORITIZE og fields
+    reportUrl: og.report_url || original.report_url,
+    traceId: og.trace_id || original.trace_id,
+    investigationId: og.investigation_id || original.investigation_id,
   };
-  
-  console.log('priority: ', normalizedAlert.priority, 'severity: ', normalizedAlert.severity);
 
   return normalizedAlert;
 };
-
+  
 export const useAlerts = (options: UseAlertsOptions = {}) => {
   const { 
     pollInterval = 1800000, // 30 minutes
@@ -193,6 +194,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       const investigationRequest = {
         alert_id: alert.id,
         severity: alert.severity || 5,
+        priority: alert.priority || 'medium',
         event_type: alert.category || 'general',
         location: `${alert.neighborhood}, ${alert.borough}`.replace('Unknown, ', '').replace(', Unknown', ''),
         summary: alert.description,
