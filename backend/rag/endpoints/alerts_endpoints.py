@@ -102,7 +102,7 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
             'description': signal.get('descriptor', ''),
             'source': '311',
             'priority': 'high' if signal.get('is_emergency', False) else 'medium',
-            'status': signal.get('status', 'Open'),
+            'status': _normalize_311_alert_status(signal.get('status', 'Open')),
             'timestamp': _extract_311_timestamp(signal),
             'neighborhood': signal.get('full_signal_data', {}).get('metadata', {}).get('incident_zip', signal.get('incident_zip', 'Unknown')),
             'borough': signal.get('full_signal_data', {}).get('metadata', {}).get('borough', signal.get('borough', 'Unknown')),
@@ -144,7 +144,7 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
             'description': signal.get('descriptor', ''),
             'source': '311',
             'priority': 'medium',
-            'status': 'Open',
+            'status': _normalize_311_alert_status('Open'),
             'timestamp': datetime.utcnow().isoformat(),
             'neighborhood': signal.get('borough', 'Unknown'),
             'borough': signal.get('borough', 'Unknown'),
@@ -257,8 +257,8 @@ async def get_recent_alerts(
                     'category': normalize_category(data.get('category', 'general')),
                 }
                 all_alerts.append(alert)
-                logger.info(
-                    f"✅ Alert {doc.id} has priority: {alert.get('priority')}")
+                # logger.info(
+                #     f"✅ Alert {doc.id} has priority: {alert.get('priority')}")
 
             monitor_time = (datetime.utcnow() - monitor_start).total_seconds()
             query_stats['monitor'] = {
@@ -279,7 +279,7 @@ async def get_recent_alerts(
             signals_ref = db.collection('nyc_311_signals')
             signals_query = (signals_ref
                              .where('signal_timestamp', '>=', cutoff_time)
-                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category', 'full_signal_data', 'incident_zip', 'borough'])
+                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category', 'full_signal_data', 'incident_zip', 'borough', 'status', 'severity', 'event_type'])
                              .limit(signals_limit))
 
             signals_count = 0
@@ -295,7 +295,7 @@ async def get_recent_alerts(
                 # Get categorization (may be stored in DB or need to calculate)
                 complaint_type = data.get('complaint_type', '')
 
-                # Get the main category (simplified approach)
+                # Get the main category (simplified approach) - ORIGINAL OPTIMIZED LOGIC
                 category = data.get('category')
                 if not category:
                     # Calculate from event_type if available, otherwise from complaint_type
@@ -304,12 +304,15 @@ async def get_recent_alerts(
                     alert_type_info = get_alert_type_info(event_type)
                     category = alert_type_info.category.value
 
-                # Ultra-minimal transformation
+                # Create alert with proper status normalization
                 alert = {
                     'id': doc.id,
                     'title': f"{complaint_type}: {(data.get('descriptor', '') or '')[:50]}",
                     'description': data.get('descriptor', ''),
                     'source': '311',
+                    'priority': _get_priority_from_severity(data.get('severity', 5)),
+                    # Proper status normalization
+                    'status': _normalize_311_alert_status(data.get('status', 'Open')),
                     'severity': severity,
                     'timestamp': _extract_311_timestamp(data),
                     'coordinates': {
@@ -319,9 +322,10 @@ async def get_recent_alerts(
                     # Extract neighborhood and borough from full_signal_data.metadata
                     'neighborhood': data.get('full_signal_data', {}).get('metadata', {}).get('incident_zip', data.get('incident_zip', 'Unknown')),
                     'borough': data.get('full_signal_data', {}).get('metadata', {}).get('borough', data.get('borough', 'Unknown')),
-                    # Simplified categorization - just the main category
+                    # Simplified categorization - just the main category (ORIGINAL LOGIC)
                     'category': normalize_category(category),
                 }
+
                 all_alerts.append(alert)
                 signals_count += 1
 
@@ -542,17 +546,41 @@ async def get_single_alert(alert_id: str, user=Depends(verify_google_token)):
 
 
 def _get_priority_from_severity(severity: int) -> str:
-    """Convert severity to priority"""
-    if severity >= 9:
+    """Convert severity number to priority string"""
+    if severity >= 8:
         return 'critical'
-    elif severity >= 7:
+    elif severity >= 6:
         return 'high'
-    elif severity >= 5:
+    elif severity >= 4:
         return 'medium'
-    elif severity >= 3:
+    else:
         return 'low'
 
-    return 'info'
+
+def _normalize_311_alert_status(status: str) -> str:
+    """
+    Normalize alert status values to standard format with lowercase handling.
+
+    Maps:
+    - 'open' -> 'active'
+    - 'assigned' -> 'investigating'
+    - 'closed' -> 'resolved'
+
+    All comparisons are done in lowercase to handle case variations.
+    """
+    if not status or not isinstance(status, str):
+        return 'active'  # Default fallback
+
+    status_lower = status.lower().strip()
+
+    status_mapping = {
+        'open': 'active',
+        'unknown': 'active',
+        'assigned': 'investigating',
+        'closed': 'resolved'
+    }
+
+    return status_mapping.get(status_lower, status_lower)
 
 
 def _extract_311_timestamp(data: dict) -> str:
@@ -1069,7 +1097,7 @@ async def get_alerts_with_reports(
                 alert = {
                     'id': doc.id,
                     'title': f"{data.get('complaint_type', 'NYC 311')}: {(data.get('descriptor', '') or '')[:50]}",
-                    'status': data.get('status', 'resolved'),
+                    'status': _normalize_311_alert_status(data.get('status', 'resolved')),
                     'source': '311',
                     'date': data.get('updated_at', data.get('created_at')),
                     'reportUrl': report_url,

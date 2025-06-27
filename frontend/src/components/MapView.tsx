@@ -567,7 +567,7 @@ className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text
 disabled={!isConnected}
 >
 <option value="all">All Status</option>
-<option value="new">New</option>
+<option value="active">Active</option>
 <option value="investigating">Investigating</option>
 <option value="resolved">Resolved</option>
 </select>
