@@ -117,16 +117,12 @@ const Dashboard: React.FC = () => {
                 <h3 className="text-lg font-semibold mb-2 text-white">Status Overview</h3>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-zinc-300 text-sm">New</span>
-                    <span className="text-yellow-400 font-bold">{stats.byStatus.new || 0}</span>
+                    <span className="text-zinc-300 text-sm">Active</span>
+                    <span className="text-yellow-400 font-bold">{stats.byStatus.active || 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-zinc-300 text-sm">Investigating</span>
                     <span className="text-blue-400 font-bold">{stats.byStatus.investigating || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-zinc-300 text-sm">Active</span>
-                    <span className="text-orange-400 font-bold">{stats.byStatus.active || 0}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-zinc-300 text-sm">Resolved</span>
