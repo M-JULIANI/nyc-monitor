@@ -214,7 +214,7 @@ async def get_recent_alerts(
         try:
             alerts_ref = db.collection('nyc_monitor_alerts')
             monitor_query = (alerts_ref
-                             .where('event_date', '>=', cutoff_time)
+                             .where('created_at', '>=', cutoff_time)
                              .limit(monitor_limit))
 
             for doc in monitor_query.stream():
@@ -243,7 +243,8 @@ async def get_recent_alerts(
                     'description': data.get('description', ''),
                     # Now shows the actual source: reddit, twitter, etc.
                     'source': real_source,
-                    'severity': _get_severity_from_priority(data.get('priority', 'medium')),
+                    'priority': _get_priority_from_severity(data.get('severity', 5)),
+                    'severity': data.get('severity', 5),
                     'timestamp': _extract_monitor_timestamp(data),
                     'coordinates': {
                         'lat': data.get('original_alert', {}).get('latitude', 40.7589),
@@ -256,6 +257,8 @@ async def get_recent_alerts(
                     'category': normalize_category(data.get('category', 'general')),
                 }
                 all_alerts.append(alert)
+                logger.info(
+                    f"✅ Alert {doc.id} has priority: {alert.get('priority')}")
 
             monitor_time = (datetime.utcnow() - monitor_start).total_seconds()
             query_stats['monitor'] = {
@@ -538,16 +541,18 @@ async def get_single_alert(alert_id: str, user=Depends(verify_google_token)):
         raise HTTPException(status_code=500, detail="Failed to fetch alert")
 
 
-def _get_severity_from_priority(priority: str) -> int:
-    """Convert priority to numeric severity"""
-    priority_map = {
-        'critical': 9,
-        'high': 7,
-        'medium': 5,
-        'low': 3,
-        'info': 1
-    }
-    return priority_map.get(priority.lower(), 5)
+def _get_priority_from_severity(severity: int) -> str:
+    """Convert severity to priority"""
+    if severity >= 9:
+        return 'critical'
+    elif severity >= 7:
+        return 'high'
+    elif severity >= 5:
+        return 'medium'
+    elif severity >= 3:
+        return 'low'
+
+    return 'info'
 
 
 def _extract_311_timestamp(data: dict) -> str:
@@ -753,7 +758,7 @@ async def get_alert_stats(
         try:
             monitor_ref = db.collection('nyc_monitor_alerts')
             monitor_docs = monitor_ref.where(
-                'event_date', '>=', cutoff_time).stream()
+                'created_at', '>=', cutoff_time).stream()
             stats['monitor_alerts'] = sum(1 for _ in monitor_docs)
         except Exception as e:
             logger.error(f"Error counting monitor alerts: {e}")
