@@ -77,7 +77,7 @@ Atlas is an autonomous investigation system that monitors New York City through 
 ## 📁 Project Structure
 
 ```
-atlas-bootstrapped/
+nyc-monitor/
 ├── frontend/          # React application with Mapbox integration
 ├── backend/           # FastAPI services and AI agent system
 │   ├── rag/agents/   # AI investigation agent
