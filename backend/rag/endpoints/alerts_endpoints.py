@@ -257,8 +257,8 @@ async def get_recent_alerts(
                     'category': normalize_category(data.get('category', 'general')),
                 }
                 all_alerts.append(alert)
-                logger.info(
-                    f"✅ Alert {doc.id} has priority: {alert.get('priority')}")
+                # logger.info(
+                #     f"✅ Alert {doc.id} has priority: {alert.get('priority')}")
 
             monitor_time = (datetime.utcnow() - monitor_start).total_seconds()
             query_stats['monitor'] = {
