@@ -4,8 +4,10 @@ import { Alert } from '../types';
 
 interface AlertsContextType {
   alerts: Alert[];
+  alertsWithReports: Alert[];
   error: string | null;
   isLoading: boolean;
+  isLoadingReports: boolean;
   stats: {
     total: number;
     byPriority: Record<string, number>;
@@ -19,6 +21,7 @@ interface AlertsContextType {
     resolved: number;
   };
   refetch: () => void;
+  fetchAlertsWithReports: () => void;
   refetchAlert: (alertId: string) => Promise<{ success: boolean; message: string; alert?: Alert }>;
   generateReport: (alertId: string) => Promise<{ success: boolean; message: string; investigationId?: string }>;
   fetchAgentTrace: (traceId: string) => Promise<{ success: boolean; trace?: string; message: string }>;

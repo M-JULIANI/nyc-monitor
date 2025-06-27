@@ -91,13 +91,51 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   } = options;
   
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alertsWithReports, setAlertsWithReports] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingReports, setIsLoadingReports] = useState(true);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [lastReportsFetch, setLastReportsFetch] = useState<Date | null>(null);
 
   // Keep track of alerts that are currently being investigated to prevent polling interference
   const [investigatingAlerts, setInvestigatingAlerts] = useState<Set<string>>(new Set());
   const [completedInvestigations, setCompletedInvestigations] = useState<Map<string, { reportUrl?: string; traceId?: string; investigationId?: string }>>(new Map());
+
+  // Fetch alerts with reports
+  const fetchAlertsWithReports = useCallback(async () => {
+    try {
+      setIsLoadingReports(true);
+      
+      const token = localStorage.getItem('idToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+      
+      const response = await fetch(`/api/alerts/reports?limit=100`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch alerts with reports: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Don't normalize - the reports endpoint already returns clean minimal data
+      const alerts = data.alerts || [];
+      
+      setAlertsWithReports(alerts);
+      setLastReportsFetch(new Date());
+      setIsLoadingReports(false);
+    } catch (err) {
+      console.error('Error fetching alerts with reports:', err);
+      setIsLoadingReports(false);
+      // Don't set main error state for reports-specific fetch failures
+    }
+  }, []);
 
   // Fetch all alerts - simplified
   const fetchAlerts = useCallback(async () => {
@@ -420,11 +458,17 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   useEffect(() => {
     // Initial load
     fetchAlerts();
+    fetchAlertsWithReports();
 
-    // Set up polling
-    const interval = setInterval(fetchAlerts, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchAlerts, pollInterval]);
+    // Set up staggered polling intervals
+    const alertsInterval = setInterval(fetchAlerts, pollInterval); // 30 minutes
+    const reportsInterval = setInterval(fetchAlertsWithReports, 720000); // 12 minutes (12 * 60 * 1000)
+    
+    return () => {
+      clearInterval(alertsInterval);
+      clearInterval(reportsInterval);
+    };
+  }, [fetchAlerts, fetchAlertsWithReports, pollInterval]);
 
   // Memoized stats
   const alertStats = useMemo(() => {
@@ -460,13 +504,17 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
 
   return { 
     alerts, 
+    alertsWithReports,
     error, 
     isLoading,
+    isLoadingReports,
     lastFetch,
+    lastReportsFetch,
     stats: alertStats,
     refetch: fetchAlerts,
     refetchAlert,
     generateReport,
-    fetchAgentTrace
+    fetchAgentTrace,
+    fetchAlertsWithReports
   };
 };

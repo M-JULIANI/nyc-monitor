@@ -53,25 +53,11 @@ Atlas is an autonomous investigation system that monitors New York City through 
   - Priority distribution and trends
   - Geographic clustering analysis
 
-### **Quick Testing (Automated)**
-For rapid testing without waiting for real alerts:
-1. **Navigate**: Go to [nyc-monitor.app/testing](https://nyc-monitor.app/testing)
+### **View Reports**
+1. **Navigate**: Go to [nyc-monitor.app](https://nyc-monitor.app)
 2. **Login**: Authenticate with Google OAuth
-3. **Investigate**: Click "Start Investigation" to run test scenario
-4. **Results**: View generated maps, images, and comprehensive report
+3. **Investigate**: Navigate to '/reports' tab, and view cards displaying reports that have already been generated ([sample report](https://docs.google.com/presentation/d/16pSm3nSPESrj6Tgoiltrhuu6kZvXzz8jVhrlO1GznIo/edit?slide=id.gc6fa3c898_0_0#slide=id.gc6fa3c898_0_0)). To view all reports generated, feel free to go this this publicly viewable [drive folder](https://drive.google.com/drive/u/0/folders/1dw2UL95bWqoswsgKFK5_9FHlXjXKQlkd).
 
-### **Test Scenario**
-The automated test investigates a simulated infrastructure alert:
-```json
-{
-  "event_type": "infrastructure_failure", 
-  "location": "Manhattan Bridge",
-  "severity": 8,
-  "summary": "Critical infrastructure issue detected"
-}
-```
-
-**Expected Output**: 2 satellite maps + 8+ images + professional Google Slides report
 
 ## 🏗️ Architecture Overview
 
