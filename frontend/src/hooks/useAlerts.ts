@@ -76,6 +76,8 @@ const normalizeAlert = (rawAlert: any): Alert => {
     traceId: rawAlert.trace_id || original.trace_id,
     investigationId: rawAlert.investigation_id || original.investigation_id,
   };
+  
+  console.log('priority: ', normalizedAlert.priority, 'severity: ', normalizedAlert.severity);
 
   return normalizedAlert;
 };
