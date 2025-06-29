@@ -2,7 +2,8 @@
 
 Atlas is an AI-powered urban intelligence system that autonomously monitors New York City through real-time data collection and intelligent investigation. The system combines continuous background monitoring with on-demand deep investigation capabilities.
 
-High-level Diagram
+### High-level Diagram
+
 ```mermaid
 graph LR
     subgraph "Data In"
@@ -39,7 +40,7 @@ graph LR
     class UI,Reports output
 ```
 
-Detailed Diagram
+### Detailed Diagram
 
 ```mermaid
 flowchart TD

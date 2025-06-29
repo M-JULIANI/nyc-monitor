@@ -59,7 +59,7 @@ Atlas is an autonomous investigation system that monitors New York City through 
 3. **Investigate**: Navigate to '/reports' tab, and view cards displaying reports that have already been generated ([sample report](https://docs.google.com/presentation/d/16pSm3nSPESrj6Tgoiltrhuu6kZvXzz8jVhrlO1GznIo/edit?slide=id.gc6fa3c898_0_0#slide=id.gc6fa3c898_0_0)). To view all reports generated, feel free to go this this publicly viewable [drive folder](https://drive.google.com/drive/u/0/folders/1dw2UL95bWqoswsgKFK5_9FHlXjXKQlkd).
 
 
-## 🏗️ Architecture Overview
+## 🏗️ [Architecture Overview](./docs/architecture.md)
 
 **Technology Stack**:
 - **AI Engine**: Google ADK with Gemini 2.0 Flash Experimental
