@@ -1,6 +1,4 @@
-
-
-  import {useState, useRef, useEffect, useMemo} from "react";
+import {useState, useRef, useEffect, useMemo} from "react";
 import Map, {Layer, Source, Popup, Marker} from "react-map-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import {Alert} from "../types";
