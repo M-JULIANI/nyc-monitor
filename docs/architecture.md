@@ -1,6 +1,45 @@
-# Atlas NYC Monitor - Architecture Overview
+# NYC Monitor - Architecture Overview
 
 Atlas is an AI-powered urban intelligence system that autonomously monitors New York City through real-time data collection and intelligent investigation. The system combines continuous background monitoring with on-demand deep investigation capabilities.
+
+High-level Diagram
+```mermaid
+graph LR
+    subgraph "Data In"
+        Sources[📡 Multi-Source<br/>Collection]
+        AI[🧠 AI Triage]
+    end
+    
+    subgraph "Storage"
+        DB[(💾 Multi-DB<br/>Architecture)]
+    end
+    
+    subgraph "Intelligence"
+        Agent[🤖 Gemini ADK<br/>Investigation Agent]
+    end
+    
+    subgraph "Output"
+        UI[🖥️ Dashboard]
+        Reports[📊 Generated<br/>Reports]
+    end
+
+    Sources --> AI --> DB
+    DB --> Agent --> Reports
+    DB --> UI
+    Agent --> UI
+
+    classDef input fill:#e1f5fe
+    classDef storage fill:#e8f5e8  
+    classDef intelligence fill:#f3e5f5
+    classDef output fill:#fff3e0
+
+    class Sources,AI input
+    class DB storage
+    class Agent intelligence
+    class UI,Reports output
+```
+
+Detailed Diagram
 
 ```mermaid
 flowchart TD
