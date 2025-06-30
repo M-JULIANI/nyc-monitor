@@ -46,21 +46,6 @@ const sliderStyles = `
     border: none;
   }
 
-  /* Mobile touch handling improvements */
-  .mobile-map-container * {
-    touch-action: manipulation;
-  }
-  
-  .mobile-map-container .mapboxgl-canvas-container {
-    touch-action: pan-x pan-y;
-  }
-
-  /* Prevent iOS bounce/overscroll on map */
-  .mobile-map-container {
-    overflow: hidden;
-    -webkit-overflow-scrolling: touch;
-  }
-
   /* Mobile and iOS specific styles */
   @media (max-width: 768px) {
     .mobile-map-container {
