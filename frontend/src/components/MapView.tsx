@@ -197,7 +197,6 @@ const MapView: React.FC = () => {
     setShouldAutoFit(true);
   }, [filter]);
 
-        map.touchPitch.enable();
   // Handle viewport changes from the map
   const handleViewportChange = (evt: any) => {
     setViewport({
