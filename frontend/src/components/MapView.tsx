@@ -197,24 +197,7 @@ const MapView: React.FC = () => {
     setShouldAutoFit(true);
   }, [filter]);
 
-  // Configure touch interactions for mobile devices
-  useEffect(() => {
-    if (mapRef.current && isConnected) {
-      const map = mapRef.current.getMap();
-      if (map) {
-        // Enable touch interactions for mobile devices
         map.touchPitch.enable();
-        map.touchZoomRotate.enable();
-        map.dragPan.enable();
-        map.scrollZoom.enable();
-        map.doubleClickZoom.enable();
-
-        // Set cooperative gestures for better mobile UX
-        map.setCooperativeGestures(false); // Allow single-finger pan
-      }
-    }
-  }, [isConnected]);
-
   // Handle viewport changes from the map
   const handleViewportChange = (evt: any) => {
     setViewport({
