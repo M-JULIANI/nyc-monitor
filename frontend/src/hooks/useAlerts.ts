@@ -283,7 +283,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
             a.id === alertId
               ? {
                   ...a,
-                  status: newStatus as const,
+                  status: newStatus,
                   investigationId: result.investigation_id,
                   reportUrl: result.report_url,
                   traceId: result.trace_id || result.investigation_id,
