@@ -403,12 +403,12 @@ deploy-api: check-docker check-gcloud
 		--region $(CLOUD_RUN_REGION) \
 		--allow-unauthenticated \
 		--port 8000 \
-		--memory=1Gi \
-		--cpu=1 \
+		--memory=2Gi \
+		--cpu=2 \
 		--min-instances=1 \
 		--max-instances=10 \
 		--concurrency=80 \
-		--timeout=60 \
+		--timeout=900 \
 		--env-vars-file /tmp/deploy-env-vars.yaml
 	@rm -f /tmp/deploy-env-vars.yaml
 	@echo "Backend API deployed. Service URL:"
