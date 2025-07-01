@@ -365,6 +365,8 @@ deploy-api: check-docker check-gcloud
 	@echo "ENV: production" > /tmp/deploy-env-vars.yaml
 	@echo "GOOGLE_CLIENT_ID: \"$(GOOGLE_CLIENT_ID)\"" >> /tmp/deploy-env-vars.yaml
 	@echo "RAG_CORPUS: \"$(RAG_CORPUS)\"" >> /tmp/deploy-env-vars.yaml
+	@echo "GOOGLE_CLOUD_PROJECT: \"$(GOOGLE_CLOUD_PROJECT)\"" >> /tmp/deploy-env-vars.yaml
+	@echo "GOOGLE_CLOUD_LOCATION: \"$(GOOGLE_CLOUD_LOCATION)\"" >> /tmp/deploy-env-vars.yaml
 	@if [ -n "$(ADMIN_EMAILS)" ]; then \
 		echo "ADMIN_EMAILS: \"$(ADMIN_EMAILS)\"" >> /tmp/deploy-env-vars.yaml; \
 	fi
