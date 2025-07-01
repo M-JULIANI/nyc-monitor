@@ -786,7 +786,7 @@ const MapView: React.FC = () => {
         style={{
           minHeight: "calc(100vh - 120px)", // Account for navbar + tab navigation + safe areas
           maxHeight: "calc(100vh - 120px)",
-          touchAction: "pan-x pan-y", // Enable touch panning for map interaction
+          touchAction: "manipulation", // Enable touch panning and pinch zoom for map interaction
         }}
       >
         <Map
