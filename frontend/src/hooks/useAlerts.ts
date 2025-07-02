@@ -211,7 +211,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
 
         // Check if investigation is already in progress
         if (investigatingAlerts.has(alertId)) {
-          console.log(`Investigation already in progress for alert ${alertId}`);
+          //console.log(`Investigation already in progress for alert ${alertId}`);
           return {
             success: false,
             message: "Investigation already in progress",
@@ -242,7 +242,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
           sources: [alert.source],
         };
 
-        console.log(`Starting investigation for alert ${alertId}:`, investigationRequest);
+        //console.log(`Starting investigation for alert ${alertId}:`, investigationRequest);
 
         const response = await fetch("/api/investigate", {
           method: "POST",
@@ -258,7 +258,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
         }
 
         const result = await response.json();
-        console.log(`Investigation completed for alert ${alertId}:`, result);
+        //console.log(`Investigation completed for alert ${alertId}:`, result);
 
         // Remove from investigating set
         setInvestigatingAlerts((prev) => {
@@ -292,7 +292,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
           ),
         );
 
-        console.log(`✅ Updated alert ${alertId} to ${newStatus} status with reportUrl: ${result.report_url}`);
+        // console.log(`✅ Updated alert ${alertId} to ${newStatus} status with reportUrl: ${result.report_url}`);
 
         return {
           success: true,
@@ -371,7 +371,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
           throw new Error("Authentication required");
         }
 
-        console.log(`🔄 Refetching alert ${alertId}...`);
+        //console.log(`🔄 Refetching alert ${alertId}...`);
 
         const response = await fetch(`/api/alerts/get/${alertId}?_t=${Date.now()}`, {
           headers: {
@@ -409,15 +409,15 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
             existingAlert.investigationId !== normalizedAlert.investigationId;
 
           if (!hasChanges) {
-            console.log(`📋 No changes detected for alert ${alertId}, skipping update`);
+            //   console.log(`📋 No changes detected for alert ${alertId}, skipping update`);
             return prev; // Return same reference to prevent re-renders
           }
 
-          console.log(`📋 Changes detected for alert ${alertId}, updating collection`);
+          //console.log(`📋 Changes detected for alert ${alertId}, updating collection`);
           return prev.map((a) => (a.id === alertId ? normalizedAlert : a));
         });
 
-        console.log(`✅ Successfully refetched and updated alert ${alertId}`);
+        //  console.log(`✅ Successfully refetched and updated alert ${alertId}`);
 
         return {
           success: true,
