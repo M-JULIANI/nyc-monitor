@@ -33,7 +33,7 @@ const MobileProvider: React.FC<MobileProviderProps> = ({ children, isMobile }) =
 
 // Internal component to access alerts for AlertStatsProvider
 const HomeContent = () => {
-  const [activeTab, setActiveTab] = useState("map");
+  const [activeTab, setActiveTab] = useState("dashboard");
 
   const renderActiveTab = () => {
     switch (activeTab) {
@@ -91,8 +91,6 @@ const Home = () => {
       /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
     );
   }, []);
-
-  console.log("🏠 Home component - isMobile:", isMobile);
 
   return (
     <MobileProvider isMobile={isMobile}>
