@@ -86,8 +86,16 @@ const MapView: React.FC = () => {
     alertTitle: "",
   });
 
-  // Track if we should auto-fit to alerts (only on first load or filter changes)
-  const [shouldAutoFit, setShouldAutoFit] = useState(true);
+  // Detect if we're on mobile to disable autofitting (causes touch interaction issues)
+  const isMobile = useMemo(() => {
+    return (
+      window.innerWidth <= 768 ||
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    );
+  }, []);
+
+  // Track if we should auto-fit to alerts (only on first load or filter changes, disabled on mobile)
+  const [shouldAutoFit, setShouldAutoFit] = useState(!isMobile);
 
   // Calculate bounds for all visible alerts
   const calculateAlertBounds = (alerts: Alert[]) => {
@@ -143,9 +151,9 @@ const MapView: React.FC = () => {
     return filtered;
   }, [alerts, filter]);
 
-  // Update map bounds when alerts change, but only if we should auto-fit
+  // Update map bounds when alerts change, but only if we should auto-fit (desktop only)
   useEffect(() => {
-    if (mapRef.current && filteredAlerts.length > 0 && shouldAutoFit) {
+    if (mapRef.current && filteredAlerts.length > 0 && shouldAutoFit && !isMobile) {
       const bounds = calculateAlertBounds(filteredAlerts);
       if (bounds) {
         try {
@@ -175,12 +183,14 @@ const MapView: React.FC = () => {
         }
       }
     }
-  }, [filteredAlerts, shouldAutoFit, setViewport]); // Re-run when filtered alerts change
+  }, [filteredAlerts, shouldAutoFit, isMobile, setViewport]); // Re-run when filtered alerts change
 
-  // Reset auto-fit when filters change
+  // Reset auto-fit when filters change (desktop only)
   useEffect(() => {
-    setShouldAutoFit(true);
-  }, [filter]);
+    if (!isMobile) {
+      setShouldAutoFit(true);
+    }
+  }, [filter, isMobile]);
 
   // Handle viewport changes from the map
   const handleViewportChange = (evt: any) => {
