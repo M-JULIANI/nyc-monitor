@@ -78,11 +78,8 @@ const MapView: React.FC = () => {
   const { user } = useAuth();
   const { isMobile } = useMobile();
 
-  // Separate connection status from interactivity
-  // isConnected: Whether we have network connectivity and alerts have loaded
-  // isMapInteractive: Whether the map itself should accept user interactions (pan, zoom, etc.)
   const isConnected = !isLoading;
-  const isMapInteractive = true; // Map should always be interactive, especially on mobile
+  const isMapInteractive = true;
 
   const { viewport, setViewport, filter, setFilter, viewMode, setViewMode } = useMapState();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
@@ -93,12 +90,6 @@ const MapView: React.FC = () => {
     traceId: "",
     alertTitle: "",
   });
-
-  useEffect(() => {
-    console.log("🖱️ MapView - isMobile:", isMobile);
-    console.log("🖱️ MapView - isConnected:", isConnected);
-    console.log("🖱️ MapView - isMapInteractive:", isMapInteractive);
-  }, [isMobile, isConnected, isMapInteractive]);
 
   // Track if we should auto-fit to alerts (only on first load or filter changes, disabled on mobile)
   const [shouldAutoFit, setShouldAutoFit] = useState(!isMobile);
