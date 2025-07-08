@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 interface TabNavigationProps {
   activeTab: string;
@@ -7,9 +7,9 @@ interface TabNavigationProps {
 
 const TabNavigation: React.FC<TabNavigationProps> = ({ activeTab, onTabChange }) => {
   const tabs = [
-    { id: 'map', label: 'Map', icon: '' },
-    { id: 'dashboard', label: 'Dashboard', icon: '' },
-    { id: 'insights', label: 'Insights', icon: '' }
+    { id: "dashboard", label: "Dashboard", icon: "" },
+    { id: "map", label: "Map", icon: "" },
+    { id: "insights", label: "Insights", icon: "" },
   ];
 
   return (
@@ -19,11 +19,7 @@ const TabNavigation: React.FC<TabNavigationProps> = ({ activeTab, onTabChange })
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors duration-200
-            ${
-              activeTab === tab.id
-                ? 'text-zinc-100 border-b-2 border-primary'
-                : 'text-zinc-400 hover:text-zinc-100'
-            }
+            ${activeTab === tab.id ? "text-zinc-100 border-b-2 border-primary" : "text-zinc-400 hover:text-zinc-100"}
             bg-zinc-900 rounded-t-md
           `}
           type="button"
@@ -36,4 +32,4 @@ const TabNavigation: React.FC<TabNavigationProps> = ({ activeTab, onTabChange })
   );
 };
 
-export default TabNavigation; 
+export default TabNavigation;
