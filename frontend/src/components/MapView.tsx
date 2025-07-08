@@ -4,6 +4,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { Alert } from "../types";
 import { useAlerts } from "../contexts/AlertsContext";
 import { useMapState } from "../contexts/MapStateContext";
+import { useMobile } from "../pages/Home";
 import Spinner from "./Spinner";
 import AgentTraceModal from "./AgentTraceModal";
 import { useAuth } from "@/contexts/AuthContext";
@@ -75,7 +76,11 @@ const MapView: React.FC = () => {
   //const markerClickedRef = useRef(false);
   const { alerts, error, isLoading, generateReport, refetchAlert } = useAlerts();
   const { user } = useAuth();
+  const { isMobile } = useMobile();
+
   const isConnected = !isLoading;
+  const isMapInteractive = true;
+
   const { viewport, setViewport, filter, setFilter, viewMode, setViewMode } = useMapState();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [selectedAlertLoading, setSelectedAlertLoading] = useState(false);
@@ -85,14 +90,6 @@ const MapView: React.FC = () => {
     traceId: "",
     alertTitle: "",
   });
-
-  // Detect if we're on mobile to disable autofitting (causes touch interaction issues)
-  const isMobile = useMemo(() => {
-    return (
-      window.innerWidth <= 768 ||
-      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-    );
-  }, []);
 
   // Track if we should auto-fit to alerts (only on first load or filter changes, disabled on mobile)
   const [shouldAutoFit, setShouldAutoFit] = useState(!isMobile);
@@ -318,10 +315,10 @@ const MapView: React.FC = () => {
   const handleMarkerClick = (alert: Alert) => {
     console.log("🖱️ MARKER CLICKED! Alert ID:", alert.id);
     console.log("🖱️ isConnected:", isConnected);
-    // console.log('🖱️ Alert object:', alert);
+    console.log("🖱️ isMapInteractive:", isMapInteractive);
 
-    if (!isConnected) {
-      console.log("🖱️ Not connected, returning early");
+    if (!isMapInteractive) {
+      console.log("🖱️ Map not interactive, returning early");
       return;
     }
 
@@ -494,7 +491,7 @@ const MapView: React.FC = () => {
   };
 
   const isInvestigationDisabled = (alert: Alert) => {
-    // Button should be disabled when investigating or when not connected
+    // Button should be disabled when investigating or when not connected to network
     return !isConnected || alert.status === "investigating";
   };
 
@@ -528,9 +525,9 @@ const MapView: React.FC = () => {
       <button
         onClick={() => setIsFilterCollapsed(!isFilterCollapsed)}
         className={`absolute top-4 left-4 z-20 bg-zinc-800/95 backdrop-blur-sm p-3 rounded-lg text-white hover:bg-zinc-700 transition-all duration-300 ease-in-out touch-manipulation ${
-          !isConnected ? "opacity-50 pointer-events-none" : ""
+          !isMapInteractive ? "opacity-50 pointer-events-none" : ""
         }`}
-        disabled={!isConnected}
+        disabled={!isMapInteractive}
         style={{
           minHeight: "48px", // Minimum touch target size for mobile
           minWidth: "48px",
@@ -547,7 +544,7 @@ const MapView: React.FC = () => {
       {!isFilterCollapsed && (
         <div
           className={`absolute top-16 left-4 z-10 bg-zinc-800/95 backdrop-blur-sm p-4 rounded-lg text-white min-w-[200px] w-[calc(100vw-32px)] sm:w-auto sm:max-w-[280px] transition-all duration-300 ease-in-out ${
-            !isConnected ? "opacity-50 pointer-events-none" : ""
+            !isMapInteractive ? "opacity-50 pointer-events-none" : ""
           }`}
         >
           <h3 className="text-xs font-semibold mb-2 text-zinc-300">Filters</h3>
@@ -558,7 +555,7 @@ const MapView: React.FC = () => {
               value={filter.priority}
               onChange={(e) => setFilter((prev) => ({ ...prev, priority: e.target.value }))}
               className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-xs"
-              disabled={!isConnected}
+              disabled={!isMapInteractive}
             >
               <option value="all">All</option>
               <option value="critical">Critical</option>
@@ -574,7 +571,7 @@ const MapView: React.FC = () => {
               value={filter.source}
               onChange={(e) => setFilter((prev) => ({ ...prev, source: e.target.value }))}
               className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-xs"
-              disabled={!isConnected}
+              disabled={!isMapInteractive}
             >
               <option value="all">All Sources</option>
               <option value="reddit">Reddit</option>
@@ -589,7 +586,7 @@ const MapView: React.FC = () => {
               value={filter.status}
               onChange={(e) => setFilter((prev) => ({ ...prev, status: e.target.value }))}
               className="w-full p-1 bg-zinc-700 text-white border border-zinc-600 rounded text-xs"
-              disabled={!isConnected}
+              disabled={!isMapInteractive}
             >
               <option value="all">All Status</option>
               <option value="active">Active</option>
@@ -610,7 +607,7 @@ const MapView: React.FC = () => {
                   checked={viewMode === "category"}
                   onChange={(e) => setViewMode(e.target.value as "priority" | "source" | "category")}
                   className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
-                  disabled={!isConnected}
+                  disabled={!isMapInteractive}
                 />
                 <span>By Category</span>
                 <span className="text-zinc-500 hidden sm:inline">(category icons)</span>
@@ -623,7 +620,7 @@ const MapView: React.FC = () => {
                   checked={viewMode === "source"}
                   onChange={(e) => setViewMode(e.target.value as "priority" | "source" | "category")}
                   className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
-                  disabled={!isConnected}
+                  disabled={!isMapInteractive}
                 />
                 <span>By Source</span>
                 <span className="text-zinc-500 hidden sm:inline">(source icons)</span>
@@ -636,7 +633,7 @@ const MapView: React.FC = () => {
                   checked={viewMode === "priority"}
                   onChange={(e) => setViewMode(e.target.value as "priority" | "source" | "category")}
                   className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
-                  disabled={!isConnected}
+                  disabled={!isMapInteractive}
                 />
                 <span>By Priority</span>
                 <span className="text-zinc-500 hidden sm:inline">(colored circles)</span>
@@ -724,7 +721,7 @@ const MapView: React.FC = () => {
       {/* Alert Count - Mobile responsive */}
       <div
         className={`absolute top-4 right-4 z-10 bg-zinc-800/95 px-3 sm:px-4 py-2 rounded-lg text-white text-xs sm:text-sm ${
-          !isConnected ? "opacity-50" : ""
+          !isMapInteractive ? "opacity-50" : ""
         }`}
       >
         <span className="hidden sm:inline">{filteredAlerts.length} alerts visible</span>
@@ -735,7 +732,7 @@ const MapView: React.FC = () => {
       {/* Time Range Slider - Responsive with better mobile positioning */}
       <div
         className={`absolute bottom-4 sm:bottom-6 left-1/2 transform -translate-x-1/2 z-10 bg-zinc-800/95 backdrop-blur-sm px-3 sm:px-6 py-2 sm:py-4 rounded-lg text-white w-[95%] sm:w-auto sm:min-w-[400px] max-w-[500px] mobile-timeline-slider ${
-          !isConnected ? "opacity-50 pointer-events-none" : ""
+          !isMapInteractive ? "opacity-50 pointer-events-none" : ""
         }`}
       >
         <div className="text-center mb-1 sm:mb-3">
@@ -776,7 +773,7 @@ const MapView: React.FC = () => {
             value={169 - filter.timeRangeHours}
             onChange={(e) => setFilter((prev) => ({ ...prev, timeRangeHours: 169 - parseInt(e.target.value) }))}
             className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
-            disabled={!isConnected}
+            disabled={!isMapInteractive}
           />
 
           {/* Current value indicator - responsive text */}
@@ -806,12 +803,12 @@ const MapView: React.FC = () => {
           style={{ width: "100%", height: "100%" }}
           mapStyle="mapbox://styles/mapbox/dark-v11"
           interactiveLayerIds={viewMode === "priority" ? ["alert-points"] : []}
-          interactive={isConnected}
-          dragPan={isConnected}
-          dragRotate={isConnected}
-          scrollZoom={isConnected}
-          keyboard={isConnected}
-          doubleClickZoom={isConnected}
+          interactive={isMapInteractive}
+          dragPan={isMapInteractive}
+          dragRotate={isMapInteractive}
+          scrollZoom={isMapInteractive}
+          keyboard={isMapInteractive}
+          doubleClickZoom={isMapInteractive}
           onMove={handleViewportChange}
         >
           {/* Priority Mode - Circle Layer */}
