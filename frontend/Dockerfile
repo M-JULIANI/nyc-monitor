@@ -11,8 +11,8 @@ COPY frontend/package*.json ./
 COPY frontend/.npmrc ./
 COPY pnpm-workspace.yaml ../
 
-# Install dependencies
-RUN pnpm install
+# Install dependencies (including devDependencies for build)
+RUN pnpm install --include=dev
 
 # Copy source code
 COPY frontend/ ./
