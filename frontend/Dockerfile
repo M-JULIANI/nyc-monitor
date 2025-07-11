@@ -1,19 +1,24 @@
 # Build stage
-FROM node:20-slim AS builder
+FROM node:20-alpine AS builder
+
+# Install pnpm
+RUN npm install -g pnpm
 
 WORKDIR /app
 
 # Copy package files
 COPY frontend/package*.json ./
+COPY frontend/.npmrc ./
+COPY pnpm-workspace.yaml ../
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (including devDependencies for build)
+RUN pnpm install --include=dev
 
 # Copy source code
 COPY frontend/ ./
 
 # Build the application
-RUN npm run build
+RUN pnpm run build
 
 # Production stage
 FROM nginx:alpine

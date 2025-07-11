@@ -167,12 +167,13 @@ install-api:
 	fi
 
 install-web:
-	@echo "Installing frontend dependencies..."
+	@echo "Installing frontend dependencies with pnpm..."
+	@if ! command -v pnpm >/dev/null 2>&1; then \
+		echo "Installing pnpm..."; \
+		npm install -g pnpm; \
+	fi
 	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && \
-		npm install --no-audit --no-fund && \
-		npm update --no-audit --no-fund && \
-		npm install --save-dev vitest; \
+		cd frontend && pnpm install; \
 	else \
 		echo "Warning: frontend/package.json not found"; \
 	fi
@@ -219,13 +220,13 @@ dev-api:
 
 dev-web:
 	@echo "Starting frontend development server..."
-	cd frontend && npm run dev -- --host 0.0.0.0
+	cd frontend && pnpm run dev -- --host 0.0.0.0
 
 # Test against deployed backend
 dev-web-deployed:
 	@echo "Starting frontend with deployed backend..."
 	@echo "Backend URL: https://atlas-backend-blz2r3yjgq-uc.a.run.app"
-	@cd frontend && REACT_APP_USE_DEPLOYED_BACKEND=true npm run dev -- --host 0.0.0.0
+	@cd frontend && REACT_APP_USE_DEPLOYED_BACKEND=true pnpm run dev -- --host 0.0.0.0
 
 # Get deployed backend URL
 get-api-url: check-gcloud
@@ -255,7 +256,7 @@ test-api:
 test-web:
 	@echo "Running frontend tests..."
 	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && npm test; \
+		cd frontend && pnpm test; \
 	fi
 
 # Linting and Formatting
@@ -265,7 +266,7 @@ lint:
 		cd backend && poetry run ruff check .; \
 	fi
 	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && npm run lint; \
+		cd frontend && pnpm run lint; \
 	fi
 
 format:
@@ -274,7 +275,7 @@ format:
 		cd backend && poetry run black . && poetry run ruff format .; \
 	fi
 	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && npm run format; \
+		cd frontend && pnpm run format; \
 	fi
 
 # Check Docker permissions
@@ -695,6 +696,7 @@ help:
 	@echo "  make lint             - Run linters"
 	@echo "  make format           - Format code"
 	@echo "  make clean            - Clean up development environment"
+	@echo "  make compare-package-managers - Compare npm vs pnpm performance"
 	@echo "Devcontainer Commands:"
 	@echo "  make devcontainer-setup  - Set up devcontainer environment"
 	@echo "  make devcontainer-clean  - Clean devcontainer environment"

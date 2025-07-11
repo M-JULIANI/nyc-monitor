@@ -1,4 +1,4 @@
-# RAG Backend Test Suite
+# Backend Test Suite
 
 This directory contains comprehensive unit tests for the RAG backend service, designed to provide protection against regressions and ensure system reliability.
 
