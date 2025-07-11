@@ -34,6 +34,9 @@
         "source=${localEnv:HOME}/.config/gcloud,target=/home/vscode/.config/gcloud,type=bind,consistency=cached",
         "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
     ],
-    "postCreateCommand": "sudo groupadd -f docker && sudo usermod -aG docker vscode && sudo chown root:docker /var/run/docker.sock && sudo chmod 666 /var/run/docker.sock && newgrp docker && curl -sSL https://install.python-poetry.org | python3 - && export PATH=\"/home/vscode/.local/bin:$PATH\" && curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs && cd backend && poetry install && cd ../frontend && npm install && cd ..",
-    "updateContentCommand": "sudo groupadd -f docker && sudo usermod -aG docker vscode && sudo chown root:docker /var/run/docker.sock && sudo chmod 666 /var/run/docker.sock && newgrp docker && curl -sSL https://install.python-poetry.org | python3 - && export PATH=\"/home/vscode/.local/bin:$PATH\" && curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs && cd backend && poetry install && cd ../frontend && npm install && cd .."
+    "postCreateCommand": "sudo groupadd -f docker && sudo usermod -aG docker vscode && sudo chown root:docker /var/run/docker.sock && sudo chmod 666 /var/run/docker.sock && newgrp docker && curl -sSL https://install.python-poetry.org | python3 - && cd backend && poetry install && cd ../frontend && pnpm install && cd ..",
+    "updateContentCommand": "sudo groupadd -f docker && sudo usermod -aG docker vscode && sudo chown root:docker /var/run/docker.sock && sudo chmod 666 /var/run/docker.sock && newgrp docker && curl -sSL https://install.python-poetry.org | python3 - && cd backend && poetry install && cd ../frontend && pnpm install && cd ..",
+    "containerEnv": {
+        "PATH": "/home/vscode/.local/bin:/usr/lib/node_modules/pnpm/bin:${PATH}"
+    }
 }
