@@ -13,7 +13,7 @@ from dataclasses import dataclass, asdict
 from rag.investigation.state_manager import state_manager
 import logging
 from rag.investigation_service_simple import investigate_alert_simple as investigate_alert
-from rag.investigation.progress_tracker import progress_tracker
+from rag.investigation.deprecated_progress_tracker import progress_tracker
 
 # Configure logging to capture everything
 logging.basicConfig(level=logging.DEBUG,

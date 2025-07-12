@@ -16,7 +16,7 @@ from google.cloud import firestore
 
 from ..investigation_service_simple import investigate_alert_simple
 from ..investigation.state_manager import AlertData, state_manager
-from ..investigation.progress_tracker import progress_tracker
+from ..investigation.deprecated_progress_tracker import progress_tracker
 from ..investigation.tracing import get_distributed_tracer
 from ..auth import verify_google_token
 from ..exceptions import InvestigationError, AlertError, DatabaseError
