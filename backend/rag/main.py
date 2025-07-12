@@ -1,18 +1,23 @@
 from .auth import verify_google_token
 from .endpoints import chat_router, investigation_router, auth_router, admin_router, alerts_router
 from .config import initialize_config, get_config
+from .exceptions import (
+    APIError,
+    api_error_handler,
+    validation_error_handler,
+    generic_exception_handler
+)
+from .middleware import configure_middleware, get_middleware_health
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import RedirectResponse
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+from fastapi.exceptions import RequestValidationError
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 import os
 from dotenv import load_dotenv
 import logging
+from datetime import datetime
 
 # Only load .env file in development (not in production containers)
 # Look for .env in the parent directory (project root)
@@ -58,24 +63,13 @@ app = FastAPI(
     root_path="/api"
 )
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://nyc-monitor.app",
-        "https://atlas-frontend-290750569862.us-central1.run.app",
-        "http://localhost:3000",
-        "http://localhost:5173",
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
-)
+# Configure all middleware in one place
+configure_middleware(app)
 
-# Rate Limiting
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Centralized Exception Handlers
+app.add_exception_handler(APIError, api_error_handler)
+app.add_exception_handler(RequestValidationError, validation_error_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -95,7 +89,15 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "rag-backend"}
+    """Enhanced health check with middleware status"""
+    base_health = {"status": "healthy", "service": "rag-backend"}
+    middleware_health = get_middleware_health()
+
+    return {
+        **base_health,
+        "middleware": middleware_health,
+        "timestamp": middleware_health["timestamp"]
+    }
 
 
 @app.get("/auth-test")
@@ -106,9 +108,3 @@ async def auth_test(user=Depends(verify_google_token)):
         "user": user,
         "message": "Authentication is working correctly!"
     }
-
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    from fastapi.responses import JSONResponse
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})

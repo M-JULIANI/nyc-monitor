@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from google.cloud import firestore
 from ..auth import verify_google_token
 from ..config import get_config
+from ..exceptions import AuthenticationError, DatabaseError
 import logging
 from typing import Dict
 
@@ -24,63 +25,55 @@ async def get_or_create_user(user_info: Dict) -> Dict:
     Get existing user or create new one if doesn't exist.
     Returns user document with role.
     """
-    try:
-        db = get_db()
-        # Check if user exists
-        user_ref = db.collection(
-            users_collection).document(user_info['user_id'])
-        user_doc = user_ref.get()
+    # Input validation
+    if not user_info.get('user_id'):
+        raise AuthenticationError("User ID is required")
 
-        if user_doc.exists:
-            # Return existing user
-            return user_doc.to_dict()
+    if not user_info.get('email'):
+        raise AuthenticationError("Email is required")
 
-        # Create new user with default role
-        new_user = {
-            'id': user_info['user_id'],
-            'email': user_info['email'],
-            'name': user_info.get('name', ''),
-            'role': 'viewer',  # Default role
-            'created_at': firestore.SERVER_TIMESTAMP,
-            'updated_at': firestore.SERVER_TIMESTAMP
-        }
+    db = get_db()
+    # Check if user exists
+    user_ref = db.collection(
+        users_collection).document(user_info['user_id'])
+    user_doc = user_ref.get()
 
-        # Store in Firestore
-        user_ref.set(new_user)
-        logger.info(f"Created new user: {user_info['email']}")
+    if user_doc.exists:
+        # Return existing user
+        return user_doc.to_dict()
 
-        return new_user
+    # Create new user with default role
+    new_user = {
+        'id': user_info['user_id'],
+        'email': user_info['email'],
+        'name': user_info.get('name', ''),
+        'role': 'viewer',  # Default role
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP
+    }
 
-    except Exception as e:
-        logger.error(f"Error in get_or_create_user: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to get or create user"
-        )
+    # Store in Firestore
+    user_ref.set(new_user)
+    logger.info(f"Created new user: {user_info['email']}")
+
+    return new_user
 
 
 async def require_admin(current_user: Dict = Depends(verify_google_token)) -> Dict:
     """Dependency to ensure current user is admin"""
     user_doc = await get_or_create_user(current_user)
     if user_doc['role'] != 'admin':
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required"
-        )
+        raise AuthenticationError("Admin access required")
     return user_doc
 
 
 @admin_router.get("/users")
 async def get_all_users(admin_user: Dict = Depends(require_admin)):
     """Return all users (admin only)"""
-    try:
-        db = get_db()
-        users_ref = db.collection(users_collection)
-        users = [doc.to_dict() for doc in users_ref.stream()]
-        return users
-    except Exception as e:
-        logger.error(f"Error fetching users: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch users")
+    db = get_db()
+    users_ref = db.collection(users_collection)
+    users = [doc.to_dict() for doc in users_ref.stream()]
+    return users
 
 
 @admin_router.put("/users/{user_id}/role")
@@ -90,49 +83,50 @@ async def update_user_role(
     admin_user: Dict = Depends(require_admin)
 ):
     """Update user role (admin only)"""
-    try:
-        db = get_db()
-        # Update role
-        user_ref = db.collection(users_collection).document(user_id)
-        user_ref.update({
-            'role': role_update['role'],
-            'updated_at': firestore.SERVER_TIMESTAMP
-        })
+    # Input validation
+    if not user_id or not user_id.strip():
+        raise AuthenticationError("User ID is required")
 
-        # Get updated user
-        updated_user = user_ref.get().to_dict()
-        return updated_user
+    if not role_update.get('role'):
+        raise AuthenticationError("Role is required")
 
-    except Exception as e:
-        logger.error(f"Error updating user role: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to update user role"
-        )
+    # Validate role value
+    valid_roles = ['admin', 'editor', 'viewer']
+    if role_update['role'] not in valid_roles:
+        raise AuthenticationError(
+            f"Invalid role. Must be one of: {', '.join(valid_roles)}")
+
+    db = get_db()
+    # Update role
+    user_ref = db.collection(users_collection).document(user_id)
+    user_ref.update({
+        'role': role_update['role'],
+        'updated_at': firestore.SERVER_TIMESTAMP
+    })
+
+    # Get updated user
+    updated_user = user_ref.get().to_dict()
+    return updated_user
 
 
 @admin_router.get("/stats")
 async def get_admin_stats(admin_user: Dict = Depends(require_admin)):
     """Return system stats (admin only)"""
-    try:
-        db = get_db()
-        users_ref = db.collection(users_collection)
-        users = list(users_ref.stream())
+    db = get_db()
+    users_ref = db.collection(users_collection)
+    users = list(users_ref.stream())
 
-        # Basic stats
-        total_users = len(users)
-        role_counts = {}
-        for user_doc in users:
-            user_data = user_doc.to_dict()
-            role = user_data.get('role', 'viewer')
-            role_counts[role] = role_counts.get(role, 0) + 1
+    # Basic stats
+    total_users = len(users)
+    role_counts = {}
+    for user_doc in users:
+        user_data = user_doc.to_dict()
+        role = user_data.get('role', 'viewer')
+        role_counts[role] = role_counts.get(role, 0) + 1
 
-        return {
-            "total_users": total_users,
-            "users_by_role": role_counts,
-            "total_alerts": 0,  # Placeholder - you can add real alert stats later
-            "system_status": "healthy"
-        }
-    except Exception as e:
-        logger.error(f"Error fetching admin stats: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to fetch stats")
+    return {
+        "total_users": total_users,
+        "users_by_role": role_counts,
+        "total_alerts": 0,  # Placeholder - you can add real alert stats later
+        "system_status": "healthy"
+    }

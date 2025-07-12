@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 from google.cloud import firestore
 from ..auth import verify_google_token
 from ..config import get_config
+from ..exceptions import AuthenticationError, DatabaseError
 import logging
 import os
-from typing import Dict, Optional
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,7 @@ users_collection = 'users'
 
 def get_db():
     """Get Firestore client instance"""
+    # Any connection errors will be caught by global handlers
     return firestore.Client(project=get_config().GOOGLE_CLOUD_PROJECT)
 
 
@@ -47,57 +49,55 @@ async def get_or_create_user(user_info: Dict) -> Dict:
     Get existing user or create new one if doesn't exist.
     Returns user document with role.
     """
-    try:
-        db = get_db()
-        # Check if user exists
-        user_ref = db.collection(
-            users_collection).document(user_info['user_id'])
-        user_doc = user_ref.get()
+    # Validate required user info
+    if not user_info.get('user_id'):
+        raise AuthenticationError("User ID is required")
 
-        if user_doc.exists:
-            # Return existing user
-            return user_doc.to_dict()
+    if not user_info.get('email'):
+        raise AuthenticationError("Email is required")
 
-        # Determine role based on email whitelist
-        default_role = get_default_role(user_info['email'])
+    # Get database connection - any errors will be caught by global handlers
+    db = get_db()
 
-        # Create new user with determined role
-        new_user = {
-            'id': user_info['user_id'],
-            'email': user_info['email'],
-            'name': user_info.get('name', ''),
-            'role': default_role,
-            'created_at': firestore.SERVER_TIMESTAMP,
-            'updated_at': firestore.SERVER_TIMESTAMP
-        }
+    # Check if user exists
+    user_ref = db.collection(users_collection).document(user_info['user_id'])
+    user_doc = user_ref.get()
 
-        # Store in Firestore
-        user_ref.set(new_user)
-        logger.info(
-            f"Created new user: {user_info['email']} with role: {default_role}")
+    if user_doc.exists:
+        # Return existing user
+        return user_doc.to_dict()
 
-        return new_user
+    # Determine role based on email whitelist
+    default_role = get_default_role(user_info['email'])
 
-    except Exception as e:
-        logger.error(f"Error in get_or_create_user: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to get or create user"
-        )
+    # Create new user with determined role
+    new_user = {
+        'id': user_info['user_id'],
+        'email': user_info['email'],
+        'name': user_info.get('name', ''),
+        'role': default_role,
+        'created_at': firestore.SERVER_TIMESTAMP,
+        'updated_at': firestore.SERVER_TIMESTAMP
+    }
+
+    # Store in Firestore - any database errors will be caught by global handlers
+    user_ref.set(new_user)
+
+    # Log successful user creation
+    logger.info(
+        f"Created new user: {user_info['email']} with role: {default_role}")
+
+    return new_user
 
 
 @auth_router.get("/me")
 async def get_current_user(user_info: Dict = Depends(verify_google_token)):
     """Get current user info, creating user if doesn't exist"""
-    try:
-        user = await get_or_create_user(user_info)
-        return {
-            "user": user,
-            "token": "valid"  # Token is already verified by verify_google_token
-        }
-    except Exception as e:
-        logger.error(f"Error in /me endpoint: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to get user info"
-        )
+
+    # Get or create user - any errors will be caught by global handlers
+    user = await get_or_create_user(user_info)
+
+    return {
+        "user": user,
+        "token": "valid"  # Token is already verified by verify_google_token
+    }

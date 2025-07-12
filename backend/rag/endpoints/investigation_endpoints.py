@@ -19,6 +19,7 @@ from ..investigation.state_manager import AlertData, state_manager
 from ..investigation.progress_tracker import progress_tracker
 from ..investigation.tracing import get_distributed_tracer
 from ..auth import verify_google_token
+from ..exceptions import InvestigationError, AlertError, DatabaseError
 
 logger = logging.getLogger(__name__)
 
@@ -61,254 +62,257 @@ async def start_investigation(
     Start a new investigation for an alert.
     Supports both simple (direct model) and complex (ADK) approaches.
     """
-    try:
-        logger.info(f"Investigation endpoint called by user: {user}")
-        logger.info(
-            f"Starting investigation for alert {alert_request.alert_id}")
-        logger.info(f"Alert details: {alert_request}")
+    # Input validation
+    if not alert_request.alert_id or not alert_request.alert_id.strip():
+        raise InvestigationError("Alert ID is required")
 
-        # Create AlertData object
-        alert_data = AlertData(
-            alert_id=alert_request.alert_id,
-            severity=alert_request.severity,
-            event_type=alert_request.event_type,
-            location=alert_request.location,
-            summary=alert_request.summary,
-            timestamp=alert_request.timestamp,
-            sources=alert_request.sources
+    if not alert_request.summary or not alert_request.summary.strip():
+        raise InvestigationError("Alert summary is required")
+
+    if alert_request.severity < 1 or alert_request.severity > 10:
+        raise InvestigationError("Alert severity must be between 1 and 10")
+
+    logger.info(
+        f"Starting investigation for alert {alert_request.alert_id}")
+    logger.info(f"Alert details: {alert_request}")
+
+    # Create AlertData object
+    alert_data = AlertData(
+        alert_id=alert_request.alert_id,
+        severity=alert_request.severity,
+        event_type=alert_request.event_type,
+        location=alert_request.location,
+        summary=alert_request.summary,
+        timestamp=alert_request.timestamp,
+        sources=alert_request.sources
+    )
+
+    logger.info(f"AlertData object created: {alert_data}")
+
+    # Validate and enhance alert data to prevent "Unknown" issues
+    validated_alert_data = _validate_and_enhance_alert_data(alert_data)
+    logger.info(
+        f"Validated AlertData: location='{validated_alert_data.location}', event_type='{validated_alert_data.event_type}'")
+
+    # Update alert status to investigating in Firestore
+    logger.info(
+        f"🔄 Updating alert {alert_request.alert_id} status to investigating in Firestore")
+    try:
+        success = update_alert_status_to_investigating(
+            alert_request.alert_id)
+        if success:
+            logger.info(
+                f"✅ Successfully updated alert {alert_request.alert_id} to investigating")
+        else:
+            logger.error(
+                f"❌ Failed to update alert {alert_request.alert_id} to investigating")
+    except Exception as e:
+        logger.warning(
+            f"⚠️ Could not update alert status to investigating: {e}")
+
+    # Choose investigation approach based on configuration
+    logger.info("Using simple direct model investigation approach")
+    try:
+        investigation_result, investigation_id = await investigate_alert_simple(validated_alert_data)
+    except Exception as simple_error:
+        logger.error(
+            f"Simple investigation failed: {simple_error}", exc_info=True)
+        raise InvestigationError(
+            f"Investigation failed: {simple_error}",
+            investigation_id=alert_request.alert_id
         )
 
-        logger.info(f"AlertData object created: {alert_data}")
+    logger.info(
+        f"Investigation completed. Result length: {len(investigation_result) if investigation_result else 0}")
+    logger.info(f"Investigation ID: {investigation_id}")
 
-        # Validate and enhance alert data to prevent "Unknown" issues
-        validated_alert_data = _validate_and_enhance_alert_data(alert_data)
-        logger.info(
-            f"Validated AlertData: location='{validated_alert_data.location}', event_type='{validated_alert_data.event_type}'")
+    # Get the investigation state using the returned investigation_id
+    if investigation_id:
+        investigation_state = state_manager.get_investigation(
+            investigation_id)
+        if investigation_state:
+            logger.info(
+                f"Found investigation state: {investigation_state.investigation_id}")
 
-        # Update alert status to investigating in Firestore
-        logger.info(
-            f"🔄 Updating alert {alert_request.alert_id} status to investigating in Firestore")
-        try:
-            success = update_alert_status_to_investigating(
-                alert_request.alert_id)
-            if success:
+            # Extract the presentation URL from the artifacts if available
+            report_url = None
+            trace_id = None
+
+            logger.info(
+                f"🔍 Looking for presentation URL in {len(investigation_state.artifacts)} artifacts")
+
+            # Look for presentation URL in the agent response or artifacts
+            for i, artifact in enumerate(investigation_state.artifacts):
                 logger.info(
-                    f"✅ Successfully updated alert {alert_request.alert_id} to investigating")
-            else:
-                logger.error(
-                    f"❌ Failed to update alert {alert_request.alert_id} to investigating")
-        except Exception as e:
-            logger.warning(
-                f"⚠️ Could not update alert status to investigating: {e}")
+                    f"📄 Artifact {i}: type={artifact.get('type')}, filename={artifact.get('filename')}, url={artifact.get('url')}, public_url={artifact.get('public_url')}")
 
-        # Choose investigation approach based on configuration
-        logger.info("Using simple direct model investigation approach")
-        try:
-            investigation_result, investigation_id = await investigate_alert_simple(validated_alert_data)
-        except Exception as simple_error:
-            logger.error(
-                f"Simple investigation failed: {simple_error}", exc_info=True)
-            raise
+                # Check for presentation-type artifacts or URLs containing Google Slides
+                if (artifact.get('type') == 'presentation' or
+                    'presentation' in artifact.get('filename', '').lower() or
+                    'slides' in artifact.get('filename', '').lower() or
+                    'docs.google.com/presentation' in str(artifact.get('url', '')) or
+                        'docs.google.com/presentation' in str(artifact.get('public_url', ''))):
 
-        logger.info(
-            f"Investigation completed. Result length: {len(investigation_result) if investigation_result else 0}")
-        logger.info(f"Investigation ID: {investigation_id}")
-
-        # Get the investigation state using the returned investigation_id
-        if investigation_id:
-            investigation_state = state_manager.get_investigation(
-                investigation_id)
-            if investigation_state:
-                logger.info(
-                    f"Found investigation state: {investigation_state.investigation_id}")
-
-                # Extract the presentation URL from the artifacts if available
-                report_url = None
-                trace_id = None
-
-                logger.info(
-                    f"🔍 Looking for presentation URL in {len(investigation_state.artifacts)} artifacts")
-
-                # Look for presentation URL in the agent response or artifacts
-                for i, artifact in enumerate(investigation_state.artifacts):
+                    report_url = artifact.get(
+                        'url') or artifact.get('public_url')
                     logger.info(
-                        f"📄 Artifact {i}: type={artifact.get('type')}, filename={artifact.get('filename')}, url={artifact.get('url')}, public_url={artifact.get('public_url')}")
+                        f"✅ Found presentation URL in artifact {i}: {report_url}")
+                    break
 
-                    # Check for presentation-type artifacts or URLs containing Google Slides
-                    if (artifact.get('type') == 'presentation' or
-                        'presentation' in artifact.get('filename', '').lower() or
-                        'slides' in artifact.get('filename', '').lower() or
-                        'docs.google.com/presentation' in str(artifact.get('url', '')) or
-                            'docs.google.com/presentation' in str(artifact.get('public_url', ''))):
+            # Check if there are any function results in the investigation state
+            if not report_url and hasattr(investigation_state, 'function_results'):
+                logger.info(
+                    "🔍 Checking function results for presentation URL...")
+                for func_name, func_result in investigation_state.function_results.items():
+                    if 'create_slides_presentation' in func_name:
+                        if isinstance(func_result, dict) and func_result.get('url'):
+                            report_url = func_result.get('url')
+                            logger.info(
+                                f"✅ Found presentation URL in function result: {report_url}")
+                            break
 
-                        report_url = artifact.get(
-                            'url') or artifact.get('public_url')
+            # If no presentation URL found in artifacts, check if it's mentioned in the investigation result
+            if not report_url and investigation_result:
+                logger.info(
+                    f"🔍 No presentation URL in artifacts, searching investigation result text ({len(investigation_result)} characters)")
+                import re
+
+                # Enhanced Google Slides URL patterns - more comprehensive matching
+                slides_patterns = [
+                    # Standard sharing URL with edit permissions
+                    r'https://docs\.google\.com/presentation/d/([a-zA-Z0-9_-]+)/edit\?usp=sharing',
+                    # Edit URL without sharing parameter
+                    r'https://docs\.google\.com/presentation/d/([a-zA-Z0-9_-]+)/edit',
+                    # Basic presentation URL
+                    r'https://docs\.google\.com/presentation/d/([a-zA-Z0-9_-]+)',
+                    # More flexible pattern for URL variations
+                    r'docs\.google\.com/presentation/d/([a-zA-Z0-9_-]+)(?:/[^\\s]*)?'
+                ]
+
+                for pattern in slides_patterns:
+                    match = re.search(pattern, investigation_result)
+                    if match:
+                        # Reconstruct the full sharing URL
+                        presentation_id = match.group(1)
+                        report_url = f"https://docs.google.com/presentation/d/{presentation_id}/edit?usp=sharing"
                         logger.info(
-                            f"✅ Found presentation URL in artifact {i}: {report_url}")
+                            f"✅ Found presentation URL in agent response with pattern '{pattern}': {report_url}")
                         break
 
-                # Check if there are any function results in the investigation state
-                if not report_url and hasattr(investigation_state, 'function_results'):
-                    logger.info(
-                        "🔍 Checking function results for presentation URL...")
-                    for func_name, func_result in investigation_state.function_results.items():
-                        if 'create_slides_presentation' in func_name:
-                            if isinstance(func_result, dict) and func_result.get('url'):
-                                report_url = func_result.get('url')
-                                logger.info(
-                                    f"✅ Found presentation URL in function result: {report_url}")
-                                break
-
-                # If no presentation URL found in artifacts, check if it's mentioned in the investigation result
-                if not report_url and investigation_result:
-                    logger.info(
-                        f"🔍 No presentation URL in artifacts, searching investigation result text ({len(investigation_result)} characters)")
-                    import re
-
-                    # Enhanced Google Slides URL patterns - more comprehensive matching
-                    slides_patterns = [
-                        # Standard sharing URL with edit permissions
-                        r'https://docs\.google\.com/presentation/d/([a-zA-Z0-9_-]+)/edit\?usp=sharing',
-                        # Edit URL without sharing parameter
-                        r'https://docs\.google\.com/presentation/d/([a-zA-Z0-9_-]+)/edit',
-                        # Basic presentation URL
-                        r'https://docs\.google\.com/presentation/d/([a-zA-Z0-9_-]+)',
-                        # More flexible pattern for URL variations
-                        r'docs\.google\.com/presentation/d/([a-zA-Z0-9_-]+)(?:/[^\\s]*)?'
-                    ]
-
-                    for pattern in slides_patterns:
-                        match = re.search(pattern, investigation_result)
-                        if match:
-                            # Reconstruct the full sharing URL
-                            presentation_id = match.group(1)
-                            report_url = f"https://docs.google.com/presentation/d/{presentation_id}/edit?usp=sharing"
-                            logger.info(
-                                f"✅ Found presentation URL in agent response with pattern '{pattern}': {report_url}")
-                            break
-
-                    if not report_url:
-                        logger.warning(
-                            f"⚠️ No Google Slides URL found in investigation result")
-                        # Log a snippet of the investigation result for debugging
-                        snippet = investigation_result[:1000] + "..." if len(
-                            investigation_result) > 1000 else investigation_result
-                        logger.info(
-                            f"📝 Investigation result snippet: {snippet}")
-
-                        # Look for any URLs in the response for debugging
-                        url_pattern = r'https?://[^\s]+'
-                        urls = re.findall(url_pattern, investigation_result)
-                        if urls:
-                            logger.info(
-                                f"🔗 Found other URLs in response: {urls[:5]}")  # Limit to first 5 for brevity
-                        else:
-                            logger.warning(
-                                f"⚠️ No URLs found at all in investigation result")
-                else:
-                    logger.info(f"📎 Report URL found: {report_url}")
-
-                # Save agent trace to Firestore
-                try:
-                    trace_id = save_agent_trace_to_firestore(investigation_id)
-                    if trace_id:
-                        logger.info(f"✅ Saved agent trace: {trace_id}")
-                    else:
-                        logger.warning("⚠️ Could not save agent trace")
-                except Exception as e:
-                    logger.warning(f"⚠️ Error saving agent trace: {e}")
-
-                # Determine if investigation was actually successful
-                # Check for clear failure indicators in the investigation result
-                investigation_success = True
-                if investigation_result:
-                    # Look for error indicators in the result
-                    error_indicators = [
-                        "failed", "error", "exception", "traceback",
-                        "❌", "ERROR:", "WARNING:", "fallback",
-                        "Context variable not found", "object has no attribute"
-                    ]
-                    result_lower = investigation_result.lower()
-                    for indicator in error_indicators:
-                        if indicator.lower() in result_lower:
-                            investigation_success = False
-                            logger.warning(
-                                f"🚨 Investigation failure detected: found '{indicator}' in result")
-                            break
-
-                # Also check if we have meaningful artifacts (beyond just trace data)
-                meaningful_artifacts = 0
-                if investigation_state.artifacts:
-                    for artifact in investigation_state.artifacts:
-                        artifact_type = artifact.get('type', '')
-                        if artifact_type in ['map_image', 'image', 'screenshot', 'presentation']:
-                            meaningful_artifacts += 1
-
-                # Consider investigation failed if no meaningful artifacts AND no report URL
-                if meaningful_artifacts == 0 and not report_url:
-                    investigation_success = False
+                if not report_url:
                     logger.warning(
-                        "🚨 Investigation considered failed: no meaningful artifacts or report generated")
+                        f"⚠️ No Google Slides URL found in investigation result")
+                    # Log a snippet of the investigation result for debugging
+                    snippet = investigation_result[:1000] + "..." if len(
+                        investigation_result) > 1000 else investigation_result
+                    logger.info(
+                        f"📝 Investigation result snippet: {snippet}")
 
-                logger.info(
-                    f"🎯 Investigation success determination: {investigation_success}")
-                logger.info(
-                    f"   - Meaningful artifacts: {meaningful_artifacts}")
-                logger.info(f"   - Report URL present: {bool(report_url)}")
-
-                # Update the alert in Firestore with investigation results
-                try:
-                    success = update_alert_with_investigation_results(
-                        alert_id=alert_request.alert_id,
-                        investigation_id=investigation_state.investigation_id,
-                        report_url=report_url,
-                        trace_id=trace_id,
-                        success=investigation_success  # Pass the actual success status
-                    )
-                    if success:
+                    # Look for any URLs in the response for debugging
+                    url_pattern = r'https?://[^\s]+'
+                    urls = re.findall(url_pattern, investigation_result)
+                    if urls:
                         logger.info(
-                            f"✅ Updated alert {alert_request.alert_id} in Firestore")
+                            f"🔗 Found other URLs in response: {urls[:5]}")  # Limit to first 5 for brevity
                     else:
                         logger.warning(
-                            f"⚠️ Could not update alert {alert_request.alert_id} in Firestore")
-                except Exception as e:
-                    logger.warning(
-                        f"⚠️ Error updating alert in Firestore: {e}")
-
-                return InvestigationResponse(
-                    investigation_id=investigation_state.investigation_id,
-                    status="completed",
-                    findings=investigation_result,
-                    artifacts=[artifact.get('filename', artifact.get('file', str(
-                        artifact))) for artifact in investigation_state.artifacts] if investigation_state.artifacts else [],
-                    confidence_score=investigation_state.confidence_score,
-                    report_url=report_url,  # Use URL from agent artifacts
-                    trace_id=trace_id       # Add trace ID to response
-                )
+                            f"⚠️ No URLs found at all in investigation result")
             else:
+                logger.info(f"📎 Report URL found: {report_url}")
+
+            # Save agent trace to Firestore
+            try:
+                trace_id = save_agent_trace_to_firestore(investigation_id)
+                if trace_id:
+                    logger.info(f"✅ Saved agent trace: {trace_id}")
+                else:
+                    logger.warning("⚠️ Could not save agent trace")
+            except Exception as e:
+                logger.warning(f"⚠️ Error saving agent trace: {e}")
+
+            # Determine if investigation was actually successful
+            # Check for clear failure indicators in the investigation result
+            investigation_success = True
+            if investigation_result:
+                # Look for error indicators in the result
+                error_indicators = [
+                    "failed", "error", "exception", "traceback",
+                    "❌", "ERROR:", "WARNING:", "fallback",
+                    "Context variable not found", "object has no attribute"
+                ]
+                result_lower = investigation_result.lower()
+                for indicator in error_indicators:
+                    if indicator.lower() in result_lower:
+                        investigation_success = False
+                        logger.warning(
+                            f"🚨 Investigation failure detected: found '{indicator}' in result")
+                        break
+
+            # Also check if we have meaningful artifacts (beyond just trace data)
+            meaningful_artifacts = 0
+            if investigation_state.artifacts:
+                for artifact in investigation_state.artifacts:
+                    artifact_type = artifact.get('type', '')
+                    if artifact_type in ['map_image', 'image', 'screenshot', 'presentation']:
+                        meaningful_artifacts += 1
+
+            # Consider investigation failed if no meaningful artifacts AND no report URL
+            if meaningful_artifacts == 0 and not report_url:
+                investigation_success = False
                 logger.warning(
-                    f"No investigation state found for ID: {investigation_id}")
+                    "🚨 Investigation considered failed: no meaningful artifacts or report generated")
 
-        # Fallback if state not found or no investigation_id
-        logger.warning(
-            "Using fallback response - no investigation state available")
-        return InvestigationResponse(
-            investigation_id=investigation_id or f"fallback_{alert_request.alert_id}",
-            status="completed",
-            findings=investigation_result,
-            artifacts=[],
-            confidence_score=0.7,
-            report_url=None,
-            trace_id=None
-        )
+            logger.info(
+                f"🎯 Investigation success determination: {investigation_success}")
+            logger.info(
+                f"   - Meaningful artifacts: {meaningful_artifacts}")
+            logger.info(f"   - Report URL present: {bool(report_url)}")
 
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
-    except Exception as e:
-        logger.error(f"Investigation endpoint error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail=f"Investigation failed: {str(e)}")
+            # Update the alert in Firestore with investigation results
+            try:
+                success = update_alert_with_investigation_results(
+                    alert_id=alert_request.alert_id,
+                    investigation_id=investigation_state.investigation_id,
+                    report_url=report_url,
+                    trace_id=trace_id,
+                    success=investigation_success  # Pass the actual success status
+                )
+                if success:
+                    logger.info(
+                        f"✅ Updated alert {alert_request.alert_id} in Firestore")
+                else:
+                    logger.warning(
+                        f"⚠️ Could not update alert {alert_request.alert_id} in Firestore")
+            except Exception as e:
+                logger.warning(
+                    f"⚠️ Error updating alert in Firestore: {e}")
+
+            return InvestigationResponse(
+                investigation_id=investigation_state.investigation_id,
+                status="completed",
+                findings=investigation_result,
+                artifacts=[artifact.get('filename', artifact.get('file', str(
+                    artifact))) for artifact in investigation_state.artifacts] if investigation_state.artifacts else [],
+                confidence_score=investigation_state.confidence_score,
+                report_url=report_url,  # Use URL from agent artifacts
+                trace_id=trace_id       # Add trace ID to response
+            )
+        else:
+            logger.warning(
+                f"No investigation state found for ID: {investigation_id}")
+
+    # Fallback if state not found or no investigation_id
+    logger.warning(
+        "Using fallback response - no investigation state available")
+    return InvestigationResponse(
+        investigation_id=investigation_id or f"fallback_{alert_request.alert_id}",
+        status="completed",
+        findings=investigation_result,
+        artifacts=[],
+        confidence_score=0.7,
+        report_url=None,
+        trace_id=None
+    )
 
 
 @investigation_router.get("/{investigation_id}/progress")
@@ -317,22 +321,21 @@ async def get_investigation_progress(
     user=Depends(verify_google_token)
 ):
     """Get the current progress of an investigation"""
-    try:
-        progress = progress_tracker.get_progress(investigation_id)
-        if not progress:
-            raise HTTPException(
-                status_code=404, detail="Investigation not found")
+    # Input validation
+    if not investigation_id or not investigation_id.strip():
+        raise InvestigationError("Investigation ID is required")
 
-        return {
-            "investigation_id": investigation_id,
-            "progress": progress,
-        }
+    progress = progress_tracker.get_progress(investigation_id)
+    if not progress:
+        raise InvestigationError(
+            f"Investigation not found: {investigation_id}",
+            investigation_id=investigation_id
+        )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get progress: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "investigation_id": investigation_id,
+        "progress": progress,
+    }
 
 
 @investigation_router.get("/{investigation_id}/stream")
@@ -396,22 +399,22 @@ async def get_trace_summary(
     user=Depends(verify_google_token)
 ):
     """Get high-level trace summary"""
-    try:
-        summary = tracer.get_trace_summary(investigation_id)
+    # Input validation
+    if not investigation_id or not investigation_id.strip():
+        raise InvestigationError("Investigation ID is required")
 
-        if not summary:
-            raise HTTPException(status_code=404, detail="Trace not found")
+    summary = tracer.get_trace_summary(investigation_id)
 
-        return {
-            "investigation_id": investigation_id,
-            "trace_summary": summary,
-        }
+    if not summary:
+        raise InvestigationError(
+            f"Trace not found: {investigation_id}",
+            investigation_id=investigation_id
+        )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get trace summary: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "investigation_id": investigation_id,
+        "trace_summary": summary,
+    }
 
 
 @investigation_router.get("/{investigation_id}/trace/timeline")
@@ -420,23 +423,22 @@ async def get_trace_timeline(
     user=Depends(verify_google_token)
 ):
     """Get chronological timeline of trace events"""
-    try:
-        timeline = tracer.get_trace_timeline(investigation_id)
+    # Input validation
+    if not investigation_id or not investigation_id.strip():
+        raise InvestigationError("Investigation ID is required")
 
-        if not timeline:
-            raise HTTPException(
-                status_code=404, detail="Trace timeline not found")
+    timeline = tracer.get_trace_timeline(investigation_id)
 
-        return {
-            "investigation_id": investigation_id,
-            "timeline": timeline,
-        }
+    if not timeline:
+        raise InvestigationError(
+            f"Trace timeline not found: {investigation_id}",
+            investigation_id=investigation_id
+        )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get trace timeline: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "investigation_id": investigation_id,
+        "timeline": timeline,
+    }
 
 
 @investigation_router.get("/{investigation_id}/trace/export")
@@ -445,23 +447,23 @@ async def export_trace_data(
     user=Depends(verify_google_token)
 ):
     """Export complete trace data"""
-    try:
-        trace_data = tracer.export_trace(investigation_id)
+    # Input validation
+    if not investigation_id or not investigation_id.strip():
+        raise InvestigationError("Investigation ID is required")
 
-        if not trace_data:
-            raise HTTPException(status_code=404, detail="Trace data not found")
+    trace_data = tracer.export_trace(investigation_id)
 
-        return {
-            "investigation_id": investigation_id,
-            "trace_data": trace_data,
-            "exported_at": datetime.utcnow().isoformat()
-        }
+    if not trace_data:
+        raise InvestigationError(
+            f"Trace data not found: {investigation_id}",
+            investigation_id=investigation_id
+        )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to export trace data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "investigation_id": investigation_id,
+        "trace_data": trace_data,
+        "exported_at": datetime.utcnow().isoformat()
+    }
 
 
 @investigation_router.get("/{investigation_id}/agent-flow")
@@ -470,23 +472,22 @@ async def get_agent_message_flow(
     user=Depends(verify_google_token)
 ):
     """Get agent message flow visualization data"""
-    try:
-        agent_flow = tracer.get_agent_message_flow(investigation_id)
+    # Input validation
+    if not investigation_id or not investigation_id.strip():
+        raise InvestigationError("Investigation ID is required")
 
-        if not agent_flow:
-            raise HTTPException(
-                status_code=404, detail="Agent flow data not found")
+    agent_flow = tracer.get_agent_message_flow(investigation_id)
 
-        return {
-            "investigation_id": investigation_id,
-            "agent_message_flow": agent_flow,
-        }
+    if not agent_flow:
+        raise InvestigationError(
+            f"Agent flow data not found: {investigation_id}",
+            investigation_id=investigation_id
+        )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get agent flow: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "investigation_id": investigation_id,
+        "agent_message_flow": agent_flow,
+    }
 
 # Configuration endpoint
 
@@ -699,42 +700,38 @@ async def debug_alert_status(
     user=Depends(verify_google_token)
 ):
     """Debug endpoint to check alert status in Firestore and test updates."""
-    try:
-        from google.cloud import firestore
+    # Input validation
+    if not alert_id or not alert_id.strip():
+        raise AlertError("Alert ID is required")
 
-        # Initialize Firestore
-        db = firestore.Client()
+    from google.cloud import firestore
 
-        # Get the alert document
-        alert_ref = db.collection('nyc_monitor_alerts').document(alert_id)
-        doc = alert_ref.get()
+    # Initialize Firestore
+    db = firestore.Client()
 
-        if not doc.exists:
-            return {
-                "alert_id": alert_id,
-                "exists": False,
-                "error": "Alert document does not exist"
-            }
+    # Get the alert document
+    alert_ref = db.collection('nyc_monitor_alerts').document(alert_id)
+    doc = alert_ref.get()
 
-        alert_data = doc.to_dict()
-
+    if not doc.exists:
         return {
             "alert_id": alert_id,
-            "exists": True,
-            "current_data": alert_data,
-            "status": alert_data.get('status'),
-            "report_url": alert_data.get('report_url'),
-            "investigation_id": alert_data.get('investigation_id'),
-            "trace_id": alert_data.get('trace_id'),
-            "updated_at": alert_data.get('updated_at')
+            "exists": False,
+            "error": "Alert document does not exist"
         }
 
-    except Exception as e:
-        logger.error(f"Debug endpoint error: {e}")
-        return {
-            "alert_id": alert_id,
-            "error": str(e)
-        }
+    alert_data = doc.to_dict()
+
+    return {
+        "alert_id": alert_id,
+        "exists": True,
+        "current_data": alert_data,
+        "status": alert_data.get('status'),
+        "report_url": alert_data.get('report_url'),
+        "investigation_id": alert_data.get('investigation_id'),
+        "trace_id": alert_data.get('trace_id'),
+        "updated_at": alert_data.get('updated_at')
+    }
 
 
 @investigation_router.post("/debug/{alert_id}/test-update")
@@ -743,33 +740,29 @@ async def test_alert_update(
     user=Depends(verify_google_token)
 ):
     """Test endpoint to manually trigger alert status updates."""
-    try:
-        # Test updating to investigating
-        logger.info(f"🧪 Testing update alert {alert_id} to investigating")
-        success1 = update_alert_status_to_investigating(alert_id)
+    # Input validation
+    if not alert_id or not alert_id.strip():
+        raise AlertError("Alert ID is required")
 
-        # Test updating to resolved with dummy data
-        logger.info(f"🧪 Testing update alert {alert_id} to resolved")
-        success2 = update_alert_with_investigation_results(
-            alert_id=alert_id,
-            investigation_id="test_investigation_123",
-            report_url="https://docs.google.com/presentation/d/test_presentation_id/edit",
-            trace_id="test_trace_123"
-        )
+    # Test updating to investigating
+    logger.info(f"🧪 Testing update alert {alert_id} to investigating")
+    success1 = update_alert_status_to_investigating(alert_id)
 
-        return {
-            "alert_id": alert_id,
-            "investigating_update": success1,
-            "resolved_update": success2,
-            "message": "Check logs for detailed output"
-        }
+    # Test updating to resolved with dummy data
+    logger.info(f"🧪 Testing update alert {alert_id} to resolved")
+    success2 = update_alert_with_investigation_results(
+        alert_id=alert_id,
+        investigation_id="test_investigation_123",
+        report_url="https://docs.google.com/presentation/d/test_presentation_id/edit",
+        trace_id="test_trace_123"
+    )
 
-    except Exception as e:
-        logger.error(f"Test update error: {e}")
-        return {
-            "alert_id": alert_id,
-            "error": str(e)
-        }
+    return {
+        "alert_id": alert_id,
+        "investigating_update": success1,
+        "resolved_update": success2,
+        "message": "Check logs for detailed output"
+    }
 
 
 def _validate_and_enhance_alert_data(alert_data: AlertData) -> AlertData:
