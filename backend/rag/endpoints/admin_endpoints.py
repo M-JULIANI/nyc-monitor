@@ -107,26 +107,3 @@ async def update_user_role(
     # Get updated user
     updated_user = user_ref.get().to_dict()
     return updated_user
-
-
-@admin_router.get("/stats")
-async def get_admin_stats(admin_user: Dict = Depends(require_admin)):
-    """Return system stats (admin only)"""
-    db = get_db()
-    users_ref = db.collection(users_collection)
-    users = list(users_ref.stream())
-
-    # Basic stats
-    total_users = len(users)
-    role_counts = {}
-    for user_doc in users:
-        user_data = user_doc.to_dict()
-        role = user_data.get('role', 'viewer')
-        role_counts[role] = role_counts.get(role, 0) + 1
-
-    return {
-        "total_users": total_users,
-        "users_by_role": role_counts,
-        "total_alerts": 0,  # Placeholder - you can add real alert stats later
-        "system_status": "healthy"
-    }

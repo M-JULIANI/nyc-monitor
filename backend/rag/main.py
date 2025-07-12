@@ -57,8 +57,8 @@ else:
     logger.warning("RAG_CORPUS not found in environment!")
 
 app = FastAPI(
-    title="RAG Backend",
-    description="Backend service for RAG (Retrieval-Augmented Generation) application using Vertex AI RAG Engine",
+    title="NYC Monitor Backend",
+    description="Backend service for NYC Monitor application",
     version="0.1.0",
     root_path="/api"
 )

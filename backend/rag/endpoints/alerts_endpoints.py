@@ -724,30 +724,6 @@ async def clear_cache(user=Depends(verify_google_token)):
     }
 
 
-# Keep the stream endpoint for potential future use
-@alerts_router.get('/stream')
-async def stream_alerts(user=Depends(verify_google_token)):
-    """
-    Stream alerts via Server-Sent Events (legacy endpoint)
-
-    **Requires authentication**: Valid Google OAuth token
-    """
-    logger.info(
-        f"🔒 Authenticated user {user.get('email')} starting alert stream")
-    return EventSourceResponse(alert_stream())
-
-
-async def alert_stream():
-    """Basic alert streaming (legacy)"""
-    db = get_db()
-    while True:
-        yield {
-            'event': 'ping',
-            'data': json.dumps({'timestamp': datetime.utcnow().isoformat()})
-        }
-        await asyncio.sleep(60)  # Ping every minute
-
-
 @alerts_router.get('/stats')
 async def get_alert_stats(
     hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
