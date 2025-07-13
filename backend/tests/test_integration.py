@@ -248,7 +248,7 @@ class TestArtifactCollection:
             "events_count": 10
         }
         
-        from rag.tools.analysis_tools import generate_investigation_timeline_func
+        from rag.tools.map_tools import generate_investigation_timeline_func
         
         # Act
         result = generate_investigation_timeline_func(
