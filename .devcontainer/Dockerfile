@@ -18,19 +18,18 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 
 # Install pipx and ensure it's in PATH
 RUN pip install --user pipx \
-    && python -m pipx ensurepath \
-    && echo 'export PATH="$PATH:/home/vscode/.local/bin"' >> /home/vscode/.bashrc
+    && python -m pipx ensurepath
 
-# Install Agent Starter Pack
+# Install Agent Starter Pack  
 RUN pipx install agent-starter-pack
 
 # Install pnpm globally
 RUN npm install -g pnpm
 
-# Add pnpm to PATH and some helpful aliases
-RUN echo 'export PATH="$PATH:/usr/lib/node_modules/pnpm/bin"' >> /home/vscode/.bashrc \
+# Switch to vscode user and configure environment
+USER vscode
+
+# Add helpful aliases and ensure PATH includes necessary directories
+RUN echo 'export PATH="/home/vscode/.local/bin:$PATH"' >> /home/vscode/.bashrc \
     && echo 'alias ll="ls -la"' >> /home/vscode/.bashrc \
     && echo 'alias pn="pnpm"' >> /home/vscode/.bashrc
-
-# Set the default user
-USER vscode

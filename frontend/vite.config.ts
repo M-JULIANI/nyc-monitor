@@ -20,9 +20,8 @@ export default defineConfig({
       "@react-oauth/google",
       "@tanstack/react-query",
       "recharts",
+      "mapbox-gl",
     ],
-    // Exclude large dependencies that work better as separate chunks
-    exclude: ["mapbox-gl"],
   },
   server: {
     port: 3000,
@@ -68,5 +67,10 @@ export default defineConfig({
     minify: "esbuild",
     // Set reasonable chunk size limit
     chunkSizeWarningLimit: 1000,
+  },
+  // Define global constants for mapbox-gl
+  define: {
+    global: "globalThis",
+    "process.env": {},
   },
 });

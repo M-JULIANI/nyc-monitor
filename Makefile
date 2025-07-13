@@ -170,10 +170,10 @@ install-web:
 	@echo "Installing frontend dependencies with pnpm..."
 	@if ! command -v pnpm >/dev/null 2>&1; then \
 		echo "Installing pnpm..."; \
-		npm install -g pnpm; \
+		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
 	fi
 	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && pnpm install; \
+		cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm install; \
 	else \
 		echo "Warning: frontend/package.json not found"; \
 	fi
@@ -220,13 +220,21 @@ dev-api:
 
 dev-web:
 	@echo "Starting frontend development server..."
-	cd frontend && pnpm run dev -- --host 0.0.0.0
+	@if ! command -v pnpm >/dev/null 2>&1; then \
+		echo "pnpm not found, installing..."; \
+		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
+	fi
+	cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm run dev -- --host 0.0.0.0
 
 # Test against deployed backend
 dev-web-deployed:
 	@echo "Starting frontend with deployed backend..."
 	@echo "Backend URL: https://atlas-backend-blz2r3yjgq-uc.a.run.app"
-	@cd frontend && REACT_APP_USE_DEPLOYED_BACKEND=true pnpm run dev -- --host 0.0.0.0
+	@if ! command -v pnpm >/dev/null 2>&1; then \
+		echo "pnpm not found, installing..."; \
+		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
+	fi
+	@cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" REACT_APP_USE_DEPLOYED_BACKEND=true pnpm run dev -- --host 0.0.0.0
 
 # Get deployed backend URL
 get-api-url: check-gcloud
@@ -248,15 +256,44 @@ test: test-api test-web
 	@echo "All tests completed"
 
 test-api:
-	@echo "Running backend tests..."
+	@echo "Running backend tests (excluding real integration tests)..."
 	@if [ -f "backend/pyproject.toml" ]; then \
-		cd backend && poetry run pytest; \
+		cd backend && poetry run pytest -m "not real_integration"; \
 	fi
 
 test-web:
 	@echo "Running frontend tests..."
+	@if ! command -v pnpm >/dev/null 2>&1; then \
+		echo "pnpm not found, installing..."; \
+		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
+	fi
 	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && pnpm test; \
+		cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm test; \
+	fi
+
+# Backend test variants
+test-unit:
+	@echo "Running unit tests only..."
+	cd backend && poetry run pytest -m unit
+
+test-integration:
+	@echo "Running mocked integration tests..."
+	cd backend && poetry run pytest -m integration
+
+test-integration-real:
+	@echo "🚨 Running REAL integration tests (requires API credentials)..."
+	@echo "⚠️  This will make actual API calls and may cost money!"
+	@echo "⚠️  Ensure you have the following environment variables set:"
+	@echo "   - GOOGLE_MAPS_API_KEY"
+	@echo "   - GOOGLE_CUSTOM_SEARCH_API_KEY"
+	@echo "   - GOOGLE_DRIVE_FOLDER_ID"
+	@echo "   - STATUS_TRACKER_TEMPLATE_ID"
+	@echo "   - GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64"
+	@read -p "Continue? (y/N) " -n 1 -r; echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		cd backend && poetry run pytest -m real_integration; \
+	else \
+		echo "Cancelled."; \
 	fi
 
 # Linting and Formatting
@@ -266,7 +303,11 @@ lint:
 		cd backend && poetry run ruff check .; \
 	fi
 	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && pnpm run lint; \
+		if ! command -v pnpm >/dev/null 2>&1; then \
+			echo "pnpm not found, installing..."; \
+			curl -fsSL https://get.pnpm.io/install.sh | sh -; \
+		fi; \
+		cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm run lint; \
 	fi
 
 format:
@@ -275,7 +316,11 @@ format:
 		cd backend && poetry run black . && poetry run ruff format .; \
 	fi
 	@if [ -f "frontend/package.json" ]; then \
-		cd frontend && pnpm run format; \
+		if ! command -v pnpm >/dev/null 2>&1; then \
+			echo "pnpm not found, installing..."; \
+			curl -fsSL https://get.pnpm.io/install.sh | sh -; \
+		fi; \
+		cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm run format; \
 	fi
 
 # Check Docker permissions
@@ -671,13 +716,6 @@ cleanup-monitor-permissions: check-gcloud
 		--role="roles/run.admin" --quiet >/dev/null 2>&1 || true
 	@echo "✅ Cleanup complete!"
 
-# Cleanup
-clean:
-	@echo "Cleaning up development environment..."
-	rm -rf backend/.venv frontend/node_modules
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-
 # Help
 help:
 	@echo "Development Commands:"
@@ -688,15 +726,16 @@ help:
 	@echo "  make dev-api      - Start backend development server"
 	@echo "  make dev-web     - Start frontend development server"
 	@echo "  make dev-web-deployed - Start frontend using deployed backend"
-	@echo "  make test             - Run all tests"
-	@echo "  make test-api     - Run backend tests"
-	@echo "  make test-web    - Run frontend tests"
+	@echo "  make test             - Run all tests (excludes real integration tests)"
+	@echo "  make test-api         - Run backend tests (excludes real integration tests)"
+	@echo "  make test-web         - Run frontend tests"
+	@echo "  make test-unit        - Run unit tests only"
+	@echo "  make test-integration - Run mocked integration tests"
+	@echo "  make test-integration-real - Run REAL integration tests (requires credentials)"
 	@echo "  make test-deployed-api    - Test deployed backend health"
 	@echo "  make get-api-url  - Get deployed backend URL"
 	@echo "  make lint             - Run linters"
 	@echo "  make format           - Format code"
-	@echo "  make clean            - Clean up development environment"
-	@echo "  make compare-package-managers - Compare npm vs pnpm performance"
 	@echo "Devcontainer Commands:"
 	@echo "  make devcontainer-setup  - Set up devcontainer environment"
 	@echo "  make devcontainer-clean  - Clean devcontainer environment"
