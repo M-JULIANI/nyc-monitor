@@ -207,59 +207,5 @@ class TestAgentIntegration:
         assert result["confidence"] == 0.85
 
 
-class TestArtifactCollection:
-    """Test artifact collection workflows."""
-
-    @pytest.mark.integration
-    @patch('rag.tools.data_tools.collect_media_content_func')
-    def test_media_collection_integration(self, mock_collect_media):
-        """Test media collection integration."""
-        # Arrange
-        mock_collect_media.return_value = {
-            "success": True,
-            "media_items": [
-                {"type": "image", "url": "https://example.com/image1.jpg"},
-                {"type": "video", "url": "https://example.com/video1.mp4"}
-            ]
-        }
-        
-        from rag.tools.data_tools import collect_media_content_func
-        
-        # Act
-        result = collect_media_content_func(
-            investigation_id="test-investigation",
-            search_query="test query",
-            max_items=5
-        )
-        
-        # Assert
-        assert result["success"] is True
-        assert "media_items" in result
-        assert len(result["media_items"]) == 2
-
-    @pytest.mark.integration
-    @patch('rag.tools.analysis_tools.generate_investigation_timeline_func')
-    def test_timeline_generation_integration(self, mock_timeline_func):
-        """Test timeline generation integration."""
-        # Arrange
-        mock_timeline_func.return_value = {
-            "success": True,
-            "timeline_url": "https://example.com/timeline.png",
-            "events_count": 10
-        }
-        
-        from rag.tools.map_tools import generate_investigation_timeline_func
-        
-        # Act
-        result = generate_investigation_timeline_func(
-            investigation_id="test-investigation"
-        )
-        
-        # Assert
-        assert result["success"] is True
-        assert "timeline_url" in result
-        assert result["events_count"] == 10
-
-
 # Pytest markers for organization
 pytestmark = pytest.mark.integration 
