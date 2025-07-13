@@ -95,8 +95,9 @@ class TestInvestigationWorkflow:
     """Test complete investigation workflow integration."""
 
     @pytest.mark.integration
+    @pytest.mark.asyncio
     @patch('rag.investigation_service_simple.investigate_alert_simple')
-    def test_simple_investigation_workflow(self, mock_investigate):
+    async def test_simple_investigation_workflow(self, mock_investigate):
         """Test simple investigation workflow."""
         # Arrange
         mock_investigate.return_value = (
@@ -117,7 +118,7 @@ class TestInvestigationWorkflow:
         )
         
         # Act
-        result, investigation_id = mock_investigate(alert_data)
+        result, investigation_id = await mock_investigate(alert_data)
         
         # Assert
         assert result is not None
