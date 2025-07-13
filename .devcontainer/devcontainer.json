@@ -35,8 +35,5 @@
         "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
     ],
     "postCreateCommand": "bash .devcontainer/setup.sh",
-    "updateContentCommand": "bash .devcontainer/setup.sh",
-    "containerEnv": {
-        "PATH": "/home/vscode/.local/bin:${PATH}"
-    }
+    "updateContentCommand": "bash .devcontainer/setup.sh"
 }
