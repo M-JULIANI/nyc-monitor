@@ -716,23 +716,6 @@ cleanup-monitor-permissions: check-gcloud
 		--role="roles/run.admin" --quiet >/dev/null 2>&1 || true
 	@echo "✅ Cleanup complete!"
 
-# Reset pnpm completely
-reset-pnpm:
-	@echo "🧹 Completely resetting pnpm installation..."
-	@chmod +x scripts/reset-pnpm.sh
-	@./scripts/reset-pnpm.sh
-
-# Cleanup
-clean:
-	@echo "Cleaning up development environment..."
-	rm -rf backend/.venv frontend/node_modules
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
-
-# Deep clean including pnpm
-clean-deep: clean reset-pnpm
-	@echo "Deep clean with pnpm reset completed"
-
 # Help
 help:
 	@echo "Development Commands:"
@@ -753,9 +736,6 @@ help:
 	@echo "  make get-api-url  - Get deployed backend URL"
 	@echo "  make lint             - Run linters"
 	@echo "  make format           - Format code"
-	@echo "  make clean            - Clean up development environment"
-	@echo "  make clean-deep       - Deep clean including pnpm reset"
-	@echo "  make reset-pnpm       - Completely reset and reinstall pnpm"
 	@echo "Devcontainer Commands:"
 	@echo "  make devcontainer-setup  - Set up devcontainer environment"
 	@echo "  make devcontainer-clean  - Clean devcontainer environment"
