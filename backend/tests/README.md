@@ -71,11 +71,20 @@ pytest tests/test_main.py::TestHealthEndpoints::test_health_check_endpoint
 # Run only unit tests (fast)
 pytest -m unit
 
+# Run mocked integration tests
+pytest -m integration
+
+# Run real integration tests (requires API credentials)
+pytest -m real_integration
+
 # Run only API tests
 pytest -m api
 
 # Skip slow tests
 pytest -m "not slow"
+
+# Skip real integration tests (default for CI/CD)
+pytest -m "not real_integration"
 ```
 
 ### Coverage Reports
@@ -93,34 +102,70 @@ pytest --cov-fail-under=80
 
 ## Test Coverage Areas
 
-### 🔧 Configuration Management
+### 🧪 **Unit Tests** (`test_*.py` - except `test_integration*.py`)
+Fast, isolated tests with mocked dependencies:
+
+#### 🔧 Configuration Management
 - Environment variable loading (development vs production)
 - Configuration validation and error handling
 - Global config initialization and access
 
-### 🔐 Authentication & Security
+#### 🔐 Authentication & Security
 - Google OAuth token verification
 - Invalid token handling
 - Security headers and CORS configuration
 - Rate limiting functionality
 
-### 💬 Chat Functionality
+#### 💬 Chat Functionality
 - Chat message processing and response generation
 - Session management and conversation history
 - Error handling for missing RAG corpus
 - Session clearing and retrieval
 
-### 🔍 Investigation System
+#### 🔍 Investigation System
 - Both simple and ADK investigation approaches
 - Progress tracking and real-time streaming
 - State management and artifact handling
 - Configuration and tracing endpoints
 
-### 🌐 API & Infrastructure
+#### 🌐 API & Infrastructure
 - Health checks and service status
 - FastAPI app configuration and metadata
 - Middleware stack (CORS, rate limiting)
 - HTTP exception handling
+
+### 🔗 **Mocked Integration Tests** (`test_integration.py`)
+Component integration tests with mocked external services:
+
+#### 🛠️ Tool Integration
+- Map generation, web search, presentation creation
+- Tool function interfaces and response formats
+- Error handling and validation
+
+#### 🤖 Agent Integration
+- Research, data, and analysis agent workflows
+- Agent communication and state management
+- Multi-agent coordination patterns
+
+#### 📊 Workflow Integration
+- Complete investigation workflows
+- State management across components
+- Artifact collection and management
+
+### 🌐 **Real Integration Tests** (`test_integration_real.py`)
+End-to-end tests with actual API calls:
+
+#### 🗺️ Real API Testing
+- Google Maps API integration
+- Google Custom Search API
+- Google Slides API
+- End-to-end workflow with real services
+
+#### ⚠️ Requirements
+- Real API credentials required
+- Run sparingly (costs money)
+- Skipped by default in CI/CD
+- Use for production readiness verification
 
 ## Test Patterns & Best Practices
 
@@ -141,11 +186,42 @@ pytest --cov-fail-under=80
 
 ## Continuous Integration
 
-These tests are designed to run in CI/CD pipelines with:
+The test suite is designed with CI/CD in mind:
+
+### 🚀 **CI/CD Pipeline (Automated)**
+- **Default behavior**: Excludes real integration tests (`pytest -m "not real_integration"`)
 - **Fast Execution**: Most tests complete in under 10 seconds
 - **No External Dependencies**: All external services mocked
+- **No API Costs**: Won't charge your Google Cloud account
 - **Deterministic Results**: No flaky tests or race conditions
 - **Clear Failure Messages**: Detailed assertions and error reporting
+
+### 🛠️ **Manual Testing Options**
+
+```bash
+# Standard development testing (fast, no API calls)
+make test
+
+# Run specific test types
+make test-unit                    # Unit tests only
+make test-integration            # Mocked integration tests
+make test-integration-real       # REAL API calls (requires credentials)
+make test-all-backend           # Everything including real API calls
+
+# Direct pytest commands
+pytest -m unit                   # Unit tests
+pytest -m integration           # Mocked integration
+pytest -m real_integration      # Real API calls
+pytest -m "not real_integration" # Everything except real API calls
+```
+
+### ⚠️ **Real Integration Test Requirements**
+Real integration tests require environment variables:
+- `GOOGLE_MAPS_API_KEY`
+- `GOOGLE_CUSTOM_SEARCH_API_KEY` 
+- `GOOGLE_DRIVE_FOLDER_ID`
+- `STATUS_TRACKER_TEMPLATE_ID`
+- `GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64`
 
 ## Extending the Test Suite
 
