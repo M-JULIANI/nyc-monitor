@@ -256,9 +256,9 @@ test: test-api test-web
 	@echo "All tests completed"
 
 test-api:
-	@echo "Running backend tests..."
+	@echo "Running backend tests (excluding real integration tests)..."
 	@if [ -f "backend/pyproject.toml" ]; then \
-		cd backend && poetry run pytest; \
+		cd backend && poetry run pytest -m "not real_integration"; \
 	fi
 
 test-web:
@@ -269,6 +269,31 @@ test-web:
 	fi
 	@if [ -f "frontend/package.json" ]; then \
 		cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm test; \
+	fi
+
+# Backend test variants
+test-unit:
+	@echo "Running unit tests only..."
+	cd backend && poetry run pytest -m unit
+
+test-integration:
+	@echo "Running mocked integration tests..."
+	cd backend && poetry run pytest -m integration
+
+test-integration-real:
+	@echo "🚨 Running REAL integration tests (requires API credentials)..."
+	@echo "⚠️  This will make actual API calls and may cost money!"
+	@echo "⚠️  Ensure you have the following environment variables set:"
+	@echo "   - GOOGLE_MAPS_API_KEY"
+	@echo "   - GOOGLE_CUSTOM_SEARCH_API_KEY"
+	@echo "   - GOOGLE_DRIVE_FOLDER_ID"
+	@echo "   - STATUS_TRACKER_TEMPLATE_ID"
+	@echo "   - GOOGLE_SLIDES_SERVICE_ACCOUNT_KEY_BASE64"
+	@read -p "Continue? (y/N) " -n 1 -r; echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		cd backend && poetry run pytest -m real_integration; \
+	else \
+		echo "Cancelled."; \
 	fi
 
 # Linting and Formatting
@@ -718,9 +743,12 @@ help:
 	@echo "  make dev-api      - Start backend development server"
 	@echo "  make dev-web     - Start frontend development server"
 	@echo "  make dev-web-deployed - Start frontend using deployed backend"
-	@echo "  make test             - Run all tests"
-	@echo "  make test-api     - Run backend tests"
-	@echo "  make test-web    - Run frontend tests"
+	@echo "  make test             - Run all tests (excludes real integration tests)"
+	@echo "  make test-api         - Run backend tests (excludes real integration tests)"
+	@echo "  make test-web         - Run frontend tests"
+	@echo "  make test-unit        - Run unit tests only"
+	@echo "  make test-integration - Run mocked integration tests"
+	@echo "  make test-integration-real - Run REAL integration tests (requires credentials)"
 	@echo "  make test-deployed-api    - Test deployed backend health"
 	@echo "  make get-api-url  - Get deployed backend URL"
 	@echo "  make lint             - Run linters"
