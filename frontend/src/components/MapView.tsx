@@ -11,6 +11,19 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const MAPBOX_TOKEN = "pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA";
 
+// Configure mapbox-gl for development environment
+if (typeof window !== "undefined") {
+  // Set mapbox access token globally via ES import
+  import("mapbox-gl").then((mapboxgl) => {
+    if (mapboxgl.default) {
+      mapboxgl.default.accessToken = MAPBOX_TOKEN;
+      console.log("✅ Mapbox access token set via ES import");
+    }
+  }).catch((importError) => {
+    console.error("❌ ES import failed:", importError);
+  });
+}
+
 // Custom slider styles
 const sliderStyles = `
   .slider::-webkit-slider-thumb {
@@ -796,21 +809,24 @@ const MapView: React.FC = () => {
           touchAction: "manipulation", // Enable touch panning and pinch zoom for map interaction
         }}
       >
-        <Map
-          ref={mapRef}
-          initialViewState={viewport}
-          mapboxAccessToken={MAPBOX_TOKEN}
-          style={{ width: "100%", height: "100%" }}
-          mapStyle="mapbox://styles/mapbox/dark-v11"
-          interactiveLayerIds={viewMode === "priority" ? ["alert-points"] : []}
-          interactive={isMapInteractive}
-          dragPan={isMapInteractive}
-          dragRotate={isMapInteractive}
-          scrollZoom={isMapInteractive}
-          keyboard={isMapInteractive}
-          doubleClickZoom={isMapInteractive}
-          onMove={handleViewportChange}
-        >
+          <Map
+            ref={mapRef}
+            initialViewState={viewport}
+            mapboxAccessToken={MAPBOX_TOKEN}
+            style={{ width: "100%", height: "100%" }}
+            mapStyle="mapbox://styles/mapbox/dark-v11"
+            interactiveLayerIds={viewMode === "priority" ? ["alert-points"] : []}
+            interactive={isMapInteractive}
+            dragPan={isMapInteractive}
+            dragRotate={isMapInteractive}
+            scrollZoom={isMapInteractive}
+            keyboard={isMapInteractive}
+            doubleClickZoom={isMapInteractive}
+            onMove={handleViewportChange}
+            onError={(error) => {
+              console.error("❌ Map runtime error:", error);
+            }}
+          >
           {/* Priority Mode - Circle Layer */}
           {viewMode === "priority" && (
             <Source type="geojson" data={alertsGeoJSON}>
