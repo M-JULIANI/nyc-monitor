@@ -138,12 +138,12 @@ flowchart TD
     Analysis -.-> Dashboard
 
     %% Styling
-    classDef background fill:#e1f5fe
-    classDef investigation fill:#f3e5f5
-    classDef storage fill:#e8f5e8
-    classDef frontend fill:#fff3e0
-    classDef output fill:#fce4ec
-    classDef tools fill:#e8eaf6
+    classDef background fill:#e1f5fe,color:#000000
+    classDef investigation fill:#f3e5f5,color:#000000
+    classDef storage fill:#e8f5e8,color:#000000
+    classDef frontend fill:#fff3e0,color:#000000
+    classDef output fill:#fce4ec,color:#000000
+    classDef tools fill:#e8eaf6,color:#000000
 
     class Cron,Collector,Triage background
     class ADK,WebSearch,MapTool,MediaTool,ReportTool investigation
