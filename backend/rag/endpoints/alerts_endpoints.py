@@ -4,6 +4,7 @@ from sse_starlette.sse import EventSourceResponse
 from google.cloud import firestore
 from ..config import get_config
 from ..auth import verify_google_token
+from ..exceptions import AlertError, DatabaseError
 import asyncio
 from datetime import datetime, timedelta
 import json
@@ -30,12 +31,7 @@ CACHE_TTL_SECONDS = 300  # 5 minutes
 
 def get_db():
     """Get Firestore client instance"""
-    try:
-        return firestore.Client(project=get_config().GOOGLE_CLOUD_PROJECT)
-    except Exception as e:
-        logger.error(f"Failed to initialize Firestore client: {e}")
-        raise HTTPException(
-            status_code=500, detail="Database configuration error")
+    return firestore.Client(project=get_config().GOOGLE_CLOUD_PROJECT)
 
 
 def get_cache_key(limit: int, hours: int) -> str:
@@ -177,279 +173,281 @@ async def get_recent_alerts(
 
     **Requires authentication**: Valid Google OAuth token
     """
+    # Input validation
+    if limit < 1 or limit > 5000:
+        raise AlertError("Limit must be between 1 and 5000")
+
+    if hours < 1 or hours > 168:
+        raise AlertError("Hours must be between 1 and 168")
+
+    logger.info(
+        f"🔒 Authenticated user {user.get('email')} accessing recent alerts")
+
+    # Check cache first
+    cache_key = f"minimal:{limit}:{hours}"
+
+    if cache_key in _cache:
+        entry = _cache[cache_key]
+        if is_cache_valid(entry['timestamp']):
+            logger.info(f"✅ Cache HIT for {cache_key}")
+            cached_data = entry['data'].copy()
+            if 'performance' in cached_data:
+                cached_data['performance']['cached'] = True
+                cached_data['performance']['cache_age_seconds'] = round(
+                    time.time() - entry['timestamp'], 2)
+            return cached_data
+
+    start_time = datetime.utcnow()
+    db = get_db()
+    cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+
+    # Allocate limits
+    monitor_limit = min(600, int(limit * 0.3))  # 30% for monitor
+    signals_limit = limit - monitor_limit   # 70% for 311
+
+    logger.info(
+        f"🚀 MINIMAL FETCH: {monitor_limit} monitor + {signals_limit} 311")
+
+    all_alerts = []
+    query_stats = {}
+
+    # Query 1: Monitor alerts - minimal fields
+    monitor_start = datetime.utcnow()
     try:
-        logger.info(
-            f"🔒 Authenticated user {user.get('email')} accessing recent alerts")
+        alerts_ref = db.collection('nyc_monitor_alerts')
+        monitor_query = (alerts_ref
+                         .where('created_at', '>=', cutoff_time)
+                         .limit(monitor_limit))
 
-        # Check cache first
-        cache_key = f"minimal:{limit}:{hours}"
+        for doc in monitor_query.stream():
+            data = doc.to_dict()
 
-        if cache_key in _cache:
-            entry = _cache[cache_key]
-            if is_cache_valid(entry['timestamp']):
-                logger.info(f"✅ Cache HIT for {cache_key}")
-                cached_data = entry['data'].copy()
-                if 'performance' in cached_data:
-                    cached_data['performance']['cached'] = True
-                    cached_data['performance']['cache_age_seconds'] = round(
-                        time.time() - entry['timestamp'], 2)
-                return cached_data
+            # Extract the real source from the nested structure
+            real_source = 'monitor'  # Default fallback
+            try:
+                original_alert = data.get('original_alert', {})
+                if original_alert:
+                    original_alert_data = original_alert.get(
+                        'original_alert_data', {})
+                    if original_alert_data:
+                        signals = original_alert_data.get('signals', [])
+                        if signals and len(signals) > 0:
+                            # First signal is the true source (reddit, twitter, etc.)
+                            real_source = signals[0]
+            except Exception as e:
+                logger.warning(
+                    f"Could not extract source for alert {doc.id}: {e}")
 
-        start_time = datetime.utcnow()
-        db = get_db()
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
-
-        # Allocate limits
-        monitor_limit = min(600, int(limit * 0.3))  # 30% for monitor
-        signals_limit = limit - monitor_limit   # 70% for 311
-
-        logger.info(
-            f"🚀 MINIMAL FETCH: {monitor_limit} monitor + {signals_limit} 311")
-
-        all_alerts = []
-        query_stats = {}
-
-        # Query 1: Monitor alerts - minimal fields
-        monitor_start = datetime.utcnow()
-        try:
-            alerts_ref = db.collection('nyc_monitor_alerts')
-            monitor_query = (alerts_ref
-                             .where('created_at', '>=', cutoff_time)
-                             .limit(monitor_limit))
-
-            for doc in monitor_query.stream():
-                data = doc.to_dict()
-
-                # Extract the real source from the nested structure
-                real_source = 'monitor'  # Default fallback
-                try:
-                    original_alert = data.get('original_alert', {})
-                    if original_alert:
-                        original_alert_data = original_alert.get(
-                            'original_alert_data', {})
-                        if original_alert_data:
-                            signals = original_alert_data.get('signals', [])
-                            if signals and len(signals) > 0:
-                                # First signal is the true source (reddit, twitter, etc.)
-                                real_source = signals[0]
-                except Exception as e:
-                    logger.warning(
-                        f"Could not extract source for alert {doc.id}: {e}")
-
-                # Ultra-minimal transformation
-                alert = {
-                    'id': doc.id,
-                    'title': data.get('title', 'NYC Alert'),
-                    'description': data.get('description', ''),
-                    # Now shows the actual source: reddit, twitter, etc.
-                    'source': real_source,
-                    'priority': _get_priority_from_severity(data.get('severity', 5)),
-                    'severity': data.get('severity', 5),
-                    'timestamp': _extract_monitor_timestamp(data),
-                    'coordinates': {
-                        'lat': data.get('original_alert', {}).get('latitude', 40.7589),
-                        'lng': data.get('original_alert', {}).get('longitude', -73.9851)
-                    },
-                    # Extract neighborhood and borough from original_alert
-                    'neighborhood': data.get('original_alert', {}).get('neighborhood', 'Unknown'),
-                    'borough': data.get('original_alert', {}).get('borough', 'Unknown'),
-                    # Simplified categorization - just the main category
-                    'category': normalize_category(data.get('category', 'general')),
-                }
-                all_alerts.append(alert)
-                # logger.info(
-                #     f"✅ Alert {doc.id} has priority: {alert.get('priority')}")
-
-            monitor_time = (datetime.utcnow() - monitor_start).total_seconds()
-            query_stats['monitor'] = {
-                # Count non-311 alerts
-                'count': len([a for a in all_alerts if a['source'] != '311']),
-                'time_seconds': round(monitor_time, 3),
-                # Show actual sources found
-                'sources_found': list(set([a['source'] for a in all_alerts if a['source'] != '311']))
-            }
-
-        except Exception as e:
-            logger.error(f"Monitor error: {e}")
-            query_stats['monitor'] = {'error': str(e)}
-
-        # Query 2: 311 signals - ultra-minimal fields
-        signals_start = datetime.utcnow()
-        try:
-            signals_ref = db.collection('nyc_311_signals')
-            signals_query = (signals_ref
-                             .where('signal_timestamp', '>=', cutoff_time)
-                             .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category', 'full_signal_data', 'incident_zip', 'borough', 'status', 'severity', 'event_type'])
-                             .limit(signals_limit))
-
-            signals_count = 0
-            for doc in signals_query.stream():
-                data = doc.to_dict()
-
-                # Use calculated severity from rule-based triage, fallback to emergency logic
-                severity = data.get('severity')
-                if severity is None:
-                    # Fallback for old records without severity
-                    severity = 7 if data.get('is_emergency', False) else 3
-
-                # Get categorization (may be stored in DB or need to calculate)
-                complaint_type = data.get('complaint_type', '')
-
-                # Get the main category (simplified approach) - ORIGINAL OPTIMIZED LOGIC
-                category = data.get('category')
-                if not category:
-                    # Calculate from event_type if available, otherwise from complaint_type
-                    event_type = data.get(
-                        'event_type') or categorize_311_complaint(complaint_type)
-                    alert_type_info = get_alert_type_info(event_type)
-                    category = alert_type_info.category.value
-
-                # Create alert with proper status normalization
-                alert = {
-                    'id': doc.id,
-                    'title': f"{complaint_type}: {(data.get('descriptor', '') or '')[:50]}",
-                    'description': data.get('descriptor', ''),
-                    'source': '311',
-                    'priority': _get_priority_from_severity(data.get('severity', 5)),
-                    # Proper status normalization
-                    'status': _normalize_311_alert_status(data.get('status', 'Open')),
-                    'severity': severity,
-                    'timestamp': _extract_311_timestamp(data),
-                    'coordinates': {
-                        'lat': data.get('latitude', 40.7589),
-                        'lng': data.get('longitude', -73.9851)
-                    },
-                    # Extract neighborhood and borough from full_signal_data.metadata
-                    'neighborhood': data.get('full_signal_data', {}).get('metadata', {}).get('incident_zip', data.get('incident_zip', 'Unknown')),
-                    'borough': data.get('full_signal_data', {}).get('metadata', {}).get('borough', data.get('borough', 'Unknown')),
-                    # Simplified categorization - just the main category (ORIGINAL LOGIC)
-                    'category': normalize_category(category),
-                }
-
-                all_alerts.append(alert)
-                signals_count += 1
-
-            signals_time = (datetime.utcnow() - signals_start).total_seconds()
-            query_stats['311'] = {
-                'count': signals_count,
-                'time_seconds': round(signals_time, 3)
-            }
-
-        except Exception as e:
-            logger.error(f"311 error: {e}")
-            query_stats['311'] = {'error': str(e)}
-
-        total_time = (datetime.utcnow() - start_time).total_seconds()
-
-        # Deduplicate alerts by title (linear time) - EXCLUDE 311 alerts
-        dedup_start = datetime.utcnow()
-
-        # Separate 311 and non-311 alerts
-        alerts_311 = [
-            alert for alert in all_alerts if alert.get('source') == '311']
-        alerts_non_311 = [
-            alert for alert in all_alerts if alert.get('source') != '311']
-
-        # Keep all 311 alerts (no deduplication)
-        deduplicated_alerts = alerts_311.copy()
-
-        # Deduplicate non-311 alerts using similarity detection
-        seen_titles = []  # List of normalized titles for similarity comparison
-        duplicate_count = 0
-        similarity_threshold = 0.85  # 85% similarity threshold
-
-        for alert in alerts_non_311:
-            # Normalize title for comparison (lowercase, stripped, truncated)
-            normalized_title = alert.get('title', '').lower().strip()[:150]
-
-            if not normalized_title:
-                continue
-
-            is_duplicate = False
-
-            # Check similarity against all seen titles
-            for seen_title in seen_titles:
-                similarity = difflib.SequenceMatcher(
-                    None, normalized_title, seen_title).ratio()
-                if similarity >= similarity_threshold:
-                    is_duplicate = True
-                    duplicate_count += 1
-                    break
-
-            if not is_duplicate:
-                seen_titles.append(normalized_title)
-                deduplicated_alerts.append(alert)
-
-        dedup_time = (datetime.utcnow() - dedup_start).total_seconds()
-
-        # Sort deduplicated alerts to prioritize Reddit first
-        sort_start = datetime.utcnow()
-
-        def get_source_priority(alert):
-            """Return sort priority for sources (lower = higher priority)"""
-            source = alert.get('source', 'unknown')
-            if source == 'reddit':
-                return 0  # Highest priority
-            elif source == '311':
-                return 1  # Second priority
-            elif source == 'twitter':
-                return 2  # Third priority
-            else:
-                return 3  # Everything else
-
-        # Sort by source priority, then by timestamp (newest first)
-        deduplicated_alerts.sort(key=lambda alert: (
-            get_source_priority(alert),
-            -int(datetime.fromisoformat(alert.get('timestamp',
-                 '1970-01-01T00:00:00').replace('Z', '+00:00')).timestamp())
-        ))
-
-        sort_time = (datetime.utcnow() - sort_start).total_seconds()
-
-        logger.info(
-            f"🔍 DEDUP: {len(all_alerts)} → {len(deduplicated_alerts)} alerts "
-            f"({duplicate_count} non-311 duplicates removed, {len(alerts_311)} 311 alerts kept) "
-            f"in {dedup_time:.3f}s")
-
-        logger.info(
-            f"📊 SORT: Prioritized Reddit alerts in {sort_time:.3f}s")
-
-        logger.info(
-            f"🎯 MINIMAL: {len(deduplicated_alerts)} alerts in {total_time:.3f}s ({len(deduplicated_alerts)/total_time:.0f} alerts/sec)")
-
-        result = {
-            'alerts': deduplicated_alerts,
-            'count': len(deduplicated_alerts),
-            'performance': {
-                'total_time_seconds': round(total_time, 3),
-                'alerts_per_second': round(len(deduplicated_alerts) / total_time if total_time > 0 else 0, 1),
-                'query_breakdown': query_stats,
-                'deduplication': {
-                    'original_count': len(all_alerts),
-                    'final_count': len(deduplicated_alerts),
-                    'duplicates_removed': duplicate_count,
-                    'alerts_311_kept': len(alerts_311),
-                    'similarity_threshold': similarity_threshold,
-                    'dedup_time_seconds': round(dedup_time, 3)
+            # Ultra-minimal transformation
+            alert = {
+                'id': doc.id,
+                'title': data.get('title', 'NYC Alert'),
+                'description': data.get('description', ''),
+                # Now shows the actual source: reddit, twitter, etc.
+                'source': real_source,
+                'priority': _get_priority_from_severity(data.get('severity', 5)),
+                'severity': data.get('severity', 5),
+                'timestamp': _extract_monitor_timestamp(data),
+                'coordinates': {
+                    'lat': data.get('original_alert', {}).get('latitude', 40.7589),
+                    'lng': data.get('original_alert', {}).get('longitude', -73.9851)
                 },
-                'optimizations': ['ultra_minimal_fields', 'no_sorting', 'minimal_transform', 'similarity_deduplication_non_311'],
-                'cached': False,
-                'cache_ttl_seconds': CACHE_TTL_SECONDS,
-                'accessed_by': user.get('email')  # Track who accessed the data
+                # Extract neighborhood and borough from original_alert
+                'neighborhood': data.get('original_alert', {}).get('neighborhood', 'Unknown'),
+                'borough': data.get('original_alert', {}).get('borough', 'Unknown'),
+                # Simplified categorization - just the main category
+                'category': normalize_category(data.get('category', 'general')),
             }
-        }
+            all_alerts.append(alert)
+            # logger.info(
+            #     f"✅ Alert {doc.id} has priority: {alert.get('priority')}")
 
-        # Cache the result
-        _cache[cache_key] = {
-            'data': result,
-            'timestamp': time.time()
+        monitor_time = (datetime.utcnow() - monitor_start).total_seconds()
+        query_stats['monitor'] = {
+            # Count non-311 alerts
+            'count': len([a for a in all_alerts if a['source'] != '311']),
+            'time_seconds': round(monitor_time, 3),
+            # Show actual sources found
+            'sources_found': list(set([a['source'] for a in all_alerts if a['source'] != '311']))
         }
-
-        return result
 
     except Exception as e:
-        logger.error(f"Error fetching alerts: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch alerts")
+        logger.error(f"Monitor error: {e}")
+        query_stats['monitor'] = {'error': str(e)}
+
+    # Query 2: 311 signals - ultra-minimal fields
+    signals_start = datetime.utcnow()
+    try:
+        signals_ref = db.collection('nyc_311_signals')
+        signals_query = (signals_ref
+                         .where('signal_timestamp', '>=', cutoff_time)
+                         .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category', 'full_signal_data', 'incident_zip', 'borough', 'status', 'severity', 'event_type'])
+                         .limit(signals_limit))
+
+        signals_count = 0
+        for doc in signals_query.stream():
+            data = doc.to_dict()
+
+            # Use calculated severity from rule-based triage, fallback to emergency logic
+            severity = data.get('severity')
+            if severity is None:
+                # Fallback for old records without severity
+                severity = 7 if data.get('is_emergency', False) else 3
+
+            # Get categorization (may be stored in DB or need to calculate)
+            complaint_type = data.get('complaint_type', '')
+
+            # Get the main category (simplified approach) - ORIGINAL OPTIMIZED LOGIC
+            category = data.get('category')
+            if not category:
+                # Calculate from event_type if available, otherwise from complaint_type
+                event_type = data.get(
+                    'event_type') or categorize_311_complaint(complaint_type)
+                alert_type_info = get_alert_type_info(event_type)
+                category = alert_type_info.category.value
+
+            # Create alert with proper status normalization
+            alert = {
+                'id': doc.id,
+                'title': f"{complaint_type}: {(data.get('descriptor', '') or '')[:50]}",
+                'description': data.get('descriptor', ''),
+                'source': '311',
+                'priority': _get_priority_from_severity(data.get('severity', 5)),
+                # Proper status normalization
+                'status': _normalize_311_alert_status(data.get('status', 'Open')),
+                'severity': severity,
+                'timestamp': _extract_311_timestamp(data),
+                'coordinates': {
+                    'lat': data.get('latitude', 40.7589),
+                    'lng': data.get('longitude', -73.9851)
+                },
+                # Extract neighborhood and borough from full_signal_data.metadata
+                'neighborhood': data.get('full_signal_data', {}).get('metadata', {}).get('incident_zip', data.get('incident_zip', 'Unknown')),
+                'borough': data.get('full_signal_data', {}).get('metadata', {}).get('borough', data.get('borough', 'Unknown')),
+                # Simplified categorization - just the main category (ORIGINAL LOGIC)
+                'category': normalize_category(category),
+            }
+
+            all_alerts.append(alert)
+            signals_count += 1
+
+        signals_time = (datetime.utcnow() - signals_start).total_seconds()
+        query_stats['311'] = {
+            'count': signals_count,
+            'time_seconds': round(signals_time, 3)
+        }
+
+    except Exception as e:
+        logger.error(f"311 error: {e}")
+        query_stats['311'] = {'error': str(e)}
+
+    total_time = (datetime.utcnow() - start_time).total_seconds()
+
+    # Deduplicate alerts by title (linear time) - EXCLUDE 311 alerts
+    dedup_start = datetime.utcnow()
+
+    # Separate 311 and non-311 alerts
+    alerts_311 = [
+        alert for alert in all_alerts if alert.get('source') == '311']
+    alerts_non_311 = [
+        alert for alert in all_alerts if alert.get('source') != '311']
+
+    # Keep all 311 alerts (no deduplication)
+    deduplicated_alerts = alerts_311.copy()
+
+    # Deduplicate non-311 alerts using similarity detection
+    seen_titles = []  # List of normalized titles for similarity comparison
+    duplicate_count = 0
+    similarity_threshold = 0.85  # 85% similarity threshold
+
+    for alert in alerts_non_311:
+        # Normalize title for comparison (lowercase, stripped, truncated)
+        normalized_title = alert.get('title', '').lower().strip()[:150]
+
+        if not normalized_title:
+            continue
+
+        is_duplicate = False
+
+        # Check similarity against all seen titles
+        for seen_title in seen_titles:
+            similarity = difflib.SequenceMatcher(
+                None, normalized_title, seen_title).ratio()
+            if similarity >= similarity_threshold:
+                is_duplicate = True
+                duplicate_count += 1
+                break
+
+        if not is_duplicate:
+            seen_titles.append(normalized_title)
+            deduplicated_alerts.append(alert)
+
+    dedup_time = (datetime.utcnow() - dedup_start).total_seconds()
+
+    # Sort deduplicated alerts to prioritize Reddit first
+    sort_start = datetime.utcnow()
+
+    def get_source_priority(alert):
+        """Return sort priority for sources (lower = higher priority)"""
+        source = alert.get('source', 'unknown')
+        if source == 'reddit':
+            return 0  # Highest priority
+        elif source == '311':
+            return 1  # Second priority
+        elif source == 'twitter':
+            return 2  # Third priority
+        else:
+            return 3  # Everything else
+
+    # Sort by source priority, then by timestamp (newest first)
+    deduplicated_alerts.sort(key=lambda alert: (
+        get_source_priority(alert),
+        -int(datetime.fromisoformat(alert.get('timestamp',
+             '1970-01-01T00:00:00').replace('Z', '+00:00')).timestamp())
+    ))
+
+    sort_time = (datetime.utcnow() - sort_start).total_seconds()
+
+    logger.info(
+        f"🔍 DEDUP: {len(all_alerts)} → {len(deduplicated_alerts)} alerts "
+        f"({duplicate_count} non-311 duplicates removed, {len(alerts_311)} 311 alerts kept) "
+        f"in {dedup_time:.3f}s")
+
+    logger.info(
+        f"📊 SORT: Prioritized Reddit alerts in {sort_time:.3f}s")
+
+    logger.info(
+        f"🎯 MINIMAL: {len(deduplicated_alerts)} alerts in {total_time:.3f}s ({len(deduplicated_alerts)/total_time:.0f} alerts/sec)")
+
+    result = {
+        'alerts': deduplicated_alerts,
+        'count': len(deduplicated_alerts),
+        'performance': {
+            'total_time_seconds': round(total_time, 3),
+            'alerts_per_second': round(len(deduplicated_alerts) / total_time if total_time > 0 else 0, 1),
+            'query_breakdown': query_stats,
+            'deduplication': {
+                'original_count': len(all_alerts),
+                'final_count': len(deduplicated_alerts),
+                'duplicates_removed': duplicate_count,
+                'alerts_311_kept': len(alerts_311),
+                'similarity_threshold': similarity_threshold,
+                'dedup_time_seconds': round(dedup_time, 3)
+            },
+            'optimizations': ['ultra_minimal_fields', 'no_sorting', 'minimal_transform', 'similarity_deduplication_non_311'],
+            'cached': False,
+            'cache_ttl_seconds': CACHE_TTL_SECONDS,
+            'accessed_by': user.get('email')  # Track who accessed the data
+        }
+    }
+
+    # Cache the result
+    _cache[cache_key] = {
+        'data': result,
+        'timestamp': time.time()
+    }
+
+    return result
 
 
 @alerts_router.get('/get/{alert_id}')
@@ -462,87 +460,82 @@ async def get_single_alert(alert_id: str, user=Depends(verify_google_token)):
 
     **Requires authentication**: Valid Google OAuth token
     """
+    # Input validation
+    if not alert_id or not alert_id.strip():
+        raise AlertError("Alert ID is required")
+
+    logger.info(
+        f"🔒 Authenticated user {user.get('email')} accessing alert: {alert_id}")
+
+    db = get_db()
+
+    # Try monitor collection first
     try:
-        logger.info(
-            f"🔒 Authenticated user {user.get('email')} accessing alert: {alert_id}")
+        monitor_doc = db.collection(
+            'nyc_monitor_alerts').document(alert_id).get()
+        if monitor_doc.exists:
+            alert_data = monitor_doc.to_dict()
+            alert_data['id'] = monitor_doc.id
+            alert_data['source'] = 'monitor'
 
-        db = get_db()
-
-        # Try monitor collection first
-        try:
-            monitor_doc = db.collection(
-                'nyc_monitor_alerts').document(alert_id).get()
-            if monitor_doc.exists:
-                alert_data = monitor_doc.to_dict()
-                alert_data['id'] = monitor_doc.id
-                alert_data['source'] = 'monitor'
-
-                logger.info(f"✅ Found monitor alert: {alert_id}")
-                return {
-                    'alert': alert_data,
-                    'source_collection': 'nyc_monitor_alerts',
-                    'found': True,
-                    'accessed_by': user.get('email')
-                }
-        except Exception as e:
-            logger.error(f"Error checking monitor collection: {e}")
-
-        # Try 311 collection
-        try:
-            signals_doc = db.collection(
-                'nyc_311_signals').document(alert_id).get()
-            if signals_doc.exists:
-                signal_data = signals_doc.to_dict()
-
-                # Return full 311 signal with normalization for consistency
-                normalized_signal = normalize_311_signal(signal_data)
-                normalized_signal['id'] = signals_doc.id
-
-                logger.info(f"✅ Found 311 signal: {alert_id}")
-                return {
-                    'alert': normalized_signal,
-                    'source_collection': 'nyc_311_signals',
-                    'found': True,
-                    'accessed_by': user.get('email')
-                }
-        except Exception as e:
-            logger.error(f"Error checking 311 collection: {e}")
-
-        # Also try searching by unique_key for 311 signals
-        try:
-            signals_ref = db.collection('nyc_311_signals')
-            query = signals_ref.where('unique_key', '==', alert_id).limit(1)
-            docs = list(query.stream())
-
-            if docs:
-                doc = docs[0]
-                signal_data = doc.to_dict()
-                normalized_signal = normalize_311_signal(signal_data)
-                normalized_signal['id'] = doc.id
-
-                logger.info(f"✅ Found 311 signal by unique_key: {alert_id}")
-                return {
-                    'alert': normalized_signal,
-                    'source_collection': 'nyc_311_signals',
-                    'found': True,
-                    'matched_by': 'unique_key',
-                    'accessed_by': user.get('email')
-                }
-        except Exception as e:
-            logger.error(f"Error searching by unique_key: {e}")
-
-        # Not found in any collection
-        logger.warning(f"Alert not found: {alert_id}")
-        raise HTTPException(
-            status_code=404,
-            detail=f"Alert with ID '{alert_id}' not found in any collection"
-        )
-
-    except HTTPException:
-        raise
+            logger.info(f"✅ Found monitor alert: {alert_id}")
+            return {
+                'alert': alert_data,
+                'source_collection': 'nyc_monitor_alerts',
+                'found': True,
+                'accessed_by': user.get('email')
+            }
     except Exception as e:
-        logger.error(f"Error fetching single alert: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch alert")
+        logger.error(f"Error checking monitor collection: {e}")
+
+    # Try 311 collection
+    try:
+        signals_doc = db.collection(
+            'nyc_311_signals').document(alert_id).get()
+        if signals_doc.exists:
+            signal_data = signals_doc.to_dict()
+
+            # Return full 311 signal with normalization for consistency
+            normalized_signal = normalize_311_signal(signal_data)
+            normalized_signal['id'] = signals_doc.id
+
+            logger.info(f"✅ Found 311 signal: {alert_id}")
+            return {
+                'alert': normalized_signal,
+                'source_collection': 'nyc_311_signals',
+                'found': True,
+                'accessed_by': user.get('email')
+            }
+    except Exception as e:
+        logger.error(f"Error checking 311 collection: {e}")
+
+    # Also try searching by unique_key for 311 signals
+    try:
+        signals_ref = db.collection('nyc_311_signals')
+        query = signals_ref.where('unique_key', '==', alert_id).limit(1)
+        docs = list(query.stream())
+
+        if docs:
+            doc = docs[0]
+            signal_data = doc.to_dict()
+            normalized_signal = normalize_311_signal(signal_data)
+            normalized_signal['id'] = doc.id
+
+            logger.info(f"✅ Found 311 signal by unique_key: {alert_id}")
+            return {
+                'alert': normalized_signal,
+                'source_collection': 'nyc_311_signals',
+                'found': True,
+                'matched_by': 'unique_key',
+                'accessed_by': user.get('email')
+            }
+    except Exception as e:
+        logger.error(f"Error searching by unique_key: {e}")
+
+    # Not found in any collection
+    logger.warning(f"Alert not found: {alert_id}")
+    raise AlertError(
+        f"Alert with ID '{alert_id}' not found in any collection", alert_id=alert_id)
 
 
 def _get_priority_from_severity(severity: int) -> str:
@@ -731,34 +724,6 @@ async def clear_cache(user=Depends(verify_google_token)):
     }
 
 
-# Keep the stream endpoint for potential future use
-@alerts_router.get('/stream')
-async def stream_alerts(user=Depends(verify_google_token)):
-    """
-    Stream alerts via Server-Sent Events (legacy endpoint)
-
-    **Requires authentication**: Valid Google OAuth token
-    """
-    logger.info(
-        f"🔒 Authenticated user {user.get('email')} starting alert stream")
-    return EventSourceResponse(alert_stream())
-
-
-async def alert_stream():
-    """Basic alert streaming (legacy)"""
-    try:
-        db = get_db()
-        while True:
-            yield {
-                'event': 'ping',
-                'data': json.dumps({'timestamp': datetime.utcnow().isoformat()})
-            }
-            await asyncio.sleep(60)  # Ping every minute
-    except Exception as e:
-        logger.error(f"Error in alert stream: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @alerts_router.get('/stats')
 async def get_alert_stats(
     hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
@@ -769,49 +734,48 @@ async def get_alert_stats(
 
     **Requires authentication**: Valid Google OAuth token
     """
+    # Input validation
+    if hours < 1 or hours > 168:
+        raise AlertError("Hours must be between 1 and 168")
+
+    logger.info(
+        f"🔒 Authenticated user {user.get('email')} accessing alert stats")
+
+    db = get_db()
+    cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+
+    stats = {
+        'monitor_alerts': 0,
+        'nyc_311_signals': 0,
+        'total': 0
+    }
+
+    # Count monitor alerts
     try:
-        logger.info(
-            f"🔒 Authenticated user {user.get('email')} accessing alert stats")
-
-        db = get_db()
-        cutoff_time = datetime.utcnow() - timedelta(hours=hours)
-
-        stats = {
-            'monitor_alerts': 0,
-            'nyc_311_signals': 0,
-            'total': 0
-        }
-
-        # Count monitor alerts
-        try:
-            monitor_ref = db.collection('nyc_monitor_alerts')
-            monitor_docs = monitor_ref.where(
-                'created_at', '>=', cutoff_time).stream()
-            stats['monitor_alerts'] = sum(1 for _ in monitor_docs)
-        except Exception as e:
-            logger.error(f"Error counting monitor alerts: {e}")
-
-        # Count 311 signals
-        try:
-            signals_ref = db.collection('nyc_311_signals')
-            signals_docs = signals_ref.where(
-                'signal_timestamp', '>=', cutoff_time).stream()
-            stats['nyc_311_signals'] = sum(1 for _ in signals_docs)
-        except Exception as e:
-            logger.error(f"Error counting 311 signals: {e}")
-
-        stats['total'] = stats['monitor_alerts'] + stats['nyc_311_signals']
-
-        return {
-            'stats': stats,
-            'timeframe': f"Last {hours} hours",
-            'generated_at': datetime.utcnow().isoformat(),
-            'accessed_by': user.get('email')
-        }
-
+        monitor_ref = db.collection('nyc_monitor_alerts')
+        monitor_docs = monitor_ref.where(
+            'created_at', '>=', cutoff_time).stream()
+        stats['monitor_alerts'] = sum(1 for _ in monitor_docs)
     except Exception as e:
-        logger.error(f"Error generating stats: {e}")
-        raise HTTPException(status_code=500, detail="Failed to generate stats")
+        logger.error(f"Error counting monitor alerts: {e}")
+
+    # Count 311 signals
+    try:
+        signals_ref = db.collection('nyc_311_signals')
+        signals_docs = signals_ref.where(
+            'signal_timestamp', '>=', cutoff_time).stream()
+        stats['nyc_311_signals'] = sum(1 for _ in signals_docs)
+    except Exception as e:
+        logger.error(f"Error counting 311 signals: {e}")
+
+    stats['total'] = stats['monitor_alerts'] + stats['nyc_311_signals']
+
+    return {
+        'stats': stats,
+        'timeframe': f"Last {hours} hours",
+        'generated_at': datetime.utcnow().isoformat(),
+        'accessed_by': user.get('email')
+    }
 
 
 @alerts_router.get('/categories')
@@ -824,33 +788,27 @@ async def get_alert_categories(user=Depends(verify_google_token)):
 
     **Requires authentication**: Valid Google OAuth token
     """
-    try:
-        logger.info(
-            f"🔒 Authenticated user {user.get('email')} accessing alert categories")
+    logger.info(
+        f"🔒 Authenticated user {user.get('email')} accessing alert categories")
 
-        # Get the categories summary from our categorization system
-        categories = get_categories_summary()
+    # Get the categories summary from our categorization system
+    categories = get_categories_summary()
 
-        # Add additional metadata for frontend
-        response = {
-            'categories': categories,
-            # Simplified list for frontend filtering
-            'main_categories': get_main_categories(),
-            'total_categories': len(categories),
-            'total_alert_types': len(ALERT_TYPES),
-            'timestamp': datetime.utcnow().isoformat(),
-            'version': '1.0',
-            'accessed_by': user.get('email')
-        }
+    # Add additional metadata for frontend
+    response = {
+        'categories': categories,
+        # Simplified list for frontend filtering
+        'main_categories': get_main_categories(),
+        'total_categories': len(categories),
+        'total_alert_types': len(ALERT_TYPES),
+        'timestamp': datetime.utcnow().isoformat(),
+        'version': '1.0',
+        'accessed_by': user.get('email')
+    }
 
-        logger.info(
-            f"✅ Returned {len(categories)} categories with {len(ALERT_TYPES)} alert types")
-        return response
-
-    except Exception as e:
-        logger.error(f"❌ Error fetching alert categories: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to fetch alert categories: {str(e)}")
+    logger.info(
+        f"✅ Returned {len(categories)} categories with {len(ALERT_TYPES)} alert types")
+    return response
 
 
 @alerts_router.get('/agent-traces/{trace_id}')
@@ -866,41 +824,37 @@ async def get_agent_trace(trace_id: str, user=Depends(verify_google_token)):
 
     **Requires authentication**: Valid Google OAuth token - SENSITIVE INVESTIGATION DATA
     """
-    try:
-        logger.warning(
-            f"🔒🔍 Authenticated user {user.get('email')} accessing SENSITIVE agent trace: {trace_id}")
+    # Input validation
+    if not trace_id or not trace_id.strip():
+        raise AlertError("Trace ID is required")
 
-        # Get Firestore client
-        db = get_db()
+    logger.warning(
+        f"🔒🔍 Authenticated user {user.get('email')} accessing SENSITIVE agent trace: {trace_id}")
 
-        # Fetch trace document
-        trace_doc = db.collection('agent_traces').document(trace_id).get()
+    # Get Firestore client
+    db = get_db()
 
-        if not trace_doc.exists:
-            raise HTTPException(
-                status_code=404, detail="Agent trace not found")
+    # Fetch trace document
+    trace_doc = db.collection('agent_traces').document(trace_id).get()
 
-        trace_data = trace_doc.to_dict()
+    if not trace_doc.exists:
+        raise AlertError(
+            f"Agent trace not found: {trace_id}", alert_id=trace_id)
 
-        # Format trace as markdown
-        trace_markdown = format_trace_as_markdown(trace_data)
+    trace_data = trace_doc.to_dict()
 
-        logger.info(f"✅ Retrieved agent trace: {trace_id}")
-        return {
-            'trace_id': trace_id,
-            'investigation_id': trace_data.get('investigation_id'),
-            'trace': trace_markdown,
-            'created_at': trace_data.get('created_at'),
-            'approach': trace_data.get('approach'),
-            'accessed_by': user.get('email')
-        }
+    # Format trace as markdown
+    trace_markdown = format_trace_as_markdown(trace_data)
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Error fetching agent trace: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to fetch agent trace: {str(e)}")
+    logger.info(f"✅ Retrieved agent trace: {trace_id}")
+    return {
+        'trace_id': trace_id,
+        'investigation_id': trace_data.get('investigation_id'),
+        'trace': trace_markdown,
+        'created_at': trace_data.get('created_at'),
+        'approach': trace_data.get('approach'),
+        'accessed_by': user.get('email')
+    }
 
 
 def format_trace_as_markdown(trace_data: dict) -> str:
@@ -960,215 +914,213 @@ async def get_alerts_with_reports(
 
     **Requires authentication**: Valid Google OAuth token
     """
+    # Input validation
+    if limit < 1 or limit > 500:
+        raise AlertError("Limit must be between 1 and 500")
+
+    logger.info(
+        f"🔒 Authenticated user {user.get('email')} accessing alerts with reports")
+
+    # Check cache first
+    cache_key = f"reports:{limit}"
+
+    if cache_key in _cache:
+        entry = _cache[cache_key]
+        if is_cache_valid(entry['timestamp']):
+            logger.info(f"✅ Cache HIT for {cache_key}")
+            cached_data = entry['data'].copy()
+            if 'performance' in cached_data:
+                cached_data['performance']['cached'] = True
+                cached_data['performance']['cache_age_seconds'] = round(
+                    time.time() - entry['timestamp'], 2)
+            return cached_data
+
+    start_time = datetime.utcnow()
+    db = get_db()
+
+    all_alerts_with_reports = []
+    query_stats = {}
+
+    # Query monitor alerts with reports - SIMPLIFIED APPROACH
+    monitor_start = datetime.utcnow()
     try:
-        logger.info(
-            f"🔒 Authenticated user {user.get('email')} accessing alerts with reports")
+        alerts_ref = db.collection('nyc_monitor_alerts')
 
-        # Check cache first
-        cache_key = f"reports:{limit}"
+        # STRATEGY 1: First try simple status filter, then check report_url in code
+        # This avoids composite index issues
+        logger.info("🔍 Querying resolved alerts...")
 
-        if cache_key in _cache:
-            entry = _cache[cache_key]
-            if is_cache_valid(entry['timestamp']):
-                logger.info(f"✅ Cache HIT for {cache_key}")
-                cached_data = entry['data'].copy()
-                if 'performance' in cached_data:
-                    cached_data['performance']['cached'] = True
-                    cached_data['performance']['cache_age_seconds'] = round(
-                        time.time() - entry['timestamp'], 2)
-                return cached_data
+        resolved_query = (alerts_ref
+                          .where('status', '==', 'resolved')
+                          .limit(limit * 2))  # Get more to account for filtering
 
-        start_time = datetime.utcnow()
-        db = get_db()
+        monitor_count = 0
+        total_resolved = 0
 
-        all_alerts_with_reports = []
-        query_stats = {}
+        for doc in resolved_query.stream():
+            data = doc.to_dict()
+            total_resolved += 1
 
-        # Query monitor alerts with reports - SIMPLIFIED APPROACH
-        monitor_start = datetime.utcnow()
-        try:
-            alerts_ref = db.collection('nyc_monitor_alerts')
-
-            # STRATEGY 1: First try simple status filter, then check report_url in code
-            # This avoids composite index issues
-            logger.info("🔍 Querying resolved alerts...")
-
-            resolved_query = (alerts_ref
-                              .where('status', '==', 'resolved')
-                              .limit(limit * 2))  # Get more to account for filtering
-
-            monitor_count = 0
-            total_resolved = 0
-
-            for doc in resolved_query.stream():
-                data = doc.to_dict()
-                total_resolved += 1
-
-                # Check if report_url exists and is not empty (multiple field name variations)
-                report_url = None
-                for field_name in ['report_url', 'reportUrl', 'reportURL', 'report_URL']:
-                    if field_name in data and data[field_name]:
-                        report_url = data[field_name]
-                        break
-
-                if not report_url:
-                    logger.debug(
-                        f"Skipping alert {doc.id} - no report URL found")
-                    continue
-
-                logger.info(
-                    f"✅ Found alert with report: {doc.id} - {report_url}")
-
-                # Extract the real source from the nested structure
-                real_source = 'monitor'  # Default fallback
-                try:
-                    original_alert = data.get('original_alert', {})
-                    if original_alert:
-                        original_alert_data = original_alert.get(
-                            'original_alert_data', {})
-                        if original_alert_data:
-                            signals = original_alert_data.get('signals', [])
-                            if signals and len(signals) > 0:
-                                real_source = signals[0]
-                except Exception as e:
-                    logger.warning(
-                        f"Could not extract source for alert {doc.id}: {e}")
-
-                # Create alert object with report information - MINIMAL PAYLOAD
-                alert = {
-                    'id': doc.id,
-                    'title': data.get('title', 'NYC Alert'),
-                    'status': data.get('status', 'resolved'),
-                    'source': real_source,
-                    # Use updated_at as primary date
-                    'date': data.get('updated_at', data.get('created_at')),
-                    'reportUrl': report_url,
-                }
-                all_alerts_with_reports.append(alert)
-                monitor_count += 1
-
-                # Stop if we have enough
-                if monitor_count >= limit:
+            # Check if report_url exists and is not empty (multiple field name variations)
+            report_url = None
+            for field_name in ['report_url', 'reportUrl', 'reportURL', 'report_URL']:
+                if field_name in data and data[field_name]:
+                    report_url = data[field_name]
                     break
 
-            monitor_time = (datetime.utcnow() - monitor_start).total_seconds()
-            query_stats['monitor'] = {
-                'count': monitor_count,
-                'total_resolved_checked': total_resolved,
-                'time_seconds': round(monitor_time, 3),
-                'sources_found': list(set([a['source'] for a in all_alerts_with_reports if a['source'] != '311']))
-            }
+            if not report_url:
+                logger.debug(
+                    f"Skipping alert {doc.id} - no report URL found")
+                continue
 
             logger.info(
-                f"📊 Monitor query: {monitor_count} alerts with reports from {total_resolved} resolved alerts")
+                f"✅ Found alert with report: {doc.id} - {report_url}")
 
-        except Exception as e:
-            logger.error(f"Monitor reports error: {e}")
-            query_stats['monitor'] = {'error': str(e)}
+            # Extract the real source from the nested structure
+            real_source = 'monitor'  # Default fallback
+            try:
+                original_alert = data.get('original_alert', {})
+                if original_alert:
+                    original_alert_data = original_alert.get(
+                        'original_alert_data', {})
+                    if original_alert_data:
+                        signals = original_alert_data.get('signals', [])
+                        if signals and len(signals) > 0:
+                            real_source = signals[0]
+            except Exception as e:
+                logger.warning(
+                    f"Could not extract source for alert {doc.id}: {e}")
 
-        # Query 311 signals with reports (similar approach)
-        signals_start = datetime.utcnow()
-        try:
-            signals_ref = db.collection('nyc_311_signals')
-
-            # Simple approach for 311 as well
-            resolved_311_query = (signals_ref
-                                  .where('status', '==', 'resolved')
-                                  .limit(limit // 4))  # Smaller limit for 311
-
-            signals_count = 0
-            total_311_resolved = 0
-
-            for doc in resolved_311_query.stream():
-                data = doc.to_dict()
-                total_311_resolved += 1
-
-                # Check if report_url exists and is not empty
-                report_url = None
-                for field_name in ['report_url', 'reportUrl', 'reportURL', 'report_URL']:
-                    if field_name in data and data[field_name]:
-                        report_url = data[field_name]
-                        break
-
-                if not report_url:
-                    continue
-
-                # Create minimal 311 alert object - MINIMAL PAYLOAD
-                alert = {
-                    'id': doc.id,
-                    'title': f"{data.get('complaint_type', 'NYC 311')}: {(data.get('descriptor', '') or '')[:50]}",
-                    'status': _normalize_311_alert_status(data.get('status', 'resolved')),
-                    'source': '311',
-                    'date': data.get('updated_at', data.get('created_at')),
-                    'reportUrl': report_url,
-                }
-                all_alerts_with_reports.append(alert)
-                signals_count += 1
-
-            signals_time = (datetime.utcnow() - signals_start).total_seconds()
-            query_stats['311'] = {
-                'count': signals_count,
-                'total_resolved_checked': total_311_resolved,
-                'time_seconds': round(signals_time, 3)
+            # Create alert object with report information - MINIMAL PAYLOAD
+            alert = {
+                'id': doc.id,
+                'title': data.get('title', 'NYC Alert'),
+                'status': data.get('status', 'resolved'),
+                'source': real_source,
+                # Use updated_at as primary date
+                'date': data.get('updated_at', data.get('created_at')),
+                'reportUrl': report_url,
             }
+            all_alerts_with_reports.append(alert)
+            monitor_count += 1
 
-        except Exception as e:
-            logger.error(f"311 reports error: {e}")
-            query_stats['311'] = {'error': str(e)}
+            # Stop if we have enough
+            if monitor_count >= limit:
+                break
 
-        # Sort all alerts by updated_at descending (most recent first)
-        sort_start = datetime.utcnow()
-
-        def get_sort_timestamp(alert):
-            """Get timestamp for sorting (date field from minimal payload)"""
-            date_value = alert.get('date')
-            if date_value:
-                if isinstance(date_value, datetime):
-                    return date_value.timestamp()
-                elif isinstance(date_value, str):
-                    try:
-                        return datetime.fromisoformat(date_value.replace('Z', '+00:00')).timestamp()
-                    except:
-                        pass
-
-            # Fallback to epoch if no valid date
-            return 0
-
-        all_alerts_with_reports.sort(key=get_sort_timestamp, reverse=True)
-
-        # Apply final limit
-        final_alerts = all_alerts_with_reports[:limit]
-
-        sort_time = (datetime.utcnow() - sort_start).total_seconds()
-        total_time = (datetime.utcnow() - start_time).total_seconds()
+        monitor_time = (datetime.utcnow() - monitor_start).total_seconds()
+        query_stats['monitor'] = {
+            'count': monitor_count,
+            'total_resolved_checked': total_resolved,
+            'time_seconds': round(monitor_time, 3),
+            'sources_found': list(set([a['source'] for a in all_alerts_with_reports if a['source'] != '311']))
+        }
 
         logger.info(
-            f"📊 REPORTS: Found {len(final_alerts)} alerts with reports in {total_time:.3f}s")
-
-        result = {
-            'alerts': final_alerts,
-            'count': len(final_alerts),
-            'performance': {
-                'total_time_seconds': round(total_time, 3),
-                'query_breakdown': query_stats,
-                'sort_time_seconds': round(sort_time, 3),
-                'alerts_per_second': round(len(final_alerts) / total_time if total_time > 0 else 0, 1),
-                'optimizations': ['resolved_status_filter_only', 'report_url_code_filter', 'no_composite_index_needed'],
-                'cached': False,
-                'cache_ttl_seconds': CACHE_TTL_SECONDS,
-                'accessed_by': user.get('email')
-            }
-        }
-
-        # Cache the result
-        _cache[cache_key] = {
-            'data': result,
-            'timestamp': time.time()
-        }
-
-        return result
+            f"📊 Monitor query: {monitor_count} alerts with reports from {total_resolved} resolved alerts")
 
     except Exception as e:
-        logger.error(f"Error fetching alerts with reports: {e}")
-        raise HTTPException(
-            status_code=500, detail="Failed to fetch alerts with reports")
+        logger.error(f"Monitor reports error: {e}")
+        query_stats['monitor'] = {'error': str(e)}
+
+    # Query 311 signals with reports (similar approach)
+    signals_start = datetime.utcnow()
+    try:
+        signals_ref = db.collection('nyc_311_signals')
+
+        # Simple approach for 311 as well
+        resolved_311_query = (signals_ref
+                              .where('status', '==', 'resolved')
+                              .limit(limit // 4))  # Smaller limit for 311
+
+        signals_count = 0
+        total_311_resolved = 0
+
+        for doc in resolved_311_query.stream():
+            data = doc.to_dict()
+            total_311_resolved += 1
+
+            # Check if report_url exists and is not empty
+            report_url = None
+            for field_name in ['report_url', 'reportUrl', 'reportURL', 'report_URL']:
+                if field_name in data and data[field_name]:
+                    report_url = data[field_name]
+                    break
+
+            if not report_url:
+                continue
+
+            # Create minimal 311 alert object - MINIMAL PAYLOAD
+            alert = {
+                'id': doc.id,
+                'title': f"{data.get('complaint_type', 'NYC 311')}: {(data.get('descriptor', '') or '')[:50]}",
+                'status': _normalize_311_alert_status(data.get('status', 'resolved')),
+                'source': '311',
+                'date': data.get('updated_at', data.get('created_at')),
+                'reportUrl': report_url,
+            }
+            all_alerts_with_reports.append(alert)
+            signals_count += 1
+
+        signals_time = (datetime.utcnow() - signals_start).total_seconds()
+        query_stats['311'] = {
+            'count': signals_count,
+            'total_resolved_checked': total_311_resolved,
+            'time_seconds': round(signals_time, 3)
+        }
+
+    except Exception as e:
+        logger.error(f"311 reports error: {e}")
+        query_stats['311'] = {'error': str(e)}
+
+    # Sort all alerts by updated_at descending (most recent first)
+    sort_start = datetime.utcnow()
+
+    def get_sort_timestamp(alert):
+        """Get timestamp for sorting (date field from minimal payload)"""
+        date_value = alert.get('date')
+        if date_value:
+            if isinstance(date_value, datetime):
+                return date_value.timestamp()
+            elif isinstance(date_value, str):
+                try:
+                    return datetime.fromisoformat(date_value.replace('Z', '+00:00')).timestamp()
+                except:
+                    pass
+
+        # Fallback to epoch if no valid date
+        return 0
+
+    all_alerts_with_reports.sort(key=get_sort_timestamp, reverse=True)
+
+    # Apply final limit
+    final_alerts = all_alerts_with_reports[:limit]
+
+    sort_time = (datetime.utcnow() - sort_start).total_seconds()
+    total_time = (datetime.utcnow() - start_time).total_seconds()
+
+    logger.info(
+        f"📊 REPORTS: Found {len(final_alerts)} alerts with reports in {total_time:.3f}s")
+
+    result = {
+        'alerts': final_alerts,
+        'count': len(final_alerts),
+        'performance': {
+            'total_time_seconds': round(total_time, 3),
+            'query_breakdown': query_stats,
+            'sort_time_seconds': round(sort_time, 3),
+            'alerts_per_second': round(len(final_alerts) / total_time if total_time > 0 else 0, 1),
+            'optimizations': ['resolved_status_filter_only', 'report_url_code_filter', 'no_composite_index_needed'],
+            'cached': False,
+            'cache_ttl_seconds': CACHE_TTL_SECONDS,
+            'accessed_by': user.get('email')
+        }
+    }
+
+    # Cache the result
+    _cache[cache_key] = {
+        'data': result,
+        'timestamp': time.time()
+    }
+
+    return result

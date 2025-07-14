@@ -1,6 +1,6 @@
 # NYC Monitor - Architecture Overview
 
-Atlas is an AI-powered urban intelligence system that autonomously monitors New York City through real-time data collection and intelligent investigation. The system combines continuous background monitoring with on-demand deep investigation capabilities.
+**NYC-Monitor** is an AI-powered urban intelligence system that autonomously monitors New York City through real-time data collection and intelligent investigation. The system combines continuous background monitoring with on-demand deep investigation capabilities.
 
 ### High-level Diagram
 
@@ -10,15 +10,15 @@ graph LR
         Sources[📡 Multi-Source<br/>Collection]
         AI[🧠 AI Triage]
     end
-    
+
     subgraph "Storage"
         DB[(💾 Multi-DB<br/>Architecture)]
     end
-    
+
     subgraph "Intelligence"
         Agent[🤖 Gemini ADK<br/>Investigation Agent]
     end
-    
+
     subgraph "Output"
         UI[🖥️ Dashboard]
         Reports[📊 Generated<br/>Reports]
@@ -30,7 +30,7 @@ graph LR
     Agent --> UI
 
     classDef input fill:#e1f5fe
-    classDef storage fill:#e8f5e8  
+    classDef storage fill:#e8f5e8
     classDef intelligence fill:#f3e5f5
     classDef output fill:#fff3e0
 
@@ -70,7 +70,7 @@ flowchart TD
 
     subgraph Investigation["🤖 AI Investigation Agent"]
         ADK[🧠 Google ADK Agent<br/>Gemini 2.0 Flash Experimental]
-        
+
         subgraph Tools["🛠️ Agent Tools"]
             WebSearch[🔍 Web Search Tool<br/>DuckDuckGo + Google Fallback]
             MapTool[🗺️ Satellite Map Tool<br/>Multi-zoom Geographic Analysis]
@@ -158,11 +158,13 @@ flowchart TD
 ### 🤖 **AI Investigation Engine**
 
 **Core Agent**: Single intelligent agent built with Google ADK and Gemini 2.0 Flash Experimental
+
 - **Model**: `gemini-2.0-flash-exp` for advanced reasoning and tool calling
 - **Framework**: Google Agent Development Kit (ADK) for cloud-native execution
 - **Execution**: Fully autonomous workflow with comprehensive tool access
 
 **Tool-Based Investigation Workflow**:
+
 1. **Web Intelligence**: DuckDuckGo search with Google Custom Search fallback
 2. **Geographic Analysis**: Satellite map generation at multiple zoom levels (18x close, 12x wide)
 3. **Visual Evidence**: Targeted image collection from 3 search strategies
@@ -171,14 +173,16 @@ flowchart TD
 ### 📊 **Data Architecture**
 
 #### 🔥 **Firestore - Real-Time Operations**
+
 **Purpose**: Fast queries, investigation state management, real-time coordination
+
 ```json
 {
   "alerts/alert_id": {
     "severity": 8,
-    "status": "investigating", 
+    "status": "investigating",
     "event_type": "infrastructure_failure",
-    "location": {"lat": 40.7, "lng": -73.9, "address": "Manhattan Bridge"},
+    "location": { "lat": 40.7, "lng": -73.9, "address": "Manhattan Bridge" },
     "created_at": "2024-01-15T14:30:00Z",
     "sources": ["reddit", "twitter", "311"],
     "investigation_state": {
@@ -192,13 +196,15 @@ flowchart TD
 ```
 
 #### 🎯 **Vertex AI Vector DB - Semantic Intelligence**
+
 **Purpose**: Content indexing, similarity search, pattern recognition
+
 ```json
 {
   "documents/doc_id": {
     "content": "Manhattan Bridge experiencing significant delays...",
     "source": "reddit_r_brooklyn",
-    "alert_id": "infrastructure_failure_001", 
+    "alert_id": "infrastructure_failure_001",
     "embedding": [0.1, 0.2, 0.3, ...],
     "metadata": {
       "timestamp": "2024-01-15T14:25:00Z",
@@ -211,7 +217,9 @@ flowchart TD
 ```
 
 #### 📊 **BigQuery - Analytics & Historical Context**
+
 **Purpose**: Structured queries, statistical analysis, trend identification
+
 ```sql
 -- Core Analytics Tables
 census_demographics (tract_id, population, income, demographics)
@@ -221,13 +229,15 @@ permit_activity (permit_id, address, type, status, impact_area)
 ```
 
 #### ☁️ **Cloud Storage - Files & Generated Content**
+
 **Purpose**: Media storage, report templates, investigation artifacts
+
 ```
 /atlas-storage/
 ├── investigation_artifacts/
 │   ├── {investigation_id}/
 │   │   ├── satellite_maps/     # Generated geographic context
-│   │   ├── evidence_images/    # Collected visual evidence  
+│   │   ├── evidence_images/    # Collected visual evidence
 │   │   ├── web_screenshots/    # Search result captures
 │   │   └── final_report.json   # Investigation metadata
 ├── slides_templates/
@@ -246,6 +256,7 @@ permit_activity (permit_id, address, type, status, impact_area)
 When a user triggers an investigation, the ADK agent executes a sophisticated 4-phase workflow:
 
 #### **Phase 1: Web Intelligence Gathering**
+
 ```python
 # Agent executes web search tools with specific targeting
 search_1 = web_search(query=f"{event_type} {location}", max_results=5)
@@ -256,13 +267,15 @@ findings = extract_incident_analysis(search_results)
 ```
 
 **Intelligence Extraction**:
+
 - **Event Scale**: Crowd size, geographic impact, duration
-- **Timeline**: When events occurred, sequence of developments  
+- **Timeline**: When events occurred, sequence of developments
 - **Official Response**: Police actions, government statements, transportation impacts
 - **Media Coverage**: Which outlets covered it, narrative themes, quoted sources
 - **Context**: Why it happened, broader issues, political/social significance
 
 #### **Phase 2: Geographic Context Generation**
+
 ```python
 # Multi-zoom satellite imagery for comprehensive geographic understanding
 close_map = generate_location_map(location, zoom_level=18, map_type="satellite")
@@ -270,24 +283,28 @@ wide_map = generate_location_map(location, zoom_level=12, map_type="satellite")
 ```
 
 **Geographic Intelligence**:
+
 - **Close View (18x zoom)**: Specific infrastructure, building details, immediate area
 - **Wide View (12x zoom)**: Neighborhood context, transportation networks, surrounding areas
 - **Impact Assessment**: Understanding geographic scope and potential ripple effects
 
 #### **Phase 3: Visual Evidence Collection**
+
 ```python
 # Targeted image collection from multiple search strategies
 evidence_1 = collect_media_content(f"{location} {event_type}", max_items=3)
-evidence_2 = collect_media_content(f"{location}", max_items=3)  
+evidence_2 = collect_media_content(f"{location}", max_items=3)
 evidence_3 = collect_media_content(f"NYC {event_type}", max_items=2)
 ```
 
 **Evidence Strategy**:
+
 - **Specific Targeting**: Location + event type for precise evidence
 - **Contextual Gathering**: Location-only search for area context
 - **Pattern Recognition**: NYC + event type for similar incidents
 
 #### **Phase 4: Professional Report Generation**
+
 ```python
 # Comprehensive briefing with all collected artifacts and analysis
 presentation = create_slides_presentation(
@@ -298,6 +315,7 @@ presentation = create_slides_presentation(
 ```
 
 **Report Components**:
+
 - **Executive Summary**: Key findings and recommendations
 - **Evidence Gallery**: All collected maps, images, and screenshots
 - **Analysis Section**: Synthesized insights and pattern recognition
@@ -311,7 +329,7 @@ The system implements sophisticated quality assessment:
 def calculate_confidence_score(artifacts, findings):
     components = {
         'artifact_quantity': score_artifact_count(artifacts),      # 0-25 points
-        'artifact_diversity': score_artifact_types(artifacts),    # 0-20 points  
+        'artifact_diversity': score_artifact_types(artifacts),    # 0-20 points
         'web_insights': score_meaningful_findings(findings),      # 0-25 points
         'geographic_coverage': score_map_quality(artifacts),      # 0-15 points
         'visual_evidence': score_image_quality(artifacts)        # 0-15 points
@@ -320,6 +338,7 @@ def calculate_confidence_score(artifacts, findings):
 ```
 
 **Quality Thresholds**:
+
 - **High Confidence (85%+)**: 2+ maps, 8+ images, meaningful web insights, comprehensive analysis
 - **Medium Confidence (70-84%)**: Adequate artifacts with some analysis gaps
 - **Low Confidence (<70%)**: Limited evidence or incomplete investigation
@@ -327,6 +346,7 @@ def calculate_confidence_score(artifacts, findings):
 ### 🔄 **Real-Time Data Collection**
 
 #### **Continuous Monitoring (15-minute intervals)**
+
 ```python
 # Automated data collection from multiple sources
 collectors = {
@@ -342,19 +362,21 @@ deduplicated_alerts = deduplicate_alerts(raw_alerts, threshold=0.85)
 ```
 
 **Deduplication Strategy**:
+
 - **Similarity Threshold**: 85% similarity using Python's `difflib.SequenceMatcher`
 - **Source Prioritization**: Reddit first, then 311, Twitter, others
 - **Preservation Logic**: All 311 (official) alerts preserved, deduplication only for social media
 - **Title Comparison**: Extended to 150 characters for better accuracy
 
 #### **Alert Triage & Prioritization**
+
 ```python
 # AI-powered severity scoring and pattern detection
 def triage_alert(alert_data):
     severity_score = ai_severity_assessment(alert_data)
     category = classify_incident_type(alert_data)
     urgency = calculate_response_urgency(severity_score, category)
-    
+
     return {
         'severity': severity_score,      # 1-10 scale
         'category': category,            # infrastructure, safety, traffic, etc.
@@ -366,6 +388,7 @@ def triage_alert(alert_data):
 ## Technology Stack Details
 
 ### 🧠 **AI & Machine Learning**
+
 - **Primary Model**: Gemini 2.0 Flash Experimental (`gemini-2.0-flash-exp`)
 - **Framework**: Google Agent Development Kit (ADK) for cloud-native agents
 - **Execution Environment**: Vertex AI cloud infrastructure
@@ -373,6 +396,7 @@ def triage_alert(alert_data):
 - **Vector Search**: Vertex AI Vector DB for semantic similarity
 
 ### 🌐 **Backend Infrastructure**
+
 - **API Framework**: FastAPI with async/await for high performance
 - **Authentication**: Google OAuth 2.0 with role-based access control
 - **Data Storage**: Firestore for real-time, BigQuery for analytics
@@ -380,6 +404,7 @@ def triage_alert(alert_data):
 - **Deployment**: Google Cloud Run with automatic scaling
 
 ### 🖥️ **Frontend Application**
+
 - **Framework**: React 18 with TypeScript for type safety
 - **Mapping**: Mapbox GL JS for interactive geographic visualization
 - **State Management**: React Context API with custom hooks
@@ -387,6 +412,7 @@ def triage_alert(alert_data):
 - **Authentication**: Google OAuth integration with protected routes
 
 ### 🔧 **DevOps & Deployment**
+
 - **CI/CD**: GitHub Actions with automated testing and deployment
 - **Containerization**: Docker with multi-stage builds
 - **Infrastructure**: Terraform for cloud resource management
@@ -396,8 +422,9 @@ def triage_alert(alert_data):
 ## Data Flow Examples
 
 ### 🚨 **Infrastructure Emergency**
+
 ```
-311 Report: "Manhattan Bridge cable issue" → AI Triage (Severity: 9) 
+311 Report: "Manhattan Bridge cable issue" → AI Triage (Severity: 9)
 → Firestore Alert → Dashboard Notification → User Triggers Investigation
 → ADK Agent → Web Search (bridge status, news coverage) + Map Generation (close/wide view)
 → Image Collection (bridge photos, traffic impacts) → Google Slides Report
@@ -405,6 +432,7 @@ def triage_alert(alert_data):
 ```
 
 ### 🎭 **Public Event Monitoring**
+
 ```
 Reddit Post: "Pride parade blocking streets" → AI Triage (Severity: 6)
 → Auto-Investigation Trigger → Web Search (event details, official permits)
@@ -413,6 +441,7 @@ Reddit Post: "Pride parade blocking streets" → AI Triage (Severity: 6)
 ```
 
 ### 📊 **Pattern Recognition**
+
 ```
 Multiple Social Media: "Subway delays" → AI Clustering → Investigation Trigger
 → Web Research (MTA alerts, news coverage) → Historical Data (past delay patterns)
@@ -423,21 +452,25 @@ Multiple Social Media: "Subway delays" → AI Clustering → Investigation Trigg
 ## Key Innovations
 
 ### ✅ **Autonomous Intelligence**
+
 - **No Human Intervention**: Complete investigation cycle without manual oversight
 - **Adaptive Workflow**: Agent adjusts strategy based on available evidence
 - **Quality Assurance**: Built-in confidence scoring and evidence validation
 
 ### 🎯 **Speed Advantage**
+
 - **Sub-8-Minute Response**: Faster than traditional media or government response
 - **Real-Time Processing**: Investigation begins immediately upon alert detection
 - **Parallel Execution**: Simultaneous web search, mapping, and evidence collection
 
 ### 🔧 **Technical Excellence**
+
 - **Tool Calling Mastery**: Sophisticated agent tool integration
 - **Multi-Source Fusion**: Seamless integration of diverse data sources
 - **Professional Output**: Google Slides API for publication-ready reports
 
 ### 🌟 **Urban Intelligence**
+
 - **Context Awareness**: Geographic, temporal, and social context integration
 - **Pattern Detection**: Cross-domain correlation and trend identification
 - **Actionable Insights**: Decision-ready intelligence for city officials

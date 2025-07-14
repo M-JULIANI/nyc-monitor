@@ -7,7 +7,7 @@ import vertexai
 from vertexai.generative_models import GenerativeModel
 
 from .investigation.state_manager import AlertData, state_manager
-from .investigation.progress_tracker import progress_tracker, ProgressStatus
+from .investigation.deprecated_progress_tracker import progress_tracker, ProgressStatus
 from .investigation.tracing import get_distributed_tracer
 
 logger = logging.getLogger(__name__)
