@@ -43,7 +43,7 @@ export const MapStateProvider: React.FC<MapStateProviderProps> = ({ children }) 
     priority: 'all',
     source: 'all',
     status: 'all',
-    timeRangeHours: 72 // Default to last 3 days to align with -3d label
+    timeRangeHours: 168 // Default to last 7 days to show all available data
   });
 
   // View mode state
