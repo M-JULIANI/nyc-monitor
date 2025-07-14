@@ -56,12 +56,10 @@ def configure_middleware(app: FastAPI) -> None:
     # 1. CORS Middleware (essential for your frontend)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=get_allowed_origins(config),
+        allow_origins=get_allowed_origins(),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
-        max_age=3600  # Cache preflight requests
     )
 
     # 2. Simple Request Logging (optional - set ENABLE_REQUEST_LOGGING=true to enable)
@@ -76,20 +74,17 @@ def configure_middleware(app: FastAPI) -> None:
     logger.info("✅ Essential middleware configured successfully")
 
 
-def get_allowed_origins(config) -> list:
+def get_allowed_origins() -> list:
     """Get allowed origins based on environment"""
 
     base_origins = [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:8000",
+        "https://nyc-monitor.app",
+        "https://atlas-frontend-290750569862.us-central1.run.app",
+        "https://atlas-backend-blz2r3yjgq-uc.a.run.app",
     ]
-
-    if config.ENV == "production":
-        base_origins.extend([
-            "https://nyc-monitor.app",
-            "https://atlas-frontend-290750569862.us-central1.run.app",
-        ])
 
     return base_origins
 
