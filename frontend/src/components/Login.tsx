@@ -38,21 +38,26 @@ const Login: React.FC = () => {
                     await login(token);
                     navigate(from, { replace: true });
                   } catch (error) {
-                    console.error('Login failed:', error);
+                    console.error('❌ Login failed:', error);
                     setIsLoggingIn(false);
                     // You might want to show an error message to the user here
                   }
                 }
               }}
               onError={() => {
-                console.error('Login failed');
+                console.error('❌ Google OAuth failed');
                 setIsLoggingIn(false);
                 // You might want to show an error message to the user here
               }}
-              useOneTap
+              useOneTap={false}
               theme="filled_black"
               text="signin_with"
               shape="rectangular"
+              auto_select={false}
+              type="standard"
+              size="large"
+              locale="en"
+              logo_alignment="left"
             />
           )}
         </div>
