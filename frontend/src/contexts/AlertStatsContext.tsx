@@ -51,7 +51,7 @@ export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children
   const [alertCategories, setAlertCategories] = useState<AlertCategoriesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const timeRange = 72; // Fixed to 3 days
+  const timeRange = 168; // Fixed to 7 days to match data availability
 
   const fetchStats = async () => {
     try {

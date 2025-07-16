@@ -90,7 +90,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   const {
     pollInterval = 1800000, // 30 minutes
     limit = 2000, // High limit for map display
-    hours = 72, // Default to 24 hours if not provided
+    hours = 168, // Default to 7 days to get all available data
   } = options;
 
   const [alerts, setAlerts] = useState<Alert[]>([]);
