@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from sse_starlette.sse import EventSourceResponse
 from google.cloud import firestore
 from ..config import get_config
-from ..auth import verify_google_token
+from ..auth import verify_session
 from ..exceptions import AlertError, DatabaseError
 import asyncio
 from datetime import datetime, timedelta
@@ -158,7 +158,7 @@ async def get_recent_alerts(
     limit: int = Query(2000, ge=1, le=5000,
                        description="Number of alerts to return"),
     hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """
     Get recent alerts with MINIMAL data - ultra-fast for map display
@@ -451,7 +451,7 @@ async def get_recent_alerts(
 
 
 @alerts_router.get('/get/{alert_id}')
-async def get_single_alert(alert_id: str, user=Depends(verify_google_token)):
+async def get_single_alert(alert_id: str, user=Depends(verify_session)):
     """
     Get a single alert with full details by ID
 
@@ -674,7 +674,7 @@ def _extract_monitor_timestamp(data: dict) -> str:
 
 
 @alerts_router.get('/cache/info')
-async def get_cache_info(user=Depends(verify_google_token)):
+async def get_cache_info(user=Depends(verify_session)):
     """
     Get information about current cache state
 
@@ -706,7 +706,7 @@ async def get_cache_info(user=Depends(verify_google_token)):
 
 
 @alerts_router.delete('/cache')
-async def clear_cache(user=Depends(verify_google_token)):
+async def clear_cache(user=Depends(verify_session)):
     """
     Clear all cached data
 
@@ -727,7 +727,7 @@ async def clear_cache(user=Depends(verify_google_token)):
 @alerts_router.get('/stats')
 async def get_alert_stats(
     hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """
     Get simple statistics for both collections
@@ -779,7 +779,7 @@ async def get_alert_stats(
 
 
 @alerts_router.get('/categories')
-async def get_alert_categories(user=Depends(verify_google_token)):
+async def get_alert_categories(user=Depends(verify_session)):
     """
     Get all available alert categories and types with metadata for frontend use
 
@@ -812,7 +812,7 @@ async def get_alert_categories(user=Depends(verify_google_token)):
 
 
 @alerts_router.get('/agent-traces/{trace_id}')
-async def get_agent_trace(trace_id: str, user=Depends(verify_google_token)):
+async def get_agent_trace(trace_id: str, user=Depends(verify_session)):
     """
     Get agent trace from Firestore by trace ID
 
@@ -904,7 +904,7 @@ def format_trace_as_markdown(trace_data: dict) -> str:
 async def get_alerts_with_reports(
     limit: int = Query(100, ge=1, le=500,
                        description="Number of alerts with reports to return"),
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """
     Get alerts that have reports (status='resolved' and reportUrl exists)
