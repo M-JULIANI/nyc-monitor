@@ -19,6 +19,19 @@ from dotenv import load_dotenv
 import logging
 from datetime import datetime
 
+# Initialize AgentOps for observability
+try:
+    import agentops
+    agentops.init(
+        api_key=os.getenv("AGENTOPS_API_KEY"),
+        trace_name="nyc-monitor-backend"
+    )
+    print("✅ AgentOps initialized successfully")
+except ImportError:
+    print("⚠️ AgentOps not installed, skipping initialization")
+except Exception as e:
+    print(f"⚠️ AgentOps initialization failed: {e}")
+
 # Only load .env file in development (not in production containers)
 # Look for .env in the parent directory (project root)
 env_file_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")

@@ -440,13 +440,16 @@ deploy-api: check-docker check-gcloud
 	@if [ -n "$(NYC_311_APP_TOKEN)" ]; then \
 		echo "NYC_311_APP_TOKEN: \"$(NYC_311_APP_TOKEN)\"" >> /tmp/deploy-env-vars.yaml; \
 	fi
+	@if [ -n "$(AGENTOPS_API_KEY)" ]; then \
+		echo "AGENTOPS_API_KEY: \"$(AGENTOPS_API_KEY)\"" >> /tmp/deploy-env-vars.yaml; \
+	fi
 	@echo "📋 Environment variables being set:"
 	@cat /tmp/deploy-env-vars.yaml
 	@echo "Deploying to Cloud Run..."
 	@gcloud run deploy $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
 		--image "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)" \
 		--platform managed \
-		--region $(CLOUD_RUN_REGION) \
+		--region $(CLOUD_RUN_REGION) \ 
 		--allow-unauthenticated \
 		--port 8000 \
 		--memory=2Gi \
