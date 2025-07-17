@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, HTTPException, Depends, Response, Request
+from fastapi.security import HTTPBearer
 from google.cloud import firestore
 from ..auth import verify_google_token
 from ..config import get_config
-from ..exceptions import AuthenticationError, DatabaseError
 import logging
 import os
-from typing import Dict
+import jwt
+import datetime
+from typing import Dict, Optional
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -15,89 +18,138 @@ auth_router = APIRouter(prefix="/auth", tags=["auth"])
 # Collection name
 users_collection = 'users'
 
+# Pydantic models
+class LoginRequest(BaseModel):
+    token: str
+
+class LoginResponse(BaseModel):
+    user: Dict
+    message: str
 
 def get_db():
     """Get Firestore client instance"""
-    # Any connection errors will be caught by global handlers
     return firestore.Client(project=get_config().GOOGLE_CLOUD_PROJECT)
 
-
-def get_default_role(email: str) -> str:
-    """Determine default role based on email whitelist"""
-    # Get whitelisted emails from environment
-    admin_emails = os.getenv('ADMIN_EMAILS', '').split(',')
-    judge_emails = os.getenv('JUDGE_EMAILS', '').split(',')
-
-    # Clean up whitespace
-    admin_emails = [email.strip().lower()
-                    for email in admin_emails if email.strip()]
-    judge_emails = [email.strip().lower()
-                    for email in judge_emails if email.strip()]
-
-    email_lower = email.lower()
-
-    if email_lower in admin_emails:
-        return 'admin'
-    elif email_lower in judge_emails:
-        return 'judge'
-    else:
-        return 'viewer'
-
-
-async def get_or_create_user(user_info: Dict) -> Dict:
-    """
-    Get existing user or create new one if doesn't exist.
-    Returns user document with role.
-    """
-    # Validate required user info
-    if not user_info.get('user_id'):
-        raise AuthenticationError("User ID is required")
-
-    if not user_info.get('email'):
-        raise AuthenticationError("Email is required")
-
-    # Get database connection - any errors will be caught by global handlers
-    db = get_db()
-
-    # Check if user exists
-    user_ref = db.collection(users_collection).document(user_info['user_id'])
-    user_doc = user_ref.get()
-
-    if user_doc.exists:
-        # Return existing user
-        return user_doc.to_dict()
-
-    # Determine role based on email whitelist
-    default_role = get_default_role(user_info['email'])
-
-    # Create new user with determined role
-    new_user = {
-        'id': user_info['user_id'],
-        'email': user_info['email'],
-        'name': user_info.get('name', ''),
-        'role': default_role,
-        'created_at': firestore.SERVER_TIMESTAMP,
-        'updated_at': firestore.SERVER_TIMESTAMP
+def create_session_token(user_data: Dict) -> str:
+    """Create a secure session token"""
+    config = get_config()
+    
+    # Use a secret key for signing (should be in environment variables)
+    secret_key = os.getenv('SESSION_SECRET_KEY', 'your-secret-key-change-this')
+    
+    payload = {
+        'user_id': user_data['user_id'],
+        'email': user_data['email'],
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(days=7),  # 7 day expiration
+        'iat': datetime.datetime.utcnow(),
     }
+    
+    return jwt.encode(payload, secret_key, algorithm='HS256')
 
-    # Store in Firestore - any database errors will be caught by global handlers
-    user_ref.set(new_user)
+def verify_session_token(token: str) -> Dict:
+    """Verify and decode session token"""
+    secret_key = os.getenv('SESSION_SECRET_KEY', 'your-secret-key-change-this')
+    
+    try:
+        payload = jwt.decode(token, secret_key, algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Session expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid session")
 
-    # Log successful user creation
-    logger.info(
-        f"Created new user: {user_info['email']} with role: {default_role}")
+@auth_router.post("/login", response_model=LoginResponse)
+async def login(request: LoginRequest, response: Response):
+    """
+    Exchange Google ID token for secure session cookie
+    """
+    try:
+        # Verify Google ID token
+        user_data = await verify_google_token(request.token)
+        
+        # Get or create user in database
+        db = get_db()
+        user_ref = db.collection(users_collection).document(user_data['user_id'])
+        user_doc = user_ref.get()
+        
+        if user_doc.exists:
+            stored_user = user_doc.to_dict()
+            # Update last login
+            user_ref.update({'last_login': firestore.SERVER_TIMESTAMP})
+        else:
+            # Create new user
+            stored_user = {
+                'id': user_data['user_id'],
+                'email': user_data['email'],
+                'name': user_data.get('name', ''),
+                'role': 'viewer',  # Default role
+                'created_at': firestore.SERVER_TIMESTAMP,
+                'last_login': firestore.SERVER_TIMESTAMP,
+            }
+            user_ref.set(stored_user)
+        
+        # Create session token
+        session_token = create_session_token(user_data)
+        
+        # Set HttpOnly cookie
+        response.set_cookie(
+            key="session",
+            value=session_token,
+            max_age=7 * 24 * 60 * 60,  # 7 days
+            httponly=True,  # Cannot be accessed by JavaScript
+            secure=True,    # Only sent over HTTPS
+            samesite="lax"  # CSRF protection
+        )
+        
+        return LoginResponse(
+            user=stored_user,
+            message="Login successful"
+        )
+        
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 
-    return new_user
-
+@auth_router.post("/logout")
+async def logout(response: Response):
+    """
+    Clear session cookie
+    """
+    response.delete_cookie(
+        key="session",
+        httponly=True,
+        secure=True,
+        samesite="lax"
+    )
+    return {"message": "Logout successful"}
 
 @auth_router.get("/me")
-async def get_current_user(user_info: Dict = Depends(verify_google_token)):
-    """Get current user info, creating user if doesn't exist"""
-
-    # Get or create user - any errors will be caught by global handlers
-    user = await get_or_create_user(user_info)
-
-    return {
-        "user": user,
-        "token": "valid"  # Token is already verified by verify_google_token
-    }
+async def get_current_user(request: Request):
+    """
+    Get current user from session cookie
+    """
+    try:
+        # Get session cookie
+        session_token = request.cookies.get("session")
+        if not session_token:
+            raise HTTPException(status_code=401, detail="No session")
+        
+        # Verify session token
+        payload = verify_session_token(session_token)
+        
+        # Get user from database
+        db = get_db()
+        user_ref = db.collection(users_collection).document(payload['user_id'])
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_data = user_doc.to_dict()
+        return {"user": user_data}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get current user error: {str(e)}")
+        raise HTTPException(status_code=401, detail="Invalid session")

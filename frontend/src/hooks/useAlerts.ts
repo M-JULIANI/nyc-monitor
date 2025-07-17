@@ -112,15 +112,8 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     try {
       setIsLoadingReports(true);
 
-      const token = localStorage.getItem("idToken");
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
       const response = await fetch(`/api/alerts/reports?limit=100`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -148,15 +141,8 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       setIsLoading(true);
       setError(null);
 
-      const token = localStorage.getItem("idToken");
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
       const response = await fetch(`/api/alerts/recent?limit=${limit}&hours=${hours}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -204,11 +190,6 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   const generateReport = useCallback(
     async (alertId: string): Promise<{ success: boolean; message: string; investigationId?: string }> => {
       try {
-        const token = localStorage.getItem("idToken");
-        if (!token) {
-          throw new Error("Authentication required");
-        }
-
         // Check if investigation is already in progress
         if (investigatingAlerts.has(alertId)) {
           //console.log(`Investigation already in progress for alert ${alertId}`);
@@ -248,8 +229,8 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
+          credentials: 'include',
           body: JSON.stringify(investigationRequest),
         });
 
@@ -326,15 +307,8 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   const fetchAgentTrace = useCallback(
     async (investigationId: string): Promise<{ success: boolean; trace?: string; message: string }> => {
       try {
-        const token = localStorage.getItem("idToken");
-        if (!token) {
-          throw new Error("Authentication required");
-        }
-
         const response = await fetch(`/api/investigate/${investigationId}/trace/export`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: 'include',
         });
 
         if (!response.ok) {
@@ -366,18 +340,13 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   const refetchAlert = useCallback(
     async (alertId: string): Promise<{ success: boolean; message: string; alert?: Alert }> => {
       try {
-        const token = localStorage.getItem("idToken");
-        if (!token) {
-          throw new Error("Authentication required");
-        }
-
         //console.log(`🔄 Refetching alert ${alertId}...`);
 
         const response = await fetch(`/api/alerts/get/${alertId}?_t=${Date.now()}`, {
           headers: {
-            Authorization: `Bearer ${token}`,
             "Cache-Control": "no-cache",
           },
+          credentials: 'include',
         });
 
         if (!response.ok) {

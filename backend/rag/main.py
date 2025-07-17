@@ -1,4 +1,4 @@
-from .auth import verify_google_token
+from .auth import verify_session
 from .endpoints import chat_router, investigation_router, auth_router, admin_router, alerts_router
 from .config import initialize_config, get_config
 from .exceptions import (
@@ -101,7 +101,7 @@ async def health_check():
 
 
 @app.get("/auth-test")
-async def auth_test(user=Depends(verify_google_token)):
+async def auth_test(user=Depends(verify_session)):
     """Test endpoint to verify authentication is working"""
     return {
         "status": "authenticated",

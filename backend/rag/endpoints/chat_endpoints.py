@@ -16,7 +16,7 @@ from ..agents.chat_agent import (
     get_conversation_history,
     get_session_info
 )
-from ..auth import verify_google_token
+from ..auth import verify_session
 from ..config import get_config
 
 # Set up logging
@@ -49,7 +49,7 @@ async def chat_endpoint(
     request: Request,
     chat_message: ChatMessage,
     include_history: bool = False,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """
     Chat with the existing data corpus with conversation memory.
@@ -99,7 +99,7 @@ async def chat_endpoint(
 @chat_router.get("/{session_id}/history")
 async def get_chat_history(
     session_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Get conversation history for a specific session."""
     try:
@@ -119,7 +119,7 @@ async def get_chat_history(
 @chat_router.delete("/{session_id}")
 async def clear_chat_session_endpoint(
     session_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Clear a specific chat session to start fresh."""
     try:
@@ -134,7 +134,7 @@ async def clear_chat_session_endpoint(
 
 @chat_router.get("/sessions")
 async def get_chat_sessions(
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Get list of active chat sessions."""
     try:

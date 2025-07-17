@@ -19,10 +19,8 @@ export class ApiClient {
     data?: any,
     customHeaders?: Record<string, string>
   ): Promise<ApiResponse<T>> {
-    const token = localStorage.getItem('idToken');
     const headers: Record<string, string> = {
       ...this.config.headers,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...customHeaders,
     };
 
@@ -30,6 +28,7 @@ export class ApiClient {
       const response = await fetch(`${this.config.baseUrl}${endpoint}`, {
         method,
         headers,
+        credentials: 'include', // Include cookies for authentication
         body: data ? JSON.stringify(data) : undefined,
       });
 
@@ -74,11 +73,7 @@ export class ApiClient {
 
   // SSE (Server-Sent Events) helper for real-time updates
   createEventSource(endpoint: string): EventSource {
-    const token = localStorage.getItem('idToken');
-    const url = new URL(`${this.config.baseUrl}${endpoint}`);
-    if (token) {
-      url.searchParams.append('token', token);
-    }
-    return new EventSource(url.toString());
+    const url = `${this.config.baseUrl}${endpoint}`;
+    return new EventSource(url, { withCredentials: true });
   }
 } 

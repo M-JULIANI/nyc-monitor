@@ -18,7 +18,7 @@ from ..investigation_service_simple import investigate_alert_simple
 from ..investigation.state_manager import AlertData, state_manager
 from ..investigation.deprecated_progress_tracker import progress_tracker
 from ..investigation.tracing import get_distributed_tracer
-from ..auth import verify_google_token
+from ..auth import verify_session
 from ..exceptions import InvestigationError, AlertError, DatabaseError
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ class InvestigationResponse(BaseModel):
 @investigation_router.post("", response_model=InvestigationResponse)
 async def start_investigation(
     alert_request: AlertRequest,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """
     Start a new investigation for an alert.
@@ -318,7 +318,7 @@ async def start_investigation(
 @investigation_router.get("/{investigation_id}/progress")
 async def get_investigation_progress(
     investigation_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Get the current progress of an investigation"""
     # Input validation
@@ -341,7 +341,7 @@ async def get_investigation_progress(
 @investigation_router.get("/{investigation_id}/stream")
 async def stream_investigation_progress(
     investigation_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Stream real-time progress updates"""
     async def generate_progress_stream():
@@ -396,7 +396,7 @@ async def stream_investigation_progress(
 @investigation_router.get("/{investigation_id}/trace/summary")
 async def get_trace_summary(
     investigation_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Get high-level trace summary"""
     # Input validation
@@ -420,7 +420,7 @@ async def get_trace_summary(
 @investigation_router.get("/{investigation_id}/trace/timeline")
 async def get_trace_timeline(
     investigation_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Get chronological timeline of trace events"""
     # Input validation
@@ -444,7 +444,7 @@ async def get_trace_timeline(
 @investigation_router.get("/{investigation_id}/trace/export")
 async def export_trace_data(
     investigation_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Export complete trace data"""
     # Input validation
@@ -469,7 +469,7 @@ async def export_trace_data(
 @investigation_router.get("/{investigation_id}/agent-flow")
 async def get_agent_message_flow(
     investigation_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Get agent message flow visualization data"""
     # Input validation
@@ -493,7 +493,7 @@ async def get_agent_message_flow(
 
 
 @investigation_router.get("/config")
-async def get_investigation_config(user=Depends(verify_google_token)):
+async def get_investigation_config(user=Depends(verify_session)):
     """Get current investigation system configuration"""
     return {
         "investigation_approach": "simple",
@@ -697,7 +697,7 @@ def update_alert_with_investigation_results(alert_id: str, investigation_id: str
 @investigation_router.get("/debug/{alert_id}")
 async def debug_alert_status(
     alert_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Debug endpoint to check alert status in Firestore and test updates."""
     # Input validation
@@ -737,7 +737,7 @@ async def debug_alert_status(
 @investigation_router.post("/debug/{alert_id}/test-update")
 async def test_alert_update(
     alert_id: str,
-    user=Depends(verify_google_token)
+    user=Depends(verify_session)
 ):
     """Test endpoint to manually trigger alert status updates."""
     # Input validation

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from google.cloud import firestore
-from ..auth import verify_google_token
+from ..auth import verify_session
 from ..config import get_config
 from ..exceptions import AuthenticationError, DatabaseError
 import logging
@@ -59,7 +59,7 @@ async def get_or_create_user(user_info: Dict) -> Dict:
     return new_user
 
 
-async def require_admin(current_user: Dict = Depends(verify_google_token)) -> Dict:
+async def require_admin(current_user: Dict = Depends(verify_session)) -> Dict:
     """Dependency to ensure current user is admin"""
     user_doc = await get_or_create_user(current_user)
     if user_doc['role'] != 'admin':
