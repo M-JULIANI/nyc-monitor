@@ -167,17 +167,15 @@ install-api:
 	fi
 
 install-web:
-	@echo "Installing frontend dependencies with pnpm workspace..."
+	@echo "Installing frontend dependencies with pnpm..."
 	@if ! command -v pnpm >/dev/null 2>&1; then \
 		echo "Installing pnpm..."; \
 		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
 	fi
-	@if [ -f "pnpm-workspace.yaml" ]; then \
-		echo "Cleaning up node_modules to fix hoist pattern conflicts..."; \
-		rm -rf node_modules frontend/node_modules; \
-		PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm install; \
+	@if [ -f "frontend/package.json" ]; then \
+		cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm install; \
 	else \
-		echo "Warning: pnpm-workspace.yaml not found"; \
+		echo "Warning: frontend/package.json not found"; \
 	fi
 
 install-web-test:
@@ -226,7 +224,7 @@ dev-web:
 		echo "pnpm not found, installing..."; \
 		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
 	fi
-	PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm --filter frontend run dev -- --host 0.0.0.0
+	cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm run dev -- --host 0.0.0.0
 
 # Test against deployed backend
 dev-web-deployed:
@@ -236,7 +234,7 @@ dev-web-deployed:
 		echo "pnpm not found, installing..."; \
 		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
 	fi
-	@PATH="$$HOME/.local/share/pnpm:$$PATH" REACT_APP_USE_DEPLOYED_BACKEND=true pnpm --filter frontend run dev -- --host 0.0.0.0
+	@cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" REACT_APP_USE_DEPLOYED_BACKEND=true pnpm run dev -- --host 0.0.0.0
 
 # Get deployed backend URL
 get-api-url: check-gcloud
@@ -269,8 +267,8 @@ test-web:
 		echo "pnpm not found, installing..."; \
 		curl -fsSL https://get.pnpm.io/install.sh | sh -; \
 	fi
-	@if [ -f "pnpm-workspace.yaml" ]; then \
-		PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm --filter frontend test; \
+	@if [ -f "frontend/package.json" ]; then \
+		cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm test; \
 	fi
 
 # Backend test variants
@@ -304,12 +302,12 @@ lint:
 	@if [ -f "backend/pyproject.toml" ]; then \
 		cd backend && poetry run ruff check .; \
 	fi
-	@if [ -f "pnpm-workspace.yaml" ]; then \
+	@if [ -f "frontend/package.json" ]; then \
 		if ! command -v pnpm >/dev/null 2>&1; then \
 			echo "pnpm not found, installing..."; \
 			curl -fsSL https://get.pnpm.io/install.sh | sh -; \
 		fi; \
-		PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm --filter frontend run lint; \
+		cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm run lint; \
 	fi
 
 format:
@@ -317,12 +315,12 @@ format:
 	@if [ -f "backend/pyproject.toml" ]; then \
 		cd backend && poetry run black . && poetry run ruff format .; \
 	fi
-	@if [ -f "pnpm-workspace.yaml" ]; then \
+	@if [ -f "frontend/package.json" ]; then \
 		if ! command -v pnpm >/dev/null 2>&1; then \
 			echo "pnpm not found, installing..."; \
 			curl -fsSL https://get.pnpm.io/install.sh | sh -; \
 		fi; \
-		PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm --filter frontend run format; \
+		cd frontend && PATH="$$HOME/.local/share/pnpm:$$PATH" pnpm run format; \
 	fi
 
 # Check Docker permissions
