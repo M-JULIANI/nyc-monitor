@@ -14,6 +14,6 @@
 
 """Authentication module for Google OAuth token verification."""
 
-from .auth import verify_google_token, oauth2_scheme
+from .auth import verify_session, verify_google_token, oauth2_scheme
 
-__all__ = ["verify_google_token", "oauth2_scheme"]
+__all__ = ["verify_session", "verify_google_token", "oauth2_scheme"]

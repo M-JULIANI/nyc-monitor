@@ -51,28 +51,19 @@ export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children
   const [alertCategories, setAlertCategories] = useState<AlertCategoriesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const timeRange = 72; // Fixed to 3 days
+  const timeRange = 168; // Fixed to 7 days to match data availability
 
   const fetchStats = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('idToken');
-      if (!token) {
-        throw new Error('Authentication required');
-      }
-
       const [statsResponse, categoriesResponse] = await Promise.all([
         fetch(`/api/alerts/stats?hours=${timeRange}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          credentials: 'include',
         }),
         fetch('/api/alerts/categories', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          credentials: 'include',
         })
       ]);
 

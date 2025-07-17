@@ -37,16 +37,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
       
-      // Store token
-      localStorage.setItem('idToken', token);
-      
-      // Fetch user data
-      const response = await api.get<LoginResponse>('/auth/me');
+      // Send token to backend for verification and session creation
+      // Backend should set HttpOnly cookie and return user data
+      const response = await api.post<LoginResponse>('/auth/login', { token });
       
       if (response.error) {
         throw new Error(response.error);
       }
 
+      // Don't store token in localStorage - backend sets HttpOnly cookie
       setState({
         user: response.data.user,
         isAuthenticated: true,
@@ -60,18 +59,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading: false,
         error: error instanceof Error ? error.message : 'Login failed',
       });
-      localStorage.removeItem('idToken');
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('idToken');
-    setState({
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
-    });
+  const logout = async () => {
+    try {
+      // Call backend to clear session cookie
+      await api.post('/auth/logout', {});
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setState({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: null,
+      });
+    }
   };
 
   const hasRole = (role: User['role']): boolean => {
@@ -80,13 +84,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const refreshUser = async () => {
-    const token = localStorage.getItem('idToken');
-    if (!token) {
-      setState(prev => ({ ...prev, isLoading: false }));
-      return;
-    }
-
     try {
+      // Check if we have a valid session cookie
       const response = await api.get<LoginResponse>('/auth/me');
       if (response.error) {
         throw new Error(response.error);
@@ -105,18 +104,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading: false,
         error: error instanceof Error ? error.message : 'Failed to refresh user data',
       });
-      localStorage.removeItem('idToken');
     }
   };
 
   // Check for existing session on mount
   useEffect(() => {
-    const token = localStorage.getItem('idToken');
-    if (token) {
-      refreshUser();
-    } else {
-      setState(prev => ({ ...prev, isLoading: false }));
-    }
+    // Always try to refresh user data (will use session cookie if available)
+    refreshUser();
   }, []);
 
   const value = {
