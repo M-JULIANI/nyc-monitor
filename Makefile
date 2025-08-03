@@ -439,20 +439,20 @@ deploy-api: check-docker check-gcloud
 	fi
 	@if [ -n "$(NYC_311_APP_TOKEN)" ]; then \
 		echo "NYC_311_APP_TOKEN: \"$(NYC_311_APP_TOKEN)\"" >> /tmp/deploy-env-vars.yaml; \
-	fi
+	fi	
 	@echo "📋 Environment variables being set:"
 	@cat /tmp/deploy-env-vars.yaml
 	@echo "Deploying to Cloud Run..."
 	@gcloud run deploy $(CLOUD_RUN_BACKEND_SERVICE_NAME) \
 		--image "$(DOCKER_REGISTRY)/$(DOCKER_IMAGE_PREFIX)-backend:$(VERSION)" \
 		--platform managed \
-		--region $(CLOUD_RUN_REGION) \
+		--region $(CLOUD_RUN_REGION) \ 
 		--allow-unauthenticated \
 		--port 8000 \
-		--memory=2Gi \
-		--cpu=2 \
-		--min-instances=1 \
-		--max-instances=10 \
+		--memory=1Gi \
+		--cpu=1 \
+		--min-instances=0 \
+		--max-instances=5 \
 		--concurrency=80 \
 		--timeout=900 \
 		--env-vars-file /tmp/deploy-env-vars.yaml
@@ -562,7 +562,7 @@ deploy-monitor: build-monitor check-gcloud
 			--image="$(MONITOR_IMAGE):$(VERSION)" \
 			--service-account="$(MONITOR_SERVICE_ACCOUNT)@$(GOOGLE_CLOUD_PROJECT).iam.gserviceaccount.com" \
 			--region=$(GOOGLE_CLOUD_LOCATION) \
-			--memory=2Gi \
+			--memory=1Gi \
 			--cpu=1 \
 			--task-timeout=900 \
 			--parallelism=1 \
@@ -593,7 +593,7 @@ deploy-monitor: build-monitor check-gcloud
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
+			--schedule="0 */6 * * *" \
 			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
@@ -602,7 +602,7 @@ deploy-monitor: build-monitor check-gcloud
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */3 * * *" \
+			--schedule="0 */6 * * *" \
 			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
