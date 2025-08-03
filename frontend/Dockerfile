@@ -11,14 +11,14 @@ COPY frontend/package*.json ./
 COPY frontend/.npmrc ./
 COPY pnpm-workspace.yaml ../
 
-# Install dependencies using npm for better binary support in Docker
-RUN npm install --include=dev
+# Install dependencies (including devDependencies for build)
+RUN pnpm install --include=dev
 
 # Copy source code
 COPY frontend/ ./
 
 # Build the application
-RUN npm run build
+RUN pnpm run build
 
 # Production stage
 FROM nginx:alpine
