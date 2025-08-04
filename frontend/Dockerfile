@@ -17,6 +17,10 @@ RUN pnpm install --include=dev
 # Copy source code
 COPY frontend/ ./
 
+# Ensure binaries are properly linked
+RUN pnpm rebuild
+RUN pnpm install --include=dev --force
+
 # Build the application
 RUN pnpm run build
 
