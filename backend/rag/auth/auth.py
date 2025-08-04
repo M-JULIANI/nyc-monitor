@@ -1,14 +1,50 @@
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 import os
 import logging
+import jwt
+import datetime
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+def verify_session_token(token: str) -> dict:
+    """Verify and decode session token"""
+    secret_key = os.getenv('SESSION_SECRET_KEY', 'your-secret-key-change-this')
+    
+    try:
+        payload = jwt.decode(token, secret_key, algorithms=['HS256'])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Session expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+
+async def verify_session(request: Request) -> dict:
+    """Verify session cookie and return user info"""
+    # Get session cookie
+    session_token = request.cookies.get("session")
+    if not session_token:
+        raise HTTPException(status_code=401, detail="No session")
+    
+    # Verify session token
+    payload = verify_session_token(session_token)
+    
+    # Return user info in the same format as verify_google_token
+    user_info = {
+        "user_id": payload['user_id'],
+        "email": payload['email'],
+        "name": payload.get('name'),
+    }
+    
+    logger.info(f"Session verified for user: {user_info['email']}")
+    return user_info
 
 
 async def verify_google_token(token: str = Depends(oauth2_scheme)):
