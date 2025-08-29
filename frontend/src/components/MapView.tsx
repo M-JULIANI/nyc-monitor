@@ -94,7 +94,7 @@ const MapView: React.FC = () => {
   const isConnected = !isLoading;
   const isMapInteractive = true;
 
-  const { viewport, setViewport, filter, setFilter, viewMode, setViewMode } = useMapState();
+  const { viewport, setViewport, filter, setFilter, viewMode, setViewMode, displayMode, setDisplayMode } = useMapState();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [selectedAlertLoading, setSelectedAlertLoading] = useState(false);
   const [isFilterCollapsed, setIsFilterCollapsed] = useState(false);
@@ -286,15 +286,15 @@ const MapView: React.FC = () => {
   const getIconSize = (priority: string): number => {
     switch (priority) {
       case "critical":
-        return 18;
-      case "high":
         return 12;
+      case "high":
+        return 10;
       case "medium":
-        return 8;
+        return 6;
       case "low":
-        return 4;
+        return 2;
       default:
-        return 8;
+        return 1;
     }
   };
 
@@ -306,7 +306,7 @@ const MapView: React.FC = () => {
     return `${Math.round(hours / 168)} weeks`;
   };
 
-  // Create GeoJSON for alert points (only used in priority mode)
+  // Create GeoJSON for alert points (used for both priority mode and heatmap)
   const alertsGeoJSON: GeoJSON.FeatureCollection = {
     type: "FeatureCollection",
     features: filteredAlerts.map((alert) => ({
@@ -320,9 +320,24 @@ const MapView: React.FC = () => {
         title: alert.title,
         priority: alert.priority,
         source: alert.source,
+        category: alert.category || "general",
+        // Add weight property for heatmap intensity based on priority
+        weight: alert.priority === "critical" ? 4 : alert.priority === "high" ? 3 : alert.priority === "medium" ? 2 : 1,
         color: `priority-${alert.priority}`,
       },
     })),
+  };
+
+  const getHeatmapColors = () => {
+        return [
+          "rgba(0,0,255,0)",       // Transparent
+          "rgba(75,0,130,0.3)",    // Indigo
+          "rgba(0,128,255,0.5)",   // Blue
+          "rgba(0,255,127,0.7)",   // Spring green
+          "rgba(255,255,0,0.9)",   // Yellow
+          "rgba(255,140,0,1)"      // Orange
+        ];
+
   };
 
   const handleMarkerClick = (alert: Alert) => {
@@ -608,10 +623,47 @@ const MapView: React.FC = () => {
             </select>
           </div>
 
-          {/* View Mode Toggles */}
+          {/* Display Mode Toggle */}
           <div className="border-t border-zinc-700 pt-3 mb-4">
-            <h4 className="text-xs font-semibold mb-2 text-zinc-300">View Mode</h4>
+            <h4 className="text-xs font-semibold mb-2 text-zinc-300">Display Type</h4>
             <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="displayMode"
+                  value="heatmap"
+                  checked={displayMode === "heatmap"}
+                  onChange={(e) => setDisplayMode(e.target.value as "dots" | "heatmap")}
+                  className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
+                  disabled={!isMapInteractive}
+                />
+                <span>Heatmap</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="displayMode"
+                  value="dots"
+                  checked={displayMode === "dots"}
+                  onChange={(e) => setDisplayMode(e.target.value as "dots" | "heatmap")}
+                  className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
+                  disabled={!isMapInteractive}
+                />
+                <span>Dots</span>
+              </label>
+            </div>
+            {displayMode === "heatmap" && (
+              <p className="text-[9px] text-zinc-500 mt-2">
+                Shows alert density. Zoom in/out to see different intensities.
+              </p>
+            )}
+          </div>
+
+          {/* View Mode Toggles - Only show when in dots mode */}
+          {displayMode === "dots" && (
+            <div className="border-t border-zinc-700 pt-3 mb-4">
+              <h4 className="text-xs font-semibold mb-2 text-zinc-300">Dot Style</h4>
+              <div className="flex flex-col gap-2">
               <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
                 <input
                   type="radio"
@@ -652,11 +704,13 @@ const MapView: React.FC = () => {
                 <span className="text-zinc-500 hidden sm:inline">(colored circles)</span>
               </label>
             </div>
-          </div>
+            </div>
+          )}
 
-          {/* Legend */}
-          <div className="border-t border-zinc-700 pt-3">
-            <h4 className="text-xs font-semibold mb-2 text-zinc-300">Legend</h4>
+          {/* Legend - Only show when in dots mode */}
+          {displayMode === "dots" && (
+            <div className="border-t border-zinc-700 pt-3">
+              <h4 className="text-xs font-semibold mb-2 text-zinc-300">Legend</h4>
 
             {/* Priority Mode Legend */}
             {viewMode === "priority" && (
@@ -727,7 +781,27 @@ const MapView: React.FC = () => {
                 </div>
               </div>
             )}
-          </div>
+            </div>
+          )}
+
+          {/* Heatmap Legend - Only show when in heatmap mode */}
+          {displayMode === "heatmap" && (
+            <div className="border-t border-zinc-700 pt-3">
+              <h4 className="text-xs font-semibold mb-2 text-zinc-300">Heatmap Legend</h4>
+              <div className="flex items-center gap-2 mb-2">
+              <div className="flex w-full text-[9px] text-zinc-400 justify-between">
+                <span>Low</span>
+                <div 
+                  className="w-24 h-3 rounded"
+                  style={{
+                    background: `linear-gradient(to right, ${getHeatmapColors()[0]}, ${getHeatmapColors()[2]}, ${getHeatmapColors()[4]}, ${getHeatmapColors()[5]})`
+                  }}
+                />
+                  <span>High</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -815,7 +889,13 @@ const MapView: React.FC = () => {
             mapboxAccessToken={MAPBOX_TOKEN}
             style={{ width: "100%", height: "100%" }}
             mapStyle="mapbox://styles/mapbox/dark-v11"
-            interactiveLayerIds={viewMode === "priority" ? ["alert-points"] : []}
+            interactiveLayerIds={
+              displayMode === "heatmap" 
+                ? ["alert-heatmap-points"] 
+                : displayMode === "dots" && viewMode === "priority" 
+                  ? ["alert-points"] 
+                  : []
+            }
             interactive={isMapInteractive}
             dragPan={isMapInteractive}
             dragRotate={isMapInteractive}
@@ -827,8 +907,99 @@ const MapView: React.FC = () => {
               console.error("❌ Map runtime error:", error);
             }}
           >
+          {/* Heatmap Layer - Show when in heatmap mode */}
+          {displayMode === "heatmap" && (
+            <Source type="geojson" data={alertsGeoJSON}>
+              <Layer
+                id="alert-heatmap"
+                type="heatmap"
+                paint={{
+                  // Increase the heatmap weight based on frequency and property value
+                  "heatmap-weight": [
+                    "interpolate",
+                    ["linear"],
+                    ["get", "weight"],
+                    0, 0.1,
+                    1, 0.3,
+                    2, 0.6,
+                    3, 0.8,
+                    4, 1
+                  ],
+                  // Increase the heatmap color weight weight by zoom level
+                  // heatmap-intensity is a multiplier on top of heatmap-weight
+                  "heatmap-intensity": [
+                    "interpolate",
+                    ["exponential", 1.5],  // Gentle acceleration for smoother intensity changes
+                    ["zoom"],
+                    0, 0.6,
+                    8, 1.2,
+                    16, 2.5
+                  ],
+                  // Color ramp for heatmap.  Domain is 0 (low) to 1 (high).
+                  // Begin color ramp at 0-stop with a 0-transparancy color
+                  // to create a blur-like effect.
+                  "heatmap-color": [
+                    "interpolate",
+                    ["linear"],
+                    ["heatmap-density"],
+                    0, "rgba(33,102,172,0)",
+                    0.2, getHeatmapColors()[1],
+                    0.4, getHeatmapColors()[2],
+                    0.6, getHeatmapColors()[3],
+                    0.8, getHeatmapColors()[4],
+                    1, getHeatmapColors()[5]
+                  ],
+                  // Adjust the heatmap radius by zoom level - exponential for natural zoom scaling
+                  "heatmap-radius": [
+                    "interpolate",
+                    ["exponential", 2],  // Base 2 = doubles with each major zoom change
+                    ["zoom"],
+                    0, 3,       // Very small when zoomed way out
+                    8, 8,       // Small for city overview
+                    12, 20,     // Medium for neighborhood view
+                    16, 45      // Large for street-level detail
+                  ],
+                  // Keep heatmap visible across all zoom levels
+                  "heatmap-opacity": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    0, 0.8,
+                    22, 0.8
+                  ]
+                }}
+              />
+              {/* Optional: Add small circle layer for very high zoom levels */}
+              <Layer
+                id="alert-heatmap-points"
+                type="circle"
+                paint={{
+                  "circle-radius": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    14, 0,
+                    16, 5,      // Increased from 2 to 5
+                    18, 8       // Increased from 3 to 8
+                  ],
+                  "circle-color": getHeatmapColors()[5],
+                  "circle-stroke-color": "white",
+                  "circle-stroke-width": 0.5,
+                  "circle-opacity": [
+                    "interpolate",
+                    ["cubic-bezier", 0.25, 0.46, 0.45, 0.94],  // Smooth ease-out curve
+                    ["zoom"],
+                    14, 0,
+                    16, 0.7,
+                    18, 1
+                  ]
+                }}
+              />
+            </Source>
+          )}
+
           {/* Priority Mode - Circle Layer */}
-          {viewMode === "priority" && (
+          {displayMode === "dots" && viewMode === "priority" && (
             <Source type="geojson" data={alertsGeoJSON}>
               <Layer
                 id="alert-points"
@@ -863,7 +1034,7 @@ const MapView: React.FC = () => {
           )}
 
           {/* Source Mode - HTML Markers */}
-          {viewMode === "source" &&
+          {displayMode === "dots" && viewMode === "source" &&
             filteredAlerts.map((alert) => (
               <Marker
                 key={alert.id}
@@ -888,7 +1059,7 @@ const MapView: React.FC = () => {
             ))}
 
           {/* Category Mode - HTML Markers */}
-          {viewMode === "category" &&
+          {displayMode === "dots" && viewMode === "category" &&
             filteredAlerts.map((alert) => (
               <Marker
                 key={alert.id}
