@@ -14,6 +14,7 @@ interface FilterState {
 }
 
 type ViewMode = 'priority' | 'source' | 'category';
+type DisplayMode = 'dots' | 'heatmap';
 
 interface MapStateContextType {
   viewport: ViewportState;
@@ -22,6 +23,8 @@ interface MapStateContextType {
   setFilter: (filter: FilterState | ((prev: FilterState) => FilterState)) => void;
   viewMode: ViewMode;
   setViewMode: (viewMode: ViewMode) => void;
+  displayMode: DisplayMode;
+  setDisplayMode: (displayMode: DisplayMode) => void;
 }
 
 const MapStateContext = createContext<MapStateContextType | undefined>(undefined);
@@ -48,6 +51,9 @@ export const MapStateProvider: React.FC<MapStateProviderProps> = ({ children }) 
 
   // View mode state
   const [viewMode, setViewMode] = useState<ViewMode>('category');
+  
+  // Display mode state (dots vs heatmap)
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('heatmap');
 
   return (
     <MapStateContext.Provider value={{ 
@@ -56,7 +62,9 @@ export const MapStateProvider: React.FC<MapStateProviderProps> = ({ children }) 
       filter, 
       setFilter, 
       viewMode, 
-      setViewMode 
+      setViewMode,
+      displayMode,
+      setDisplayMode
     }}>
       {children}
     </MapStateContext.Provider>
