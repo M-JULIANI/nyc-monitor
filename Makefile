@@ -450,10 +450,10 @@ deploy-api: check-docker check-gcloud
 		--allow-unauthenticated \
 		--port 8000 \
 		--memory=1Gi \
-		--cpu=1 \
-		--min-instances=0 \
-		--max-instances=5 \
-		--concurrency=80 \
+		--cpu=2 \
+		--min-instances=1 \
+		--max-instances=50 \
+		--concurrency=100 \
 		--timeout=900 \
 		--env-vars-file /tmp/deploy-env-vars.yaml
 	@rm -f /tmp/deploy-env-vars.yaml
@@ -593,7 +593,7 @@ deploy-monitor: build-monitor check-gcloud
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */6 * * *" \
+			--schedule="0 */12 * * *" \
 			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
@@ -602,7 +602,7 @@ deploy-monitor: build-monitor check-gcloud
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */6 * * *" \
+			--schedule="0 */12 * * *" \
 			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
@@ -748,6 +748,15 @@ help:
 	@echo "  make deploy           - Deploy all services (backend, frontend, monitor)"
 	@echo "  make deploy-api   - Deploy fastapi backend"
 	@echo "  make deploy-web  - Deploy frontend container"
+	@echo "  make deploy-web-secure - Deploy frontend with Cloud Armor protection"
+	@echo ""
+	@echo "Security Commands (Cloud Armor):"
+	@echo "  make setup-cloud-armor    - Set up Cloud Armor protection for frontend"
+	@echo "  make check-cloud-armor    - Check Cloud Armor policy status"
+	@echo "  make logs-cloud-armor     - View Cloud Armor security logs"
+	@echo "  make test-cloud-armor     - Test Cloud Armor protection"
+	@echo "  make get-secure-frontend-url - Get Cloud Armor protected frontend URL"
+	@echo "  make remove-cloud-armor   - Remove Cloud Armor setup (cleanup)"
 	@echo ""
 	@echo "NYC Monitor System Commands:"
 	@echo "  make setup-monitor    - Set up monitor system infrastructure (ONE TIME ONLY)"
@@ -771,6 +780,12 @@ help:
 
 # Domain management
 CUSTOM_DOMAIN ?= $(shell grep -E '^CUSTOM_DOMAIN=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' ')
+
+# Cloud Armor security policy variables
+CLOUD_ARMOR_POLICY_NAME ?= atlas-frontend-security-policy
+CLOUD_ARMOR_LB_BACKEND_SERVICE ?= atlas-frontend-lb-backend-service
+CLOUD_ARMOR_URL_MAP ?= atlas-frontend-url-map
+CLOUD_ARMOR_STATIC_IP ?= atlas-frontend-ip
 
 
 check-domain: check-gcloud
@@ -918,3 +933,106 @@ logs-nyc311: check-gcloud
 test-nyc311-local:
 	@echo "🧪 Testing NYC 311 job locally..."
 	cd backend && poetry run python test_nyc311_job.py
+
+# Cloud Armor Security Setup
+setup-cloud-armor: check-gcloud
+	@echo "🛡️  Setting up Cloud Armor protection for frontend..."
+	@if [ ! -f "scripts/setup-cloud-armor.sh" ]; then \
+		echo "Error: scripts/setup-cloud-armor.sh not found"; \
+		exit 1; \
+	fi
+	@chmod +x scripts/setup-cloud-armor.sh
+	@./scripts/setup-cloud-armor.sh
+
+# Deploy frontend with Cloud Armor protection
+deploy-web-secure: deploy-web setup-cloud-armor
+	@echo "✅ Frontend deployed with Cloud Armor protection!"
+
+# Check Cloud Armor policy status
+check-cloud-armor: check-gcloud
+	@echo "🔍 Checking Cloud Armor policy status..."
+	@if gcloud compute security-policies describe $(CLOUD_ARMOR_POLICY_NAME) >/dev/null 2>&1; then \
+		echo "📋 Cloud Armor Policy: $(CLOUD_ARMOR_POLICY_NAME)"; \
+		gcloud compute security-policies describe $(CLOUD_ARMOR_POLICY_NAME) \
+			--format="table(name,description,rules.len():label=RULES)"; \
+		echo ""; \
+		echo "🔧 Security Rules:"; \
+		gcloud compute security-policies rules list $(CLOUD_ARMOR_POLICY_NAME) \
+			--format="table(priority,action,description)"; \
+	else \
+		echo "❌ Cloud Armor policy '$(CLOUD_ARMOR_POLICY_NAME)' not found"; \
+		echo "Run 'make setup-cloud-armor' to create it"; \
+	fi
+
+# View Cloud Armor logs
+logs-cloud-armor: check-gcloud
+	@echo "📝 Viewing Cloud Armor security logs (last 24 hours)..."
+	@gcloud logging read 'resource.type="gce_backend_service" AND (jsonPayload.securityPolicyRequestData.action="deny" OR jsonPayload.securityPolicyRequestData.action="rate_limit")' \
+		--limit=50 \
+		--format='table(timestamp,httpRequest.remoteIp,httpRequest.userAgent,jsonPayload.securityPolicyRequestData.action,jsonPayload.securityPolicyRequestData.ruleName)' \
+		--freshness=1d || echo "No security events found in logs"
+
+# Test Cloud Armor protection
+test-cloud-armor: check-gcloud
+	@echo "🧪 Testing Cloud Armor protection..."
+	@if [ -z "$(CLOUD_ARMOR_STATIC_IP)" ]; then \
+		echo "Error: Could not determine static IP. Check if Cloud Armor is set up."; \
+		exit 1; \
+	fi
+	@STATIC_IP=$$(gcloud compute addresses describe $(CLOUD_ARMOR_STATIC_IP) --global --format='value(address)' 2>/dev/null || echo ""); \
+	if [ -z "$$STATIC_IP" ]; then \
+		echo "❌ Static IP not found. Run 'make setup-cloud-armor' first."; \
+		exit 1; \
+	fi; \
+	echo "🌐 Testing HTTP access to $$STATIC_IP..."; \
+	if curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" "http://$$STATIC_IP"; then \
+		echo "✅ HTTP access successful"; \
+	else \
+		echo "❌ HTTP access failed"; \
+	fi; \
+	echo ""; \
+	echo "🚀 Testing rate limiting (this may take a moment)..."; \
+	echo "Sending rapid requests to trigger rate limiting..."; \
+	for i in {1..15}; do \
+		curl -s -o /dev/null -w "Request $$i: %{http_code}\n" "http://$$STATIC_IP" & \
+	done; \
+	wait; \
+	echo ""; \
+	echo "📊 Check 'make logs-cloud-armor' to see if rate limiting was triggered"
+
+# Remove Cloud Armor setup (cleanup)
+remove-cloud-armor: check-gcloud
+	@echo "🗑️  Removing Cloud Armor setup..."
+	@echo "⚠️  This will remove ALL Cloud Armor protection!"
+	@read -p "Are you sure? (y/N) " -n 1 -r; echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		echo "Removing forwarding rules..."; \
+		gcloud compute forwarding-rules delete atlas-frontend-forwarding-rule-http --global --quiet || true; \
+		gcloud compute forwarding-rules delete atlas-frontend-forwarding-rule-https --global --quiet || true; \
+		echo "Removing HTTP(S) proxies..."; \
+		gcloud compute target-http-proxies delete atlas-frontend-http-proxy --global --quiet || true; \
+		gcloud compute target-https-proxies delete atlas-frontend-https-proxy --global --quiet || true; \
+		echo "Removing URL map..."; \
+		gcloud compute url-maps delete $(CLOUD_ARMOR_URL_MAP) --global --quiet || true; \
+		echo "Removing backend service..."; \
+		gcloud compute backend-services delete $(CLOUD_ARMOR_LB_BACKEND_SERVICE) --global --quiet || true; \
+		echo "Removing network endpoint group..."; \
+		gcloud compute network-endpoint-groups delete atlas-frontend-neg --region=$(GOOGLE_CLOUD_LOCATION) --quiet || true; \
+		echo "Removing security policy..."; \
+		gcloud compute security-policies delete $(CLOUD_ARMOR_POLICY_NAME) --quiet || true; \
+		echo "Static IP '$(CLOUD_ARMOR_STATIC_IP)' preserved (delete manually if needed)"; \
+		echo "✅ Cloud Armor setup removed"; \
+	else \
+		echo "Cancelled."; \
+	fi
+
+# Get Cloud Armor protected frontend URL
+get-secure-frontend-url: check-gcloud
+	@echo "🔗 Cloud Armor protected frontend URLs:"
+	@STATIC_IP=$$(gcloud compute addresses describe $(CLOUD_ARMOR_STATIC_IP) --global --format='value(address)' 2>/dev/null || echo ""); \
+	if [ -n "$$STATIC_IP" ]; then \
+		echo "HTTP:  http://$$STATIC_IP"; \
+		echo "HTTPS: https://$$STATIC_IP (if SSL certificate is configured)"; \
+	else \
+		echo "❌ Static IP not found. Run 'make setup-cloud-armor' first."; \
+	fi
