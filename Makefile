@@ -483,7 +483,14 @@ deploy-web: check-docker check-gcloud
 		--platform managed \
 		--region $(CLOUD_RUN_REGION) \
 		--allow-unauthenticated \
-		--port 8080
+		--port 8080 \
+		--memory=1Gi \
+		--cpu=1 \
+		--min-instances=2 \
+		--max-instances=100 \
+		--concurrency=200 \
+		--cpu-throttling \
+		--timeout=60
 	@echo "Deployment completed. Service URL:"
 	@gcloud run services describe $(CLOUD_RUN_SERVICE_NAME) \
 		--platform managed \
