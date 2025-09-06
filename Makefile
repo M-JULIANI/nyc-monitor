@@ -450,11 +450,10 @@ deploy-api: check-docker check-gcloud
 		--allow-unauthenticated \
 		--port 8000 \
 		--memory=1Gi \
-		--cpu=1 \
-		--min-instances=0 \
-		--max-instances=5 \
-		--concurrency=80 \
-		--timeout=900 \
+		--cpu=2 \
+		--min-instances=1 \
+		--max-instances=50 \
+		--concurrency=100 \
 		--env-vars-file /tmp/deploy-env-vars.yaml
 	@rm -f /tmp/deploy-env-vars.yaml
 	@echo "Backend API deployed. Service URL:"
@@ -593,7 +592,7 @@ deploy-monitor: build-monitor check-gcloud
 	@if gcloud scheduler jobs describe $(MONITOR_SCHEDULER_NAME) --location=$(GOOGLE_CLOUD_LOCATION) >/dev/null 2>&1; then \
 		echo "Updating existing scheduler job..."; \
 		gcloud scheduler jobs update http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */6 * * *" \
+			--schedule="0 */12 * * *" \
 			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
@@ -602,7 +601,7 @@ deploy-monitor: build-monitor check-gcloud
 	else \
 		echo "Creating new scheduler job..."; \
 		gcloud scheduler jobs create http $(MONITOR_SCHEDULER_NAME) \
-			--schedule="0 */6 * * *" \
+			--schedule="0 */12 * * *" \
 			--uri="$(CLOUD_RUN_JOB_EXEC_URL)" \
 			--http-method=POST \
 			--location=$(GOOGLE_CLOUD_LOCATION) \
