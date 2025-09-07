@@ -68,3 +68,4 @@ atlas-reports-key.json
 key-slides.json
 **/archive/*
 .pnpm-store/
+**/performance/*.txt

@@ -7,7 +7,9 @@ import { useMapState } from "../contexts/MapStateContext";
 import { useMobile } from "../pages/Home";
 import Spinner from "./Spinner";
 import AgentTraceModal from "./AgentTraceModal";
+import PerformancePanel from "./PerformancePanel";
 import { useAuth } from "@/contexts/AuthContext";
+import { isDevelopmentMode } from "../utils/devMode";
 
 const MAPBOX_TOKEN = "pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA";
 
@@ -90,6 +92,10 @@ const MapView: React.FC = () => {
   const { alerts, error, isLoading, generateReport, refetchAlert } = useAlerts();
   const { user } = useAuth();
   const { isMobile } = useMobile();
+  
+  // Performance monitoring (dev mode only)
+  const isDevMode = isDevelopmentMode();
+
 
   const isConnected = !isLoading;
   const isMapInteractive = true;
@@ -303,7 +309,9 @@ const MapView: React.FC = () => {
     if (hours < 24) return `${hours} hours`;
     if (hours === 24) return "1 day";
     if (hours < 168) return `${Math.round(hours / 24)} days`;
-    return `${Math.round(hours / 168)} weeks`;
+    if (hours < 720) return `${Math.round(hours / 168)} weeks`; // Less than 30 days
+    if (hours < 2160) return `${Math.round(hours / 720)} months`; // Less than 90 days
+    return `${Math.round(hours / 720)} months`; // 720 hours = 30 days
   };
 
   // Create GeoJSON for alert points (used for both priority mode and heatmap)
@@ -827,27 +835,27 @@ const MapView: React.FC = () => {
         </div>
 
         <div className="relative">
-          {/* Hour markers - positioned to align with actual slider values */}
+          {/* Time markers - positioned to align with actual slider values for 6 months */}
           <div className="relative text-[9px] sm:text-xs text-zinc-400 mb-1 sm:mb-2 h-3 sm:h-4">
-            {/* -7d at position 1 = 0% */}
-            <span className="absolute left-0 transform -translate-x-1/2">-7d</span>
-            {/* -5d at position 49 = 28.7% */}
-            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: "28.7%" }}>
-              -5d
+            {/* -6mo at position 1 = 0% */}
+            <span className="absolute left-0 transform -translate-x-1/2">-6mo</span>
+            {/* -4mo at position ~1441 = 33.3% */}
+            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: "33.3%" }}>
+              -4mo
             </span>
-            {/* -3d at position 97 = 57.5% */}
-            <span className="absolute transform -translate-x-1/2" style={{ left: "57.5%" }}>
-              -3d
+            {/* -2mo at position ~2881 = 66.7% */}
+            <span className="absolute transform -translate-x-1/2" style={{ left: "66.7%" }}>
+              -2mo
             </span>
-            {/* -1d at position 145 = 86.3% */}
-            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: "86.3%" }}>
-              -1d
+            {/* -1mo at position ~3601 = 83.3% */}
+            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: "83.3%" }}>
+              -1mo
             </span>
-            {/* -12h at position 157 = 93.4% */}
-            <span className="absolute transform -translate-x-1/2" style={{ left: "93.4%" }}>
-              -12h
+            {/* -1w at position ~4153 = 96.1% */}
+            <span className="absolute transform -translate-x-1/2" style={{ left: "96.1%" }}>
+              -1w
             </span>
-            {/* -1h at position 168 = 100% */}
+            {/* -1h at position 4320 = 100% */}
             <span className="absolute right-0 transform translate-x-1/2">-1h</span>
           </div>
 
@@ -855,10 +863,10 @@ const MapView: React.FC = () => {
           <input
             type="range"
             min="1"
-            max="168"
+            max="4320"
             step="1"
-            value={169 - filter.timeRangeHours}
-            onChange={(e) => setFilter((prev) => ({ ...prev, timeRangeHours: 169 - parseInt(e.target.value) }))}
+            value={4321 - filter.timeRangeHours}
+            onChange={(e) => setFilter((prev) => ({ ...prev, timeRangeHours: 4321 - parseInt(e.target.value) }))}
             className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
             disabled={!isMapInteractive}
           />
@@ -1237,6 +1245,11 @@ const MapView: React.FC = () => {
         traceId={traceModal.traceId}
         alertTitle={traceModal.alertTitle}
       />
+
+      {/* Performance Panel - Dev Mode Only */}
+      {isDevMode && (
+        <PerformancePanel />
+      )}
     </div>
   );
 };

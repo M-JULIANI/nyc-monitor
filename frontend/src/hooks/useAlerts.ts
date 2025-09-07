@@ -2,98 +2,54 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Alert } from "../types";
 
+// Import performance tracking from AlertStatsContext
+const recordPerformanceMetric = (metric: {
+  endpoint: string;
+  method: string;
+  roundTripTime: number;
+  cached: boolean;
+  alertCount?: number;
+  timestamp: number;
+}) => {
+  // Simple global tracking - will be picked up by PerformancePanel
+  if (typeof window !== 'undefined' && (window as any).performanceMetrics) {
+    (window as any).performanceMetrics.unshift(metric);
+    (window as any).performanceMetrics = (window as any).performanceMetrics.slice(0, 99);
+  }
+};
+
 interface UseAlertsOptions {
   pollInterval?: number; // How often to refresh data
   limit?: number; // Max number of alerts to load
   hours?: number; // How many hours back to fetch
 }
 
-// Function to normalize alert objects
-const normalizeAlert = (rawAlert: any): Alert => {
-  const og = structuredClone(rawAlert);
-  const original = og.original_alert || {};
-  const originalData = og.original_alert_data || {};
-
-  // Extract coordinates from wherever they exist
-  let coordinates = {
-    lat: 40.7589, // NYC center fallback (Times Square)
-    lng: -73.9851,
+// Minimal normalization for optimized backend payload
+const normalizeAlert = (rawAlert: any): Partial<Alert> => {
+  // Backend now sends minimal, clean data - just pass through with fallbacks
+  return {
+    id: rawAlert.id,
+    title: rawAlert.title || 'Untitled Alert',
+    description: rawAlert.description || '',
+    source: rawAlert.source || 'unknown',
+    priority: rawAlert.priority || 'medium',
+    status: rawAlert.status || 'active',
+    timestamp: rawAlert.timestamp || new Date().toISOString(),
+    coordinates: rawAlert.coordinates || { lat: 40.7589, lng: -73.9851 },
+    neighborhood: rawAlert.neighborhood || 'Unknown',
+    borough: rawAlert.borough || 'Unknown',
+    category: rawAlert.category || 'general'
   };
-
-  if (original.latitude && original.longitude && original.latitude !== null && original.longitude !== null) {
-    coordinates = {
-      lat: original.latitude,
-      lng: original.longitude,
-    };
-  } else if (
-    originalData.coordinates?.lat &&
-    originalData.coordinates?.lng &&
-    originalData.coordinates.lat !== null &&
-    originalData.coordinates.lng !== null
-  ) {
-    coordinates = originalData.coordinates;
-  } else if (og.coordinates?.lat && og.coordinates?.lng) {
-    coordinates = og.coordinates;
-  }
-
-  const priorityValue = og.priority;
-
-  // Use the most complete/accurate data available
-  const normalizedAlert = {
-    id: og.id || original.id || og.alert_id,
-    title: og.title || original.title || og.topic,
-    description: original.description || og.description || "",
-    source: original.source || og.source === "unknown" ? originalData.signals?.[0] || "unknown" : og.source,
-    priority: priorityValue || "medium",
-    status: og.status || original.status || "active", // PRIORITIZE og.status
-
-    timestamp: original.timestamp || original.created_at || og.created_at || og.timestamp || new Date().toISOString(),
-    neighborhood: original.neighborhood || originalData.area || og.area || og.neighborhood || "Unknown",
-    borough: original.borough || original.borough_primary || og.borough || "Unknown",
-
-    // Additional date/time fields
-    event_date: original.event_date || og.event_date,
-    created_at: original.created_at || og.created_at,
-    updated_at: og.updated_at,
-
-    // Location data
-    coordinates: coordinates as { lat: number; lng: number },
-    area: originalData.area || original.neighborhood || og.area || og.neighborhood || "Unknown",
-    venue_address: originalData.venue_address || og.venue_address || "",
-    specific_streets: originalData.specific_streets || og.specific_streets || [],
-    cross_streets: originalData.cross_streets || og.cross_streets || [],
-
-    // Impact data
-    crowd_impact: originalData.crowd_impact || og.crowd_impact || "unknown",
-    transportation_impact: originalData.transportation_impact || og.transportation_impact || "",
-    estimated_attendance: originalData.estimated_attendance || og.estimated_attendance || "",
-    severity: originalData.severity || og.severity || 0,
-
-    // Categorization fields (simplified to just main category)
-    category: og.category || original.category || "general",
-
-    // Additional data
-    keywords: originalData.keywords || og.keywords || [],
-    signals: originalData.signals || og.signals || [],
-    url: og.url || "",
-
-    // Investigation & Report fields - PRIORITIZE og fields
-    reportUrl: og.report_url || original.report_url,
-    traceId: og.trace_id || original.trace_id,
-    investigationId: og.investigation_id || original.investigation_id,
-  };
-
-  return normalizedAlert;
 };
 
 export const useAlerts = (options: UseAlertsOptions = {}) => {
   const {
     pollInterval = 1800000, // 30 minutes
-    limit = 2000, // High limit for map display
-    hours = 168, // Default to 7 days to get all available data
+    limit = 50000, // High limit for map display
+    hours = 4320, // Default to 6 months
   } = options;
 
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alerts, setAlerts] = useState<Partial<Alert>[]>([]);
   const [alertsWithReports, setAlertsWithReports] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -141,15 +97,27 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       setIsLoading(true);
       setError(null);
 
+      const startTime = performance.now();
       const response = await fetch(`/api/alerts/recent?limit=${limit}&hours=${hours}`, {
         credentials: 'include',
       });
+      const endTime = performance.now();
 
       if (!response.ok) {
         throw new Error(`Failed to fetch alerts: ${response.status}`);
       }
 
       const data = await response.json();
+
+      // Record performance metric
+      recordPerformanceMetric({
+        endpoint: `/api/alerts/recent?limit=${limit}&hours=${hours}`,
+        method: 'GET',
+        roundTripTime: endTime - startTime,
+        cached: data.performance?.cached || false,
+        alertCount: data.count || data.alerts?.length || 0,
+        timestamp: Date.now()
+      });
 
       // Normalize the alerts
       const normalizedAlerts = (data.alerts || []).map(normalizeAlert);
@@ -338,7 +306,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
 
   // Refetch a single alert by ID and update it in the local state
   const refetchAlert = useCallback(
-    async (alertId: string): Promise<{ success: boolean; message: string; alert?: Alert }> => {
+    async (alertId: string): Promise<{ success: boolean; message: string; alert?: Partial<Alert> }> => {
       try {
         //console.log(`🔄 Refetching alert ${alertId}...`);
 
@@ -453,17 +421,17 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   const alertStats = useMemo(() => {
     const total = alerts.length;
     const byPriority = alerts.reduce((acc, alert) => {
-      acc[alert.priority] = (acc[alert.priority] || 0) + 1;
+      acc[alert.priority || "medium"] = (acc[alert.priority || "medium"] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     const byStatus = alerts.reduce((acc, alert) => {
-      acc[alert.status] = (acc[alert.status] || 0) + 1;
+      acc[alert.status || "active"] = (acc[alert.status || "active"] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     const bySource = alerts.reduce((acc, alert) => {
-      acc[alert.source] = (acc[alert.source] || 0) + 1;
+      acc[alert.source || "unknown"] = (acc[alert.source || "unknown"] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 

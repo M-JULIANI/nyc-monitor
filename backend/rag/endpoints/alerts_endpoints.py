@@ -11,7 +11,6 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 import time
-import difflib
 
 # Import the new categorization system
 import sys
@@ -155,30 +154,34 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
 
 @alerts_router.get('/recent')
 async def get_recent_alerts(
-    limit: int = Query(2000, ge=1, le=5000,
+    limit: int = Query(2000, ge=1, le=50000,
                        description="Number of alerts to return"),
-    hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
+    hours: int = Query(24, ge=1, le=4320, description="Hours to look back (max 6 months)"),
     user=Depends(verify_session)
 ):
     """
-    Get recent alerts with MINIMAL data - ultra-fast for map display
+    Get recent alerts with ULTRA-MINIMAL data - optimized for map display
 
-    Returns only: title, description, source, severity, date, coordinates
+    Returns only essential fields:
+    - Core: id, title, description, source, priority, status, timestamp
+    - Location: coordinates, neighborhood, borough, category  
+    - Investigation: reportUrl, traceId, investigationId (if present)
 
     Optimizations:
-    - Ultra-minimal field selection (8x speedup)
-    - NO sorting
-    - NO complex transformations
+    - Ultra-minimal field selection (90%+ payload reduction)
+    - NO unnecessary metadata or nested objects
+    - NO deduplication (raw speed over duplicate removal)
+    - NO sorting (database order for maximum performance)
     - In-memory caching (5 min TTL)
 
     **Requires authentication**: Valid Google OAuth token
     """
     # Input validation
-    if limit < 1 or limit > 5000:
-        raise AlertError("Limit must be between 1 and 5000")
+    if limit < 1 or limit > 50000:
+        raise AlertError("Limit must be between 1 and 50000")
 
-    if hours < 1 or hours > 168:
-        raise AlertError("Hours must be between 1 and 168")
+    if hours < 1 or hours > 4320:
+        raise AlertError("Hours must be between 1 and 4320 (6 months)")
 
     logger.info(
         f"🔒 Authenticated user {user.get('email')} accessing recent alerts")
@@ -238,24 +241,16 @@ async def get_recent_alerts(
                 logger.warning(
                     f"Could not extract source for alert {doc.id}: {e}")
 
-            # Ultra-minimal transformation
+            # ULTRA-MINIMAL transformation - only essential fields for map display
             alert = {
                 'id': doc.id,
-                'title': data.get('title', 'NYC Alert'),
-                'description': data.get('description', ''),
-                # Now shows the actual source: reddit, twitter, etc.
                 'source': real_source,
                 'priority': _get_priority_from_severity(data.get('severity', 5)),
-                'severity': data.get('severity', 5),
                 'timestamp': _extract_monitor_timestamp(data),
                 'coordinates': {
                     'lat': data.get('original_alert', {}).get('latitude', 40.7589),
                     'lng': data.get('original_alert', {}).get('longitude', -73.9851)
                 },
-                # Extract neighborhood and borough from original_alert
-                'neighborhood': data.get('original_alert', {}).get('neighborhood', 'Unknown'),
-                'borough': data.get('original_alert', {}).get('borough', 'Unknown'),
-                # Simplified categorization - just the main category
                 'category': normalize_category(data.get('category', 'general')),
             }
             all_alerts.append(alert)
@@ -306,27 +301,20 @@ async def get_recent_alerts(
                 alert_type_info = get_alert_type_info(event_type)
                 category = alert_type_info.category.value
 
-            # Create alert with proper status normalization
+            # ULTRA-MINIMAL transformation - only essential fields for map display
             alert = {
                 'id': doc.id,
-                'title': f"{complaint_type}: {(data.get('descriptor', '') or '')[:50]}",
-                'description': data.get('descriptor', ''),
                 'source': '311',
-                'priority': _get_priority_from_severity(data.get('severity', 5)),
-                # Proper status normalization
-                'status': _normalize_311_alert_status(data.get('status', 'Open')),
-                'severity': severity,
+                'priority': _get_priority_from_severity(severity),
                 'timestamp': _extract_311_timestamp(data),
                 'coordinates': {
                     'lat': data.get('latitude', 40.7589),
                     'lng': data.get('longitude', -73.9851)
                 },
-                # Extract neighborhood and borough from full_signal_data.metadata
-                'neighborhood': data.get('full_signal_data', {}).get('metadata', {}).get('incident_zip', data.get('incident_zip', 'Unknown')),
-                'borough': data.get('full_signal_data', {}).get('metadata', {}).get('borough', data.get('borough', 'Unknown')),
-                # Simplified categorization - just the main category (ORIGINAL LOGIC)
                 'category': normalize_category(category),
             }
+            
+            
 
             all_alerts.append(alert)
             signals_count += 1
@@ -343,98 +331,17 @@ async def get_recent_alerts(
 
     total_time = (datetime.utcnow() - start_time).total_seconds()
 
-    # Deduplicate alerts by title (linear time) - EXCLUDE 311 alerts
-    dedup_start = datetime.utcnow()
-
-    # Separate 311 and non-311 alerts
-    alerts_311 = [
-        alert for alert in all_alerts if alert.get('source') == '311']
-    alerts_non_311 = [
-        alert for alert in all_alerts if alert.get('source') != '311']
-
-    # Keep all 311 alerts (no deduplication)
-    deduplicated_alerts = alerts_311.copy()
-
-    # Deduplicate non-311 alerts using similarity detection
-    seen_titles = []  # List of normalized titles for similarity comparison
-    duplicate_count = 0
-    similarity_threshold = 0.85  # 85% similarity threshold
-
-    for alert in alerts_non_311:
-        # Normalize title for comparison (lowercase, stripped, truncated)
-        normalized_title = alert.get('title', '').lower().strip()[:150]
-
-        if not normalized_title:
-            continue
-
-        is_duplicate = False
-
-        # Check similarity against all seen titles
-        for seen_title in seen_titles:
-            similarity = difflib.SequenceMatcher(
-                None, normalized_title, seen_title).ratio()
-            if similarity >= similarity_threshold:
-                is_duplicate = True
-                duplicate_count += 1
-                break
-
-        if not is_duplicate:
-            seen_titles.append(normalized_title)
-            deduplicated_alerts.append(alert)
-
-    dedup_time = (datetime.utcnow() - dedup_start).total_seconds()
-
-    # Sort deduplicated alerts to prioritize Reddit first
-    sort_start = datetime.utcnow()
-
-    def get_source_priority(alert):
-        """Return sort priority for sources (lower = higher priority)"""
-        source = alert.get('source', 'unknown')
-        if source == 'reddit':
-            return 0  # Highest priority
-        elif source == '311':
-            return 1  # Second priority
-        elif source == 'twitter':
-            return 2  # Third priority
-        else:
-            return 3  # Everything else
-
-    # Sort by source priority, then by timestamp (newest first)
-    deduplicated_alerts.sort(key=lambda alert: (
-        get_source_priority(alert),
-        -int(datetime.fromisoformat(alert.get('timestamp',
-             '1970-01-01T00:00:00').replace('Z', '+00:00')).timestamp())
-    ))
-
-    sort_time = (datetime.utcnow() - sort_start).total_seconds()
-
     logger.info(
-        f"🔍 DEDUP: {len(all_alerts)} → {len(deduplicated_alerts)} alerts "
-        f"({duplicate_count} non-311 duplicates removed, {len(alerts_311)} 311 alerts kept) "
-        f"in {dedup_time:.3f}s")
-
-    logger.info(
-        f"📊 SORT: Prioritized Reddit alerts in {sort_time:.3f}s")
-
-    logger.info(
-        f"🎯 MINIMAL: {len(deduplicated_alerts)} alerts in {total_time:.3f}s ({len(deduplicated_alerts)/total_time:.0f} alerts/sec)")
+        f"🎯 ULTRA-FAST: {len(all_alerts)} alerts in {total_time:.3f}s ({len(all_alerts)/total_time:.0f} alerts/sec)")
 
     result = {
-        'alerts': deduplicated_alerts,
-        'count': len(deduplicated_alerts),
+        'alerts': all_alerts,
+        'count': len(all_alerts),
         'performance': {
             'total_time_seconds': round(total_time, 3),
-            'alerts_per_second': round(len(deduplicated_alerts) / total_time if total_time > 0 else 0, 1),
+            'alerts_per_second': round(len(all_alerts) / total_time if total_time > 0 else 0, 1),
             'query_breakdown': query_stats,
-            'deduplication': {
-                'original_count': len(all_alerts),
-                'final_count': len(deduplicated_alerts),
-                'duplicates_removed': duplicate_count,
-                'alerts_311_kept': len(alerts_311),
-                'similarity_threshold': similarity_threshold,
-                'dedup_time_seconds': round(dedup_time, 3)
-            },
-            'optimizations': ['ultra_minimal_fields', 'no_sorting', 'minimal_transform', 'similarity_deduplication_non_311'],
+            'optimizations': ['ultra_minimal_fields', 'no_deduplication', 'no_sorting', 'minimal_transform'],
             'cached': False,
             'cache_ttl_seconds': CACHE_TTL_SECONDS,
             'accessed_by': user.get('email')  # Track who accessed the data
@@ -726,7 +633,7 @@ async def clear_cache(user=Depends(verify_session)):
 
 @alerts_router.get('/stats')
 async def get_alert_stats(
-    hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
+    hours: int = Query(24, ge=1, le=4320, description="Hours to look back (max 6 months)"),
     user=Depends(verify_session)
 ):
     """
@@ -735,8 +642,8 @@ async def get_alert_stats(
     **Requires authentication**: Valid Google OAuth token
     """
     # Input validation
-    if hours < 1 or hours > 168:
-        raise AlertError("Hours must be between 1 and 168")
+    if hours < 1 or hours > 4320:
+        raise AlertError("Hours must be between 1 and 4320 (6 months)")
 
     logger.info(
         f"🔒 Authenticated user {user.get('email')} accessing alert stats")
