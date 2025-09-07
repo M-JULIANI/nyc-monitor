@@ -5,6 +5,7 @@ from google.cloud import firestore
 from ..config import get_config
 from ..auth import verify_session
 from ..exceptions import AlertError, DatabaseError
+import os
 import asyncio
 from datetime import datetime, timedelta
 import json
@@ -12,10 +13,11 @@ import logging
 from typing import List, Dict, Any, Optional
 import time
 import difflib
+import math
+import hashlib
 
 # Import the new categorization system
 import sys
-import os
 backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.insert(0, backend_dir)
 
@@ -28,6 +30,14 @@ alerts_router = APIRouter(prefix="/alerts", tags=["alerts"])
 _cache = {}
 CACHE_TTL_SECONDS = 300  # 5 minutes
 
+# NYC bounding box constants
+NYC_BOUNDS = {
+    'north': 40.92,   # Northernmost point of NYC
+    'south': 40.49,   # Southernmost point of NYC  
+    'east': -73.70,   # Easternmost point of NYC
+    'west': -74.27    # Westernmost point of NYC
+}
+
 
 def get_db():
     """Get Firestore client instance"""
@@ -37,6 +47,61 @@ def get_db():
 def get_cache_key(limit: int, hours: int) -> str:
     """Generate cache key for alerts query"""
     return f"alerts:{limit}:{hours}"
+
+
+def is_within_nyc(bbox: str) -> bool:
+    """Check if bbox is entirely within NYC bounds"""
+    try:
+        lat1, lng1, lat2, lng2 = map(float, bbox.split(','))
+        return (
+            lat1 >= NYC_BOUNDS['south'] and lat2 <= NYC_BOUNDS['north'] and
+            lng1 >= NYC_BOUNDS['west'] and lng2 <= NYC_BOUNDS['east']
+        )
+    except (ValueError, IndexError):
+        return False
+
+
+def get_viewport_cache_key(bbox: str, start_date: str, end_date: str) -> str:
+    """Generate NYC-optimized cache key for viewport queries"""
+    try:
+        lat1, lng1, lat2, lng2 = map(float, bbox.split(','))
+        
+        # Handle requests outside NYC with special metro area cache
+        if not is_within_nyc(bbox):
+            return f"metro_area:{start_date}:{end_date}"
+        
+        # Calculate viewport size for NYC-specific grid sizing
+        bbox_width = abs(lng2 - lng1)
+        bbox_height = abs(lat2 - lat1)
+        bbox_area = bbox_width * bbox_height
+        
+        # NYC-optimized grid sizes
+        if bbox_area > 0.05:  # City-wide view (>50% of NYC)
+            grid_size = 0.02
+            cache_prefix = "city"
+        elif bbox_area > 0.01:  # Borough view (10-50% of NYC)
+            grid_size = 0.01
+            cache_prefix = "borough"
+        elif bbox_area > 0.002:  # Neighborhood view (2-10% of NYC)
+            grid_size = 0.005
+            cache_prefix = "neighborhood" 
+        else:  # Street level (<2% of NYC)
+            grid_size = 0.002
+            cache_prefix = "street"
+        
+        # Snap viewport to grid boundaries
+        lat1_grid = math.floor(lat1 / grid_size) * grid_size
+        lng1_grid = math.floor(lng1 / grid_size) * grid_size  
+        lat2_grid = math.ceil(lat2 / grid_size) * grid_size
+        lng2_grid = math.ceil(lng2 / grid_size) * grid_size
+        
+        return f"viewport:{cache_prefix}:{grid_size}:{lat1_grid},{lng1_grid},{lat2_grid},{lng2_grid}:{start_date}:{end_date}"
+    
+    except (ValueError, IndexError) as e:
+        logger.warning(f"Invalid bbox format '{bbox}': {e}")
+        # Fallback to simple hash-based key
+        bbox_hash = hashlib.md5(bbox.encode()).hexdigest()[:8]
+        return f"viewport_fallback:{bbox_hash}:{start_date}:{end_date}"
 
 
 def is_cache_valid(timestamp: float) -> bool:
@@ -153,32 +218,436 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
         }
 
 
-@alerts_router.get('/recent')
-async def get_recent_alerts(
-    limit: int = Query(2000, ge=1, le=5000,
-                       description="Number of alerts to return"),
-    hours: int = Query(24, ge=1, le=168, description="Hours to look back"),
-    user=Depends(verify_session)
-):
+def query_alerts_in_bbox_and_daterange(bbox: str, start_date: str, end_date: str, limit: int = 2000) -> List[Dict]:
     """
-    Get recent alerts with MINIMAL data - ultra-fast for map display
-
-    Returns only: title, description, source, severity, date, coordinates
-
-    Optimizations:
-    - Ultra-minimal field selection (8x speedup)
-    - NO sorting
-    - NO complex transformations
-    - In-memory caching (5 min TTL)
-
-    **Requires authentication**: Valid Google OAuth token
+    Query alerts within a bounding box and date range from both collections
+    
+    Args:
+        bbox: "lat1,lng1,lat2,lng2" format
+        start_date: "YYYY-MM-DD" format  
+        end_date: "YYYY-MM-DD" format
+        limit: Maximum alerts to return
+        
+    Returns:
+        List of normalized alert dictionaries
     """
+    try:
+        lat1, lng1, lat2, lng2 = map(float, bbox.split(','))
+        
+        # Convert date strings to datetime objects
+        start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
+        end_datetime = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)  # Include full end day
+        
+        db = get_db()
+        all_alerts = []
+        
+        # Allocate limits between collections
+        monitor_limit = min(600, int(limit * 0.3))  # 30% for monitor alerts
+        signals_limit = limit - monitor_limit       # 70% for 311 signals
+        
+        # Query 1: Monitor alerts with spatial and temporal filters
+        try:
+            alerts_ref = db.collection('nyc_monitor_alerts')
+            
+            # Temporal filter first (most selective)
+            temporal_query = alerts_ref.where('created_at', '>=', start_datetime).where('created_at', '<', end_datetime)
+            
+            monitor_count = 0
+            for doc in temporal_query.limit(monitor_limit * 2).stream():  # Get extra to account for spatial filtering
+                if monitor_count >= monitor_limit:
+                    break
+                    
+                data = doc.to_dict()
+                
+                # Extract coordinates from nested structure
+                coords = data.get('original_alert', {})
+                alert_lat = coords.get('latitude')
+                alert_lng = coords.get('longitude')
+                
+                # Skip if no coordinates
+                if alert_lat is None or alert_lng is None:
+                    continue
+                
+                # Spatial filter: check if alert is within bbox
+                if not (lat1 <= alert_lat <= lat2 and lng1 <= alert_lng <= lng2):
+                    continue
+                
+                # Extract the real source from nested structure
+                real_source = 'monitor'  # Default fallback
+                try:
+                    original_alert = data.get('original_alert', {})
+                    if original_alert:
+                        original_alert_data = original_alert.get('original_alert_data', {})
+                        if original_alert_data:
+                            signals = original_alert_data.get('signals', [])
+                            if signals and len(signals) > 0:
+                                real_source = signals[0]
+                except Exception:
+                    pass  # Keep default
+                
+                # Create normalized alert
+                alert = {
+                    'id': doc.id,
+                    'title': data.get('title', 'NYC Alert'),
+                    'description': data.get('description', ''),
+                    'source': real_source,
+                    'priority': _get_priority_from_severity(data.get('severity', 5)),
+                    'severity': data.get('severity', 5),
+                    'timestamp': _extract_monitor_timestamp(data),
+                    'coordinates': {
+                        'lat': alert_lat,
+                        'lng': alert_lng
+                    },
+                    'neighborhood': coords.get('neighborhood', 'Unknown'),
+                    'borough': coords.get('borough', 'Unknown'),
+                    'category': normalize_category(data.get('category', 'general')),
+                }
+                all_alerts.append(alert)
+                monitor_count += 1
+                
+        except Exception as e:
+            logger.error(f"Error querying monitor alerts: {e}")
+        
+        # Query 2: 311 signals with spatial and temporal filters
+        try:
+            signals_ref = db.collection('nyc_311_signals')
+            
+            # Temporal filter first
+            temporal_query = signals_ref.where('signal_timestamp', '>=', start_datetime).where('signal_timestamp', '<', end_datetime)
+            
+            signals_count = 0
+            for doc in temporal_query.limit(signals_limit * 2).stream():  # Get extra to account for spatial filtering
+                if signals_count >= signals_limit:
+                    break
+                    
+                data = doc.to_dict()
+                
+                # Extract coordinates directly
+                alert_lat = data.get('latitude')
+                alert_lng = data.get('longitude')
+                
+                # Skip if no coordinates
+                if alert_lat is None or alert_lng is None:
+                    continue
+                
+                # Spatial filter: check if alert is within bbox
+                if not (lat1 <= alert_lat <= lat2 and lng1 <= alert_lng <= lng2):
+                    continue
+                
+                # Use calculated severity from rule-based triage
+                severity = data.get('severity')
+                if severity is None:
+                    severity = 7 if data.get('is_emergency', False) else 3
+                
+                # Get categorization
+                complaint_type = data.get('complaint_type', '')
+                category = data.get('category')
+                if not category:
+                    event_type = data.get('event_type') or categorize_311_complaint(complaint_type)
+                    alert_type_info = get_alert_type_info(event_type)
+                    category = alert_type_info.category.value
+                
+                # Create normalized alert
+                alert = {
+                    'id': doc.id,
+                    'title': f"{complaint_type}: {data.get('descriptor', '')[:50]}",
+                    'description': data.get('descriptor', ''),
+                    'source': '311',
+                    'priority': _get_priority_from_severity(severity),
+                    'severity': severity,
+                    'timestamp': data.get('signal_timestamp', datetime.utcnow()).isoformat(),
+                    'coordinates': {
+                        'lat': alert_lat,
+                        'lng': alert_lng
+                    },
+                    'neighborhood': data.get('incident_zip', 'Unknown'),
+                    'borough': data.get('borough', 'Unknown'),
+                    'category': normalize_category(category),
+                    'complaint_type': complaint_type,
+                    'agency': data.get('agency_name', ''),
+                    'is_emergency': data.get('is_emergency', False),
+                }
+                all_alerts.append(alert)
+                signals_count += 1
+                
+        except Exception as e:
+            logger.error(f"Error querying 311 signals: {e}")
+        
+        logger.info(f"Spatial query returned {len(all_alerts)} alerts from bbox {bbox}")
+        return all_alerts
+        
+    except Exception as e:
+        logger.error(f"Error in spatial query: {e}")
+        return []
+
+
+def get_metro_area_highlights(start_date: str, end_date: str, limit: int = 100) -> List[Dict]:
+    """Return high-priority alerts for metro area view (outside NYC bounds)"""
+    bbox = f"{NYC_BOUNDS['south']},{NYC_BOUNDS['west']},{NYC_BOUNDS['north']},{NYC_BOUNDS['east']}"
+    
+    # Get all alerts from NYC area
+    all_alerts = query_alerts_in_bbox_and_daterange(bbox, start_date, end_date, limit * 3)
+    
+    # Filter for high-severity alerts only
+    high_priority_alerts = [
+        alert for alert in all_alerts 
+        if alert.get('severity', 0) >= 7  # Only critical alerts
+    ]
+    
+    # Sort by severity descending, then by timestamp
+    high_priority_alerts.sort(
+        key=lambda x: (x.get('severity', 0), x.get('timestamp', '')), 
+        reverse=True
+    )
+    
+    return high_priority_alerts[:limit]
+
+
+def is_recent_data(start_date: str) -> bool:
+    """Check if the start date is within the last 7 days (recent data)"""
+    try:
+        start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
+        cutoff_date = datetime.utcnow() - timedelta(days=7)
+        return start_datetime >= cutoff_date
+    except ValueError:
+        return False
+
+
+# Define the viewport endpoint with conditional authentication
+if os.getenv('PERF_TEST', '').lower() == 'true':
+    # Performance testing mode - no auth required
+    @alerts_router.get('/viewport')
+    async def get_viewport_alerts(
+        bbox: str = Query(..., description="Bounding box as 'lat1,lng1,lat2,lng2'"),
+        start_date: str = Query(..., description="Start date as 'YYYY-MM-DD'"),
+        end_date: str = Query(..., description="End date as 'YYYY-MM-DD'"),
+        limit: int = Query(2000, ge=1, le=50000, description="Maximum alerts to return")
+    ):
+        """
+        Get alerts within a specific viewport (bounding box) and date range
+        
+        Uses NYC-optimized spatial grid caching for enhanced performance:
+        - Different grid sizes based on zoom level (city/borough/neighborhood/street)
+        - Special handling for viewports outside NYC (metro area highlights)
+        - Comprehensive performance instrumentation
+        - Extended historical data support (6+ months)
+        
+        **PERF_TEST MODE**: Authentication bypassed for testing
+        """
+        user = {"email": "perf-test@example.com", "testing": True}
+        
+        # Function body continues below...
+        return await _viewport_alerts_implementation(bbox, start_date, end_date, limit, user)
+        
+else:
+    # Production mode - authentication required
+    @alerts_router.get('/viewport')
+    async def get_viewport_alerts(
+        bbox: str = Query(..., description="Bounding box as 'lat1,lng1,lat2,lng2'"),
+        start_date: str = Query(..., description="Start date as 'YYYY-MM-DD'"),
+        end_date: str = Query(..., description="End date as 'YYYY-MM-DD'"),
+        limit: int = Query(2000, ge=1, le=50000, description="Maximum alerts to return"),
+        user=Depends(verify_session)
+    ):
+        """
+        Get alerts within a specific viewport (bounding box) and date range
+        
+        Uses NYC-optimized spatial grid caching for enhanced performance:
+        - Different grid sizes based on zoom level (city/borough/neighborhood/street)
+        - Special handling for viewports outside NYC (metro area highlights)
+        - Comprehensive performance instrumentation
+        - Extended historical data support (6+ months)
+        
+        **Requires authentication**: Valid Google OAuth token
+        """
+        
+        # Function body continues below...
+        return await _viewport_alerts_implementation(bbox, start_date, end_date, limit, user)
+
+
+async def _viewport_alerts_implementation(bbox: str, start_date: str, end_date: str, limit: int, user: Dict[str, Any]):
+    """Implementation of viewport alerts logic shared between auth and no-auth versions"""
+    # Input validation with normalization
+    try:
+        lat1, lng1, lat2, lng2 = map(float, bbox.split(','))
+        if not (-90 <= lat1 <= 90 and -90 <= lat2 <= 90 and -180 <= lng1 <= 180 and -180 <= lng2 <= 180):
+            raise AlertError("Invalid latitude/longitude values")
+        
+        # Normalize bounding box to ensure consistent ordering for caching
+        lat1, lat2 = min(lat1, lat2), max(lat1, lat2)
+        lng1, lng2 = min(lng1, lng2), max(lng1, lng2)
+        
+        # Calculate bbox area for optimization decisions
+        bbox_area = (lat2 - lat1) * (lng2 - lng1)
+        if bbox_area > 1.0:  # Very large area (>111km x 111km)
+            logger.warning(f"⚠️ Large viewport request: {bbox_area:.4f} sq degrees for user {user.get('email')}")
+            # Could implement stricter limits or different caching strategy for very large areas
+    except (ValueError, IndexError):
+        raise AlertError("Invalid bbox format. Use 'lat1,lng1,lat2,lng2'")
+    
+    try:
+        datetime.strptime(start_date, '%Y-%m-%d')
+        datetime.strptime(end_date, '%Y-%m-%d')
+    except ValueError:
+        raise AlertError("Invalid date format. Use 'YYYY-MM-DD'")
+    
+    if limit < 1 or limit > 50000:
+        raise AlertError("Limit must be between 1 and 50000")
+    
+    logger.info(f"🔒 Authenticated user {user.get('email')} accessing viewport alerts")
+    logger.info(f"📍 Viewport: {bbox}, Date range: {start_date} to {end_date}")
+    
+    # Performance timing
+    start_time = time.time()
+    cache_start = time.time()
+    
+    # Generate cache key using NYC-optimized strategy
+    cache_key = get_viewport_cache_key(bbox, start_date, end_date)
+    
+    # Try cache first
+    cached = _cache.get(cache_key)
+    cache_time = time.time() - cache_start
+    
+    if cached and is_cache_valid(cached['timestamp']):
+        total_time = time.time() - start_time
+        cached_data = cached['data'].copy()
+        
+        # Add cache hit performance metrics
+        cached_data['performance'].update({
+            'total_time_ms': round(total_time * 1000, 2),
+            'cache_hit': True,
+            'cache_time_ms': round(cache_time * 1000, 2),
+            'cache_age_seconds': round(time.time() - cached['timestamp'], 2),
+            'source': 'in_memory_cache'
+        })
+        
+        logger.info(f"✅ Cache HIT for {cache_key} ({round(total_time * 1000)}ms)")
+        return cached_data
+    
+    logger.info(f"❌ Cache MISS for {cache_key}")
+    
+    # Database query with timing
+    db_start = time.time()
+    
+    # Handle metro area requests (outside NYC)
+    if cache_key.startswith("metro_area:"):
+        alerts = get_metro_area_highlights(start_date, end_date, min(limit, 100))
+        query_type = "metro_area_highlights"
+    else:
+        alerts = query_alerts_in_bbox_and_daterange(bbox, start_date, end_date, limit)
+        query_type = "spatial_query"
+    
+    db_time = time.time() - db_start
+    
+    # Cache write timing
+    cache_write_start = time.time()
+    
+    # Determine TTL based on data recency
+    ttl = 3600 if is_recent_data(start_date) else 86400  # 1 hour vs 24 hours
+    
+    # Prepare response with performance metrics
+    response_data = {
+        'alerts': alerts,
+        'performance': {
+            'total_time_ms': 0,  # Will be updated below
+            'cache_hit': False,
+            'db_query_time_ms': round(db_time * 1000, 2),
+            'alert_count': len(alerts),
+            'source': 'database_fresh',
+            'query_type': query_type,
+            'cache_key_type': cache_key.split(':')[0] if ':' in cache_key else 'unknown',
+            'bbox': bbox,
+            'date_range_days': (datetime.strptime(end_date, '%Y-%m-%d') - datetime.strptime(start_date, '%Y-%m-%d')).days,
+            'ttl_seconds': ttl
+        }
+    }
+    
+    # Cache the response
+    _cache[cache_key] = {
+        'data': response_data,
+        'timestamp': time.time()
+    }
+    
+    cache_write_time = time.time() - cache_write_start
+    total_time = time.time() - start_time
+    
+    # Update final performance metrics
+    response_data['performance'].update({
+        'total_time_ms': round(total_time * 1000, 2),
+        'cache_write_time_ms': round(cache_write_time * 1000, 2)
+    })
+    
+    # Simple cache cleanup
+    cutoff = time.time() - 3600  # 1 hour
+    expired_keys = [k for k, v in _cache.items() if v['timestamp'] < cutoff]
+    for key in expired_keys:
+        del _cache[key]
+    
+    if expired_keys:
+        logger.info(f"🧹 Cleaned up {len(expired_keys)} expired cache entries")
+    
+    logger.info(f"✅ Viewport query completed: {len(alerts)} alerts in {round(total_time * 1000)}ms")
+    return response_data
+
+
+# Define the recent alerts endpoint with conditional authentication
+if os.getenv('PERF_TEST', '').lower() == 'true':
+    # Performance testing mode - no auth required
+    @alerts_router.get('/recent')
+    async def get_recent_alerts(
+        limit: int = Query(2000, ge=1, le=50000,
+                           description="Number of alerts to return"),
+        hours: int = Query(24, ge=1, le=4380, description="Hours to look back (up to 6 months)")
+    ):
+        """
+        Get recent alerts with MINIMAL data - ultra-fast for map display
+
+        Returns only: title, description, source, severity, date, coordinates
+
+        Optimizations:
+        - Ultra-minimal field selection (8x speedup)
+        - NO sorting
+        - NO complex transformations
+        - In-memory caching (5 min TTL)
+
+        **PERF_TEST MODE**: Authentication bypassed for testing
+        """
+        user = {"email": "perf-test@example.com", "testing": True}
+        return await _recent_alerts_implementation(limit, hours, user)
+        
+else:
+    # Production mode - authentication required
+    @alerts_router.get('/recent')
+    async def get_recent_alerts(
+        limit: int = Query(2000, ge=1, le=50000,
+                           description="Number of alerts to return"),
+        hours: int = Query(24, ge=1, le=4380, description="Hours to look back (up to 6 months)"),
+        user=Depends(verify_session)
+    ):
+        """
+        Get recent alerts with MINIMAL data - ultra-fast for map display
+
+        Returns only: title, description, source, severity, date, coordinates
+
+        Optimizations:
+        - Ultra-minimal field selection (8x speedup)
+        - NO sorting
+        - NO complex transformations
+        - In-memory caching (5 min TTL)
+
+        **Requires authentication**: Valid Google OAuth token
+        """
+        return await _recent_alerts_implementation(limit, hours, user)
+
+
+async def _recent_alerts_implementation(limit: int, hours: int, user: Dict[str, Any]):
+    """Implementation of recent alerts logic shared between auth and no-auth versions"""
     # Input validation
-    if limit < 1 or limit > 5000:
-        raise AlertError("Limit must be between 1 and 5000")
+    if limit < 1 or limit > 50000:
+        raise AlertError("Limit must be between 1 and 50000")
 
-    if hours < 1 or hours > 168:
-        raise AlertError("Hours must be between 1 and 168")
+    if hours < 1 or hours > 4380:
+        raise AlertError("Hours must be between 1 and 4380 (6 months)")
 
     logger.info(
         f"🔒 Authenticated user {user.get('email')} accessing recent alerts")
@@ -705,23 +1174,46 @@ async def get_cache_info(user=Depends(verify_session)):
     }
 
 
-@alerts_router.delete('/cache')
-async def clear_cache(user=Depends(verify_session)):
-    """
-    Clear all cached data
+# Define the cache clear endpoint with conditional authentication
+if os.getenv('PERF_TEST', '').lower() == 'true':
+    # Performance testing mode - no auth required
+    @alerts_router.delete('/cache')
+    async def clear_cache():
+        """
+        Clear all cached data
 
-    **Requires authentication**: Valid Google OAuth token - ADMINISTRATIVE ACTION
-    """
-    logger.warning(
-        f"🔒⚠️ Authenticated user {user.get('email')} clearing all cache data - ADMINISTRATIVE ACTION")
+        **PERF_TEST MODE**: Authentication bypassed for testing
+        """
+        user = {"email": "perf-test@example.com", "testing": True}
+        logger.warning(
+            f"🔒⚠️ PERF_TEST user {user.get('email')} clearing all cache data - TESTING ACTION")
 
-    cleared_count = len(_cache)
-    _cache.clear()
-    return {
-        'message': f"Cleared {cleared_count} cache entries",
-        'cache_size': len(_cache),
-        'cleared_by': user.get('email')
-    }
+        cleared_count = len(_cache)
+        _cache.clear()
+        return {
+            'message': f"Cleared {cleared_count} cache entries",
+            'cache_size': len(_cache),
+            'cleared_by': user.get('email')
+        }
+else:
+    # Production mode - authentication required
+    @alerts_router.delete('/cache')
+    async def clear_cache(user=Depends(verify_session)):
+        """
+        Clear all cached data
+
+        **Requires authentication**: Valid Google OAuth token - ADMINISTRATIVE ACTION
+        """
+        logger.warning(
+            f"🔒⚠️ Authenticated user {user.get('email')} clearing all cache data - ADMINISTRATIVE ACTION")
+
+        cleared_count = len(_cache)
+        _cache.clear()
+        return {
+            'message': f"Cleared {cleared_count} cache entries",
+            'cache_size': len(_cache),
+            'cleared_by': user.get('email')
+        }
 
 
 @alerts_router.get('/stats')
@@ -735,8 +1227,8 @@ async def get_alert_stats(
     **Requires authentication**: Valid Google OAuth token
     """
     # Input validation
-    if hours < 1 or hours > 168:
-        raise AlertError("Hours must be between 1 and 168")
+    if hours < 1 or hours > 4380:
+        raise AlertError("Hours must be between 1 and 4380 (6 months)")
 
     logger.info(
         f"🔒 Authenticated user {user.get('email')} accessing alert stats")

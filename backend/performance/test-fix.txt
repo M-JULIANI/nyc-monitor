@@ -1,0 +1,742 @@
+Enhanced Alert Serving Strategy - Performance Test Report
+============================================================
+
+Test Timestamp: 2025-09-06T19:04:42.167535
+Base URL: http://localhost:8000
+Test Duration: 70.4 seconds
+
+PERFORMANCE SCENARIOS SUMMARY
+----------------------------------------
+
+CURRENT_7_DAYS:
+  Description: Legacy endpoint for comparison
+  Cold Cache Avg: 7420.89ms
+  Warm Cache Avg: 32.38ms
+  Cache Hit Rate: 0.0%
+  Performance Improvement: 99.6%
+  Sample Alert Count: 1413
+
+VIEWPORT_7_DAYS:
+  Description: New caching system - 1 week Manhattan
+  Cold Cache Avg: 1443.89ms
+  Warm Cache Avg: 1.64ms
+  Cache Hit Rate: 60.0%
+  Performance Improvement: 99.9%
+  Sample Alert Count: 0
+
+VIEWPORT_30_DAYS:
+  Description: Extended historical data - 1 month Manhattan
+  Cold Cache Avg: 1348.32ms
+  Warm Cache Avg: 0.96ms
+  Cache Hit Rate: 60.0%
+  Performance Improvement: 99.9%
+  Sample Alert Count: 0
+
+VIEWPORT_6_MONTHS:
+  Description: Full historical range - 6 months Manhattan
+  Cold Cache Avg: 1314.56ms
+  Warm Cache Avg: 0.93ms
+  Cache Hit Rate: 60.0%
+  Performance Improvement: 99.9%
+  Sample Alert Count: 0
+
+BOROUGH_LEVEL:
+  Description: Borough-level caching test
+  Cold Cache Avg: 1385.86ms
+  Warm Cache Avg: 0.85ms
+  Cache Hit Rate: 60.0%
+  Performance Improvement: 99.9%
+  Sample Alert Count: 0
+
+STREET_LEVEL:
+  Description: Street-level precision caching
+  Cold Cache Avg: 1225.34ms
+  Warm Cache Avg: 0.92ms
+  Cache Hit Rate: 60.0%
+  Performance Improvement: 99.9%
+  Sample Alert Count: 0
+
+METRO_AREA:
+  Description: Metro area fallback handling
+  Cold Cache Avg: 1314.51ms
+  Warm Cache Avg: 1.32ms
+  Cache Hit Rate: 60.0%
+  Performance Improvement: 99.9%
+  Sample Alert Count: 0
+
+
+CACHE PATTERNS ANALYSIS
+----------------------------------------
+
+viewport_a:
+  First Request: Cache Hit = False, Time = 1338.1ms
+  Second Request: Cache Hit = True, Time = 1.2ms
+  Cache Key Type: viewport
+
+viewport_b_overlap:
+  First Request: Cache Hit = False, Time = 1242.9ms
+  Second Request: Cache Hit = True, Time = 1.9ms
+  Cache Key Type: viewport
+
+viewport_c_adjacent:
+  First Request: Cache Hit = False, Time = 1327.8ms
+  Second Request: Cache Hit = True, Time = 1.1ms
+  Cache Key Type: viewport
+
+zoom_out_borough:
+  First Request: Cache Hit = False, Time = 1345.4ms
+  Second Request: Cache Hit = True, Time = 1.6ms
+  Cache Key Type: viewport
+
+zoom_in_neighborhood:
+  First Request: Cache Hit = False, Time = 1313.1ms
+  Second Request: Cache Hit = True, Time = 1.3ms
+  Cache Key Type: viewport
+
+zoom_in_street:
+  First Request: Cache Hit = True, Time = 0.8ms
+  Second Request: Cache Hit = True, Time = 2.1ms
+  Cache Key Type: viewport
+
+
+LOAD TESTING RESULTS
+----------------------------------------
+Concurrent Users: 3
+Test Duration: 15 seconds
+Total Requests: 17
+Successful Requests: 17
+Failed Requests: 0
+Average Response Time: 152.26ms
+Cache Hit Rate: 94.1%
+Error Rate: 0.0%
+Requests Per Second: 1.13
+
+
+SUCCESS CRITERIA EVALUATION
+----------------------------------------
+Average Cache Hit Rate: 51.4% (Target: >75%)
+Cache Hit Rate Status: ❌ FAIL
+Load Test Error Rate: 0.0% (Target: <5%)
+Error Rate Status: ✅ PASS
+
+
+RAW DATA (JSON)
+----------------------------------------
+{
+  "test_metadata": {
+    "timestamp": "2025-09-06T19:04:42.167535",
+    "base_url": "http://localhost:8000",
+    "test_duration_seconds": 70.36140298843384
+  },
+  "performance_scenarios": {
+    "current_7_days": {
+      "description": "Legacy endpoint for comparison",
+      "cold_cache_avg_ms": 7420.89,
+      "cold_cache_min_ms": 6789.57,
+      "cold_cache_max_ms": 8052.21,
+      "warm_cache_avg_ms": 32.38,
+      "warm_cache_min_ms": 31.6,
+      "warm_cache_max_ms": 33.57,
+      "cache_hit_rate_percent": 0.0,
+      "performance_improvement_percent": 99.6,
+      "sample_alert_count": 1413,
+      "total_runs": 5,
+      "raw_data": [
+        {
+          "run": 1,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 8052.214622497559,
+          "alert_count": 1413,
+          "source": "unknown"
+        },
+        {
+          "run": 2,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 6789.574384689331,
+          "alert_count": 1413,
+          "source": "unknown"
+        },
+        {
+          "run": 3,
+          "type": "warm",
+          "cache_hit": false,
+          "response_time": 31.6011905670166,
+          "alert_count": 1413,
+          "source": "unknown"
+        },
+        {
+          "run": 4,
+          "type": "warm",
+          "cache_hit": false,
+          "response_time": 31.98385238647461,
+          "alert_count": 1413,
+          "source": "unknown"
+        },
+        {
+          "run": 5,
+          "type": "warm",
+          "cache_hit": false,
+          "response_time": 33.5695743560791,
+          "alert_count": 1413,
+          "source": "unknown"
+        }
+      ]
+    },
+    "viewport_7_days": {
+      "description": "New caching system - 1 week Manhattan",
+      "cold_cache_avg_ms": 1443.89,
+      "cold_cache_min_ms": 1387.32,
+      "cold_cache_max_ms": 1500.45,
+      "warm_cache_avg_ms": 1.64,
+      "warm_cache_min_ms": 1.0,
+      "warm_cache_max_ms": 2.46,
+      "cache_hit_rate_percent": 60.0,
+      "performance_improvement_percent": 99.9,
+      "sample_alert_count": 0,
+      "total_runs": 5,
+      "raw_data": [
+        {
+          "run": 1,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1500.453233718872,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 2,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1387.324333190918,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 3,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 2.460479736328125,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 4,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 1.459360122680664,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 5,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 1.0046958923339844,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        }
+      ]
+    },
+    "viewport_30_days": {
+      "description": "Extended historical data - 1 month Manhattan",
+      "cold_cache_avg_ms": 1348.32,
+      "cold_cache_min_ms": 1332.3,
+      "cold_cache_max_ms": 1364.34,
+      "warm_cache_avg_ms": 0.96,
+      "warm_cache_min_ms": 0.91,
+      "warm_cache_max_ms": 1.04,
+      "cache_hit_rate_percent": 60.0,
+      "performance_improvement_percent": 99.9,
+      "sample_alert_count": 0,
+      "total_runs": 5,
+      "raw_data": [
+        {
+          "run": 1,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1364.3369674682617,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 2,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1332.2968482971191,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 3,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 1.0416507720947266,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 4,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 0.9388923645019531,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 5,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 0.9071826934814453,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        }
+      ]
+    },
+    "viewport_6_months": {
+      "description": "Full historical range - 6 months Manhattan",
+      "cold_cache_avg_ms": 1314.56,
+      "cold_cache_min_ms": 1227.9,
+      "cold_cache_max_ms": 1401.23,
+      "warm_cache_avg_ms": 0.93,
+      "warm_cache_min_ms": 0.56,
+      "warm_cache_max_ms": 1.3,
+      "cache_hit_rate_percent": 60.0,
+      "performance_improvement_percent": 99.9,
+      "sample_alert_count": 0,
+      "total_runs": 5,
+      "raw_data": [
+        {
+          "run": 1,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1401.2315273284912,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 2,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1227.8962135314941,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 3,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 1.3048648834228516,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 4,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 0.9253025054931641,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 5,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 0.560760498046875,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        }
+      ]
+    },
+    "borough_level": {
+      "description": "Borough-level caching test",
+      "cold_cache_avg_ms": 1385.86,
+      "cold_cache_min_ms": 1318.4,
+      "cold_cache_max_ms": 1453.32,
+      "warm_cache_avg_ms": 0.85,
+      "warm_cache_min_ms": 0.77,
+      "warm_cache_max_ms": 0.99,
+      "cache_hit_rate_percent": 60.0,
+      "performance_improvement_percent": 99.9,
+      "sample_alert_count": 0,
+      "total_runs": 5,
+      "raw_data": [
+        {
+          "run": 1,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1453.3238410949707,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 2,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1318.4013366699219,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 3,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 0.9908676147460938,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 4,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 0.7801055908203125,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 5,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 0.7698535919189453,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        }
+      ]
+    },
+    "street_level": {
+      "description": "Street-level precision caching",
+      "cold_cache_avg_ms": 1225.34,
+      "cold_cache_min_ms": 1217.73,
+      "cold_cache_max_ms": 1232.95,
+      "warm_cache_avg_ms": 0.92,
+      "warm_cache_min_ms": 0.7,
+      "warm_cache_max_ms": 1.21,
+      "cache_hit_rate_percent": 60.0,
+      "performance_improvement_percent": 99.9,
+      "sample_alert_count": 0,
+      "total_runs": 5,
+      "raw_data": [
+        {
+          "run": 1,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1232.9466342926025,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 2,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1217.728853225708,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 3,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 1.2149810791015625,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 4,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 0.6959438323974609,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 5,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 0.8451938629150391,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        }
+      ]
+    },
+    "metro_area": {
+      "description": "Metro area fallback handling",
+      "cold_cache_avg_ms": 1314.51,
+      "cold_cache_min_ms": 1280.53,
+      "cold_cache_max_ms": 1348.49,
+      "warm_cache_avg_ms": 1.32,
+      "warm_cache_min_ms": 1.22,
+      "warm_cache_max_ms": 1.48,
+      "cache_hit_rate_percent": 60.0,
+      "performance_improvement_percent": 99.9,
+      "sample_alert_count": 0,
+      "total_runs": 5,
+      "raw_data": [
+        {
+          "run": 1,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1280.5252075195312,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 2,
+          "type": "cold",
+          "cache_hit": false,
+          "response_time": 1348.4935760498047,
+          "alert_count": 0,
+          "source": "database_fresh"
+        },
+        {
+          "run": 3,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 1.4760494232177734,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 4,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 1.2154579162597656,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        },
+        {
+          "run": 5,
+          "type": "warm",
+          "cache_hit": true,
+          "response_time": 1.2552738189697266,
+          "alert_count": 0,
+          "source": "in_memory_cache"
+        }
+      ]
+    }
+  },
+  "cache_patterns": {
+    "viewport_a": {
+      "bbox": "40.75,-74.0,40.76,-73.99",
+      "first_request": {
+        "cache_hit": false,
+        "response_time": 1338.1397724151611,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      },
+      "second_request": {
+        "cache_hit": true,
+        "response_time": 1.1782646179199219,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      }
+    },
+    "viewport_b_overlap": {
+      "bbox": "40.755,-74.005,40.765,-73.995",
+      "first_request": {
+        "cache_hit": false,
+        "response_time": 1242.8622245788574,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      },
+      "second_request": {
+        "cache_hit": true,
+        "response_time": 1.9016265869140625,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      }
+    },
+    "viewport_c_adjacent": {
+      "bbox": "40.76,-74.01,40.77,-74.00",
+      "first_request": {
+        "cache_hit": false,
+        "response_time": 1327.8439044952393,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      },
+      "second_request": {
+        "cache_hit": true,
+        "response_time": 1.0516643524169922,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      }
+    },
+    "zoom_out_borough": {
+      "bbox": "40.7,-74.1,40.8,-73.9",
+      "first_request": {
+        "cache_hit": false,
+        "response_time": 1345.4394340515137,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      },
+      "second_request": {
+        "cache_hit": true,
+        "response_time": 1.6262531280517578,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      }
+    },
+    "zoom_in_neighborhood": {
+      "bbox": "40.74,-74.02,40.78,-73.98",
+      "first_request": {
+        "cache_hit": false,
+        "response_time": 1313.1060600280762,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      },
+      "second_request": {
+        "cache_hit": true,
+        "response_time": 1.310586929321289,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      }
+    },
+    "zoom_in_street": {
+      "bbox": "40.755,-74.005,40.765,-73.995",
+      "first_request": {
+        "cache_hit": true,
+        "response_time": 0.8482933044433594,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      },
+      "second_request": {
+        "cache_hit": true,
+        "response_time": 2.140045166015625,
+        "cache_key_type": "viewport",
+        "query_type": "spatial_query"
+      }
+    }
+  },
+  "load_testing": {
+    "concurrent_users": 3,
+    "duration_seconds": 15,
+    "total_requests": 17,
+    "successful_requests": 17,
+    "failed_requests": 0,
+    "avg_response_time_ms": 152.26,
+    "cache_hit_rate_percent": 94.1,
+    "error_rate_percent": 0.0,
+    "requests_per_second": 1.13,
+    "raw_data": [
+      {
+        "user_id": 0,
+        "response_time": 2.0058155059814453,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185463.7278404
+      },
+      {
+        "user_id": 0,
+        "response_time": 2.0139217376708984,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185465.7311006
+      },
+      {
+        "user_id": 0,
+        "response_time": 2.9115676879882812,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185467.739708
+      },
+      {
+        "user_id": 0,
+        "response_time": 1.0013580322265625,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185469.743002
+      },
+      {
+        "user_id": 0,
+        "response_time": 3.9632320404052734,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185471.7481482
+      },
+      {
+        "user_id": 0,
+        "response_time": 2.4924278259277344,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185473.7571492
+      },
+      {
+        "user_id": 0,
+        "response_time": 1.3604164123535156,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185475.7631273
+      },
+      {
+        "user_id": 0,
+        "response_time": 1.0030269622802734,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185477.7668924
+      },
+      {
+        "user_id": 1,
+        "response_time": 1272.9814052581787,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185464.9988523
+      },
+      {
+        "user_id": 1,
+        "response_time": 2.651691436767578,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185468.0061684
+      },
+      {
+        "user_id": 1,
+        "response_time": 1.4660358428955078,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185470.015755
+      },
+      {
+        "user_id": 1,
+        "response_time": 2.441883087158203,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185474.038384
+      },
+      {
+        "user_id": 1,
+        "response_time": 1.5475749969482422,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185478.0803833
+      },
+      {
+        "user_id": 2,
+        "response_time": 1271.8920707702637,
+        "cache_hit": false,
+        "alert_count": 0,
+        "timestamp": 1757185464.9981635
+      },
+      {
+        "user_id": 2,
+        "response_time": 4.40216064453125,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185469.0010793
+      },
+      {
+        "user_id": 2,
+        "response_time": 11.71422004699707,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185473.0234168
+      },
+      {
+        "user_id": 2,
+        "response_time": 2.6023387908935547,
+        "cache_hit": true,
+        "alert_count": 0,
+        "timestamp": 1757185477.075545
+      }
+    ]
+  }
+}

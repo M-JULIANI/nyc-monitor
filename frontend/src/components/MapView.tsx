@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import Map, { Layer, Source, Popup, Marker } from "react-map-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import bbox from "@turf/bbox";
 import { Alert } from "../types";
 import { useAlerts } from "../contexts/AlertsContext";
 import { useMapState } from "../contexts/MapStateContext";
+import { useMapViewportAlerts } from "../hooks/useMapViewportAlerts";
 import { useMobile } from "../pages/Home";
 import Spinner from "./Spinner";
 import AgentTraceModal from "./AgentTraceModal";
@@ -87,7 +89,17 @@ const sliderStyles = `
 const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
   //const markerClickedRef = useRef(false);
-  const { alerts, error, isLoading, generateReport, refetchAlert } = useAlerts();
+  // Keep the global alerts context for report generation and individual alert operations
+  const { generateReport, refetchAlert } = useAlerts();
+  
+  // Use viewport-specific alerts for map display
+  // Pass mapRef for accurate Mapbox native bounds calculation
+  const { 
+    viewportAlerts: alerts, 
+    isLoadingViewport: isLoading, 
+    viewportError: error,
+    performanceMetrics 
+  } = useMapViewportAlerts(mapRef);
   const { user } = useAuth();
   const { isMobile } = useMobile();
 
@@ -103,35 +115,73 @@ const MapView: React.FC = () => {
     traceId: "",
     alertTitle: "",
   });
+  
+  // Performance metrics display (for development/debugging)
+  const [showPerformanceMetrics, setShowPerformanceMetrics] = useState(true);
 
   // Track if we should auto-fit to alerts (only on first load or filter changes, disabled on mobile)
   const [shouldAutoFit, setShouldAutoFit] = useState(!isMobile);
 
-  // Calculate bounds for all visible alerts
+  // Calculate bounds for all visible alerts using Turf.js for accuracy
   const calculateAlertBounds = (alerts: Alert[]) => {
     if (alerts.length === 0) return null;
 
-    let minLat = Infinity;
-    let maxLat = -Infinity;
-    let minLng = Infinity;
-    let maxLng = -Infinity;
+    try {
+      // Create GeoJSON FeatureCollection from alerts
+      const alertFeatures = {
+        type: "FeatureCollection" as const,
+        features: alerts.map((alert) => ({
+          type: "Feature" as const,
+          geometry: {
+            type: "Point" as const,
+            coordinates: [alert.coordinates.lng, alert.coordinates.lat],
+          },
+          properties: { id: alert.id },
+        })),
+      };
 
-    alerts.forEach((alert) => {
-      const { lat, lng } = alert.coordinates;
-      minLat = Math.min(minLat, lat);
-      maxLat = Math.max(maxLat, lat);
-      minLng = Math.min(minLng, lng);
-      maxLng = Math.max(maxLng, lng);
-    });
+      // Use Turf.js to calculate precise bounding box
+      const alertBounds = bbox(alertFeatures);
+      
+      // Add padding (roughly 0.01 degrees = ~1km)
+      const padding = 0.01;
+      const paddedBounds: [[number, number], [number, number]] = [
+        [alertBounds[0] - padding, alertBounds[1] - padding], // Southwest corner [minLng, minLat]
+        [alertBounds[2] + padding, alertBounds[3] + padding], // Northeast corner [maxLng, maxLat]
+      ];
 
-    // Add padding (roughly 0.01 degrees = ~1km)
-    const padding = 0.01;
-    const paddedBounds: [[number, number], [number, number]] = [
-      [minLng - padding, minLat - padding], // Southwest corner
-      [maxLng + padding, maxLat + padding], // Northeast corner
-    ];
+      console.log('📍 Calculated alert bounds using Turf.js:', { 
+        originalBounds: alertBounds, 
+        paddedBounds,
+        alertCount: alerts.length 
+      });
 
-    return paddedBounds;
+      return paddedBounds;
+    } catch (error) {
+      console.warn('⚠️ Turf.js bbox calculation failed, falling back to manual calculation:', error);
+      
+      // Fallback to manual calculation
+      let minLat = Infinity;
+      let maxLat = -Infinity;
+      let minLng = Infinity;
+      let maxLng = -Infinity;
+
+      alerts.forEach((alert) => {
+        const { lat, lng } = alert.coordinates;
+        minLat = Math.min(minLat, lat);
+        maxLat = Math.max(maxLat, lat);
+        minLng = Math.min(minLng, lng);
+        maxLng = Math.max(maxLng, lng);
+      });
+
+      const padding = 0.01;
+      const paddedBounds: [[number, number], [number, number]] = [
+        [minLng - padding, minLat - padding], // Southwest corner
+        [maxLng + padding, maxLat + padding], // Northeast corner
+      ];
+
+      return paddedBounds;
+    }
   };
 
   // Filter alerts based on current filter settings
@@ -303,7 +353,9 @@ const MapView: React.FC = () => {
     if (hours < 24) return `${hours} hours`;
     if (hours === 24) return "1 day";
     if (hours < 168) return `${Math.round(hours / 24)} days`;
-    return `${Math.round(hours / 168)} weeks`;
+    if (hours < 720) return `${Math.round(hours / 168)} weeks`; // 720 = 30 days
+    if (hours < 4380) return `${Math.round(hours / 720)} months`; // 4380 = 6 months
+    return `${Math.round(hours / 4380)} half-years`;
   };
 
   // Create GeoJSON for alert points (used for both priority mode and heatmap)
@@ -811,10 +863,83 @@ const MapView: React.FC = () => {
           !isMapInteractive ? "opacity-50" : ""
         }`}
       >
-        <span className="hidden sm:inline">{filteredAlerts.length} alerts visible</span>
-        <span className="sm:hidden">{filteredAlerts.length}</span>
-        {isConnected && <span className="ml-2 text-status-connected">●</span>}
+        <div className="flex items-center gap-2">
+          <div>
+            <span className="hidden sm:inline">{filteredAlerts.length} alerts visible</span>
+            <span className="sm:hidden">{filteredAlerts.length}</span>
+            {isConnected && <span className="ml-2 text-status-connected">●</span>}
+          </div>
+          {/* Performance metrics toggle button */}
+          <button
+            onClick={() => setShowPerformanceMetrics(!showPerformanceMetrics)}
+            className="text-xs bg-zinc-700 hover:bg-zinc-600 px-2 py-1 rounded transition-colors"
+            title="Toggle performance metrics"
+          >
+            ⚡
+          </button>
+        </div>
       </div>
+
+      {/* Performance Metrics Overlay */}
+      {showPerformanceMetrics && performanceMetrics.length > 0 && (
+        <div className="absolute top-16 right-4 z-10 bg-zinc-900/95 backdrop-blur-sm p-4 rounded-lg text-white text-xs max-w-sm">
+          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+            ⚡ Performance Metrics
+            <button
+              onClick={() => setShowPerformanceMetrics(false)}
+              className="ml-auto text-zinc-400 hover:text-white text-lg leading-none"
+            >
+              ×
+            </button>
+          </h4>
+          
+          {performanceMetrics.slice(-3).map((metric, index) => (
+            <div key={index} className="mb-3 p-2 bg-zinc-800/50 rounded border-l-2 border-blue-500">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-zinc-300">
+                  {metric.alert_count} alerts • {metric.bbox_area.toFixed(4)}° area
+                </span>
+                <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${
+                  metric.backend_performance?.cache_hit 
+                    ? 'bg-green-600 text-white' 
+                    : 'bg-yellow-600 text-black'
+                }`}>
+                  {metric.backend_performance?.cache_hit ? 'CACHE HIT' : 'CACHE MISS'}
+                </span>
+                <span className="text-zinc-400">{new Date().toLocaleString()}</span>
+              </div>
+              
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Backend:</span>
+                  <span className="text-white font-mono">
+                    {metric.backend_performance?.total_time_ms || 'N/A'}ms
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Frontend:</span>
+                  <span className="text-white font-mono">
+                    {metric.frontend_metrics.total_frontend_time_ms}ms
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Total:</span>
+                  <span className="text-white font-mono font-semibold">
+                    {Math.round(
+                      (metric.backend_performance?.total_time_ms || 0) + 
+                      metric.frontend_metrics.total_frontend_time_ms
+                    )}ms
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+          
+          <div className="text-[10px] text-zinc-500 mt-2 border-t border-zinc-700 pt-2">
+            Showing last 3 viewport requests • {performanceMetrics.length} total measurements
+          </div>
+        </div>
+      )}
 
       {/* Time Range Slider - Responsive with better mobile positioning */}
       <div
@@ -827,38 +952,73 @@ const MapView: React.FC = () => {
         </div>
 
         <div className="relative">
-          {/* Hour markers - positioned to align with actual slider values */}
+          {/* Progressive time markers - positioned to align with actual slider values */}
           <div className="relative text-[9px] sm:text-xs text-zinc-400 mb-1 sm:mb-2 h-3 sm:h-4">
-            {/* -7d at position 1 = 0% */}
-            <span className="absolute left-0 transform -translate-x-1/2">-7d</span>
-            {/* -5d at position 49 = 28.7% */}
-            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: "28.7%" }}>
-              -5d
+            {/* 6mo at position 1 = 0% (4380 hours) */}
+            <span className="absolute left-0 transform -translate-x-1/2">-6mo</span>
+            
+            {/* 3mo at position ~2190 = ~50% (3mo = 2190 hours) */}
+            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: "50%" }}>
+              -3mo
             </span>
-            {/* -3d at position 97 = 57.5% */}
-            <span className="absolute transform -translate-x-1/2" style={{ left: "57.5%" }}>
-              -3d
+            
+            {/* 1mo at position ~720 = ~83.6% (1mo = 720 hours) */}
+            <span className="absolute transform -translate-x-1/2" style={{ left: "83.6%" }}>
+              -1mo
             </span>
-            {/* -1d at position 145 = 86.3% */}
-            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: "86.3%" }}>
+            
+            {/* 1w at position ~168 = ~96.2% (1w = 168 hours) */}
+            <span className="absolute hidden sm:inline transform -translate-x-1/2" style={{ left: "96.2%" }}>
+              -1w
+            </span>
+            
+            {/* 1d at position ~24 = ~99.5% (1d = 24 hours) */}
+            <span className="absolute transform -translate-x-1/2" style={{ left: "99.5%" }}>
               -1d
             </span>
-            {/* -12h at position 157 = 93.4% */}
-            <span className="absolute transform -translate-x-1/2" style={{ left: "93.4%" }}>
-              -12h
-            </span>
-            {/* -1h at position 168 = 100% */}
+            
+            {/* 1h at position 1 = 100% */}
             <span className="absolute right-0 transform translate-x-1/2">-1h</span>
           </div>
 
-          {/* Slider - inverted so right side = fewer hours (more recent) */}
+          {/* Slider - progressive scale favoring recent times */}
           <input
             type="range"
-            min="1"
-            max="168"
+            min="0"
+            max="100"
             step="1"
-            value={169 - filter.timeRangeHours}
-            onChange={(e) => setFilter((prev) => ({ ...prev, timeRangeHours: 169 - parseInt(e.target.value) }))}
+            value={(() => {
+              // Map hours to 0-100 scale with more granularity for recent times
+              const hours = filter.timeRangeHours;
+              if (hours <= 1) return 100;
+              if (hours <= 24) return 95 - ((hours - 1) / 23) * 15; // 1-24h = 95-80 (15 points)
+              if (hours <= 168) return 80 - ((hours - 24) / 144) * 25; // 1-7d = 80-55 (25 points)
+              if (hours <= 720) return 55 - ((hours - 168) / 552) * 25; // 1-4w = 55-30 (25 points)
+              if (hours <= 2190) return 30 - ((hours - 720) / 1470) * 20; // 1-3mo = 30-10 (20 points)
+              return 10 - ((hours - 2190) / 2190) * 10; // 3-6mo = 10-0 (10 points)
+            })()}
+            onChange={(e) => {
+              // Convert 0-100 scale back to hours with progressive mapping
+              const scale = parseInt(e.target.value);
+              let hours;
+              
+              if (scale >= 95) hours = 1 + ((95 - scale) / 5) * 23; // 100-95 = 1-24h
+              else if (scale >= 80) hours = 24 + ((80 - scale) / 15) * 144; // 95-80 = 1-7d
+              else if (scale >= 55) hours = 168 + ((55 - scale) / 25) * 552; // 80-55 = 1-4w
+              else if (scale >= 30) hours = 720 + ((30 - scale) / 25) * 1470; // 55-30 = 1-3mo
+              else if (scale >= 10) hours = 2190 + ((10 - scale) / 20) * 1470; // 30-10 = 3-6mo
+              else hours = 4380; // 0-10 = 6mo max
+              
+              // Round to reasonable increments and cap
+              if (hours <= 24) hours = Math.max(1, Math.round(hours));
+              else if (hours <= 168) hours = Math.round(hours / 6) * 6; // 6-hour increments
+              else if (hours <= 720) hours = Math.round(hours / 24) * 24; // Daily increments
+              else hours = Math.round(hours / 168) * 168; // Weekly increments
+              
+              hours = Math.min(hours, 4380);
+              
+              setFilter((prev) => ({ ...prev, timeRangeHours: hours }));
+            }}
             className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
             disabled={!isMapInteractive}
           />

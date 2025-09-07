@@ -1,20 +1,20 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 
-interface ViewportState {
+export interface ViewportState {
     longitude: number;
     latitude: number;
     zoom: number;
 } 
 
-interface FilterState {
+export interface FilterState {
   priority: string;
   source: string;
   status: string;
-  timeRangeHours: number; // Hours back from now (1-168 for 7 days)
+  timeRangeHours: number; // Hours back from now (1-4380 for up to 6 months)
 }
 
-type ViewMode = 'priority' | 'source' | 'category';
-type DisplayMode = 'dots' | 'heatmap';
+export type ViewMode = 'priority' | 'source' | 'category';
+export type DisplayMode = 'dots' | 'heatmap';
 
 interface MapStateContextType {
   viewport: ViewportState;
@@ -46,7 +46,7 @@ export const MapStateProvider: React.FC<MapStateProviderProps> = ({ children }) 
     priority: 'all',
     source: 'all',
     status: 'all',
-    timeRangeHours: 168 // Default to last 7 days to show all available data
+    timeRangeHours: 168 // Default to last 7 days (reasonable starting point)
   });
 
   // View mode state

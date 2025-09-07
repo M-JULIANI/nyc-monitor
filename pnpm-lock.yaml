@@ -29,9 +29,15 @@ importers:
       '@turf/bbox':
         specifier: ^7.2.0
         version: 7.2.0
+      '@types/lodash':
+        specifier: ^4.17.20
+        version: 4.17.20
       axios:
         specifier: ^1.6.7
         version: 1.10.0
+      lodash:
+        specifier: ^4.17.21
+        version: 4.17.21
       mapbox-gl:
         specifier: ^2.15.0
         version: 2.15.0
@@ -776,6 +782,9 @@ packages:
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
+
+  '@types/lodash@4.17.20':
+    resolution: {integrity: sha512-H3MHACvFUEiujabxhaI/ImO6gUrd8oOurg7LQtS7mbwIXA/cUqWrvBsaeJ23aZEPk1TAYkurjfMbSELfoCXlGA==}
 
   '@types/mapbox-gl@3.4.1':
     resolution: {integrity: sha512-NsGKKtgW93B+UaLPti6B7NwlxYlES5DpV5Gzj9F75rK5ALKsqSk15CiEHbOnTr09RGbr6ZYiCdI+59NNNcAImg==}
@@ -2886,6 +2895,8 @@ snapshots:
   '@types/geojson@7946.0.16': {}
 
   '@types/json-schema@7.0.15': {}
+
+  '@types/lodash@4.17.20': {}
 
   '@types/mapbox-gl@3.4.1':
     dependencies:

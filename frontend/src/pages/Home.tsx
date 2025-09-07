@@ -6,6 +6,7 @@ import Insights from "../components/Insights";
 import { AlertsProvider } from "../contexts/AlertsContext";
 import { AlertStatsProvider } from "../contexts/AlertStatsContext";
 import { MapStateProvider } from "../contexts/MapStateContext";
+import { ViewportAlertsProvider } from "../contexts/ViewportAlertsContext";
 
 // Mobile Detection Context
 interface MobileContextType {
@@ -96,7 +97,9 @@ const Home = () => {
     <MobileProvider isMobile={isMobile}>
       <AlertsProvider>
         <MapStateProvider>
-          <HomeContent />
+          <ViewportAlertsProvider>
+            <HomeContent />
+          </ViewportAlertsProvider>
         </MapStateProvider>
       </AlertsProvider>
     </MobileProvider>
