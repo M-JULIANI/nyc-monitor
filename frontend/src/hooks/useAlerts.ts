@@ -19,7 +19,6 @@ const recordPerformanceMetric = (metric: {
 };
 
 interface UseAlertsOptions {
-  pollInterval?: number; // How often to refresh data
   limit?: number; // Max number of alerts to load
   hours?: number; // How many hours back to fetch
   useStreaming?: boolean; // Whether to use streaming endpoint
@@ -55,7 +54,6 @@ const normalizeAlert = (rawAlert: any): Alert => {
 
 export const useAlerts = (options: UseAlertsOptions = {}) => {
   const {
-    pollInterval = 1800000, // 30 minutes
     limit = 50000, // High limit for map display
     hours = 4320, // Default to 6 months
     useStreaming, // Default to non-streaming
@@ -76,6 +74,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [streamingProgress, setStreamingProgress] = useState({
     currentChunk: 0,
     totalChunks: 0,
@@ -87,7 +86,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   const [streamingFailures, setStreamingFailures] = useState<number>(0);
   const streamingInProgress = useRef<boolean>(false);
 
-  // Keep track of alerts that are currently being investigated to prevent polling interference
+  // Keep track of alerts that are currently being investigated
   const [investigatingAlerts, setInvestigatingAlerts] = useState<Set<string>>(new Set());
   const [completedInvestigations, setCompletedInvestigations] = useState<
     Map<string, { reportUrl?: string; traceId?: string; investigationId?: string }>
@@ -152,14 +151,15 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
 
       streamingInProgress.current = true;
       setIsLoading(true);
-      setIsStreaming(true);
+      setIsConnecting(true);
+      setIsStreaming(false); // Not streaming yet, just connecting
       setError(null);
       setAlerts([]); // Clear existing alerts for fresh stream
       setStreamingProgress({
         currentChunk: 0,
         totalChunks: 0,
         totalAlerts: 0,
-        source: '',
+        source: 'Connecting...',
         isComplete: false
       });
 
@@ -208,6 +208,8 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
           switch (data.type) {
             case 'start':
               console.log('🚀 Starting alert stream:', data);
+              setIsConnecting(false);
+              setIsStreaming(true);
               setStreamingProgress(prev => ({
                 ...prev,
                 source: 'Starting...'
@@ -249,6 +251,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
 
               setIsLoading(false);
               setIsStreaming(false);
+              setIsConnecting(false);
               setLastFetch(new Date());
               eventSource.close();
               setStreamController(null);
@@ -263,6 +266,8 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
             case 'error':
               console.error('❌ Stream error:', data);
               setError(`Streaming error (${data.source}): ${data.message}`);
+              setIsConnecting(false);
+              setIsStreaming(false);
               break;
           }
         } catch (err) {
@@ -299,6 +304,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
           eventSource.close();
           setStreamController(null);
           setIsStreaming(false);
+          setIsConnecting(false);
           streamingInProgress.current = false;
           // Trigger regular fetch as fallback
           fetchAlerts();
@@ -308,6 +314,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
         setError('Connection lost during streaming');
         setIsLoading(false);
         setIsStreaming(false);
+        setIsConnecting(false);
         eventSource.close();
         setStreamController(null);
         streamingInProgress.current = false;
@@ -317,6 +324,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       setError(err instanceof Error ? err.message : "Failed to start streaming");
       setIsLoading(false);
       setIsStreaming(false);
+      setIsConnecting(false);
       setStreamController(null);
       streamingInProgress.current = false;
       console.error("Error starting stream:", err);
@@ -329,6 +337,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       streamController.abort();
       setStreamController(null);
       setIsStreaming(false);
+      setIsConnecting(false);
       setIsLoading(false);
       streamingInProgress.current = false;
       console.log('🛑 Stream cancelled by user');
@@ -707,7 +716,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     }
   };
 
-  // Auto-refresh alerts - separate effect for initial load and polling
+  // Load alerts once on mount - NO polling
   useEffect(() => {
     let mounted = true;
     
@@ -729,27 +738,6 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       mounted = false;
     };
   }, []); // Only run once on mount
-
-  // Separate effect for polling intervals
-  useEffect(() => {
-    // Set up staggered polling intervals (only for non-streaming mode)
-    let alertsInterval: NodeJS.Timeout | undefined;
-    let reportsInterval: NodeJS.Timeout | undefined;
-    
-    if (!useStreaming) {
-      alertsInterval = setInterval(() => {
-        fetchAlerts();
-      }, pollInterval); // 30 minutes
-    }
-    reportsInterval = setInterval(() => {
-      fetchAlertsWithReports();
-    }, 720000); // 12 minutes
-
-    return () => {
-      if (alertsInterval) clearInterval(alertsInterval);
-      if (reportsInterval) clearInterval(reportsInterval);
-    };
-  }, [useStreaming, pollInterval]); // Safe to include these as they're primitive values
 
   // Separate effect for cleanup on unmount
   useEffect(() => {
@@ -810,6 +798,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     fetchAlertsWithReports,
     // Streaming-specific state and methods
     isStreaming,
+    isConnecting,
     streamingProgress,
     streamAlerts,
     cancelStreaming,

@@ -2,7 +2,7 @@ import React from "react";
 import { useAlerts } from "../contexts/AlertsContext";
 
 const Dashboard: React.FC = () => {
-  const { alertsWithReports, stats, error, isLoading, isLoadingReports } = useAlerts();
+  const { alertsWithReports, stats, error, isLoading, isLoadingReports, isConnecting } = useAlerts();
   const isConnected = !isLoading;
 
   const handleViewReport = (reportUrl: string) => {
@@ -18,17 +18,33 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="w-full h-full bg-zinc-900 text-white">
+    <div className="w-full h-full bg-zinc-900 text-white relative">
+      {/* Connecting Overlay */}
+      {isConnecting && (
+        <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center">
+          <div className="bg-zinc-800/95 backdrop-blur-sm p-6 rounded-xl text-white text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent mx-auto mb-3"></div>
+            <div className="text-lg font-medium mb-1">Connecting to Stream</div>
+            <div className="text-sm text-zinc-300">Establishing connection...</div>
+          </div>
+        </div>
+      )}
+      
       <div className="h-full overflow-y-auto">
         <div className="min-h-full p-4 md:p-6">
           <div className="max-w-7xl mx-auto space-y-4 pb-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
               <h2 className="text-2xl md:text-3xl font-bold text-white">NYC Alert Dashboard & Reports</h2>
               <div className="flex items-center gap-2 text-sm">
-                {isConnected ? (
+                {isConnecting ? (
+                  <span className="text-blue-400 flex items-center gap-1">
+                    <div className="animate-spin rounded-full h-3 w-3 border border-blue-400 border-t-transparent"></div>
+                    Connecting...
+                  </span>
+                ) : isConnected ? (
                   <span className="text-green-400">● Live</span>
                 ) : (
-                  <span className="text-yellow-400">● Streaming...</span>
+                  <span className="text-yellow-400">● Loading...</span>
                 )}
                 {error && <span className="text-red-400">⚠ {error}</span>}
               </div>

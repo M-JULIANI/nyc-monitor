@@ -15,11 +15,3 @@ export const isDevelopmentMode = (): boolean => {
     window.location.search.includes('debug=true')
   );
 };
-
-export const isDebugMode = (): boolean => {
-  return (
-    isDevelopmentMode() ||
-    window.location.search.includes('debug=true') ||
-    localStorage.getItem('debug') === 'true'
-  );
-};

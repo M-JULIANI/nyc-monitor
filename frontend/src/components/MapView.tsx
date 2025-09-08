@@ -5,11 +5,9 @@ import { Alert } from "../types";
 import { useAlerts } from "../contexts/AlertsContext";
 import { useMapState } from "../contexts/MapStateContext";
 import { useMobile } from "../pages/Home";
-import Spinner from "./Spinner";
 import AgentTraceModal from "./AgentTraceModal";
 import PerformancePanel from "./PerformancePanel";
 import { useAuth } from "@/contexts/AuthContext";
-import { isDevelopmentMode } from "../utils/devMode";
 
 const MAPBOX_TOKEN = "pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA";
 const PERFORMANCE_THRESHOLD = 1000;
@@ -101,18 +99,18 @@ const MapView: React.FC = () => {
     generateReport, 
     getSingleAlert,
     isStreaming,
-    streamingProgress,
-    cancelStreaming
+    isConnecting,
   } = useAlerts();
   const { user } = useAuth();
   const { isMobile } = useMobile();
   
   // Performance monitoring (dev mode only)
-  const isDevMode = isDevelopmentMode();
+  const isDevMode = false;
 
 
   const isConnected = !isLoading || isStreaming; // Consider streaming as connected
   const isMapInteractive = true;
+  const showConnectingSpinner = isConnecting || (isLoading && !isStreaming && alerts.length === 0);
 
   const { viewport, setViewport, filter, setFilter, viewMode, setViewMode, displayMode, setDisplayMode } = useMapState();
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
@@ -645,17 +643,35 @@ const MapView: React.FC = () => {
         </div>
       )}
 
-      {!isConnected && !error && (
-        <div className="absolute top-4 right-4 z-20 bg-status-connecting/95 px-4 py-2 rounded-lg text-white text-sm">
-          Connecting to alert stream...
+      {/* Stream Connecting Status */}
+      {isConnecting && (
+        <div className="absolute top-4 right-4 z-20 bg-blue-600/95 px-4 py-2 rounded-lg text-white text-sm flex items-center gap-2">
+          <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+          Connecting to stream...
         </div>
       )}
 
-      {/* Disconnected State Overlay */}
-      {!isConnected && !isStreaming && (
+      {/* General Loading Status */}
+      {!isConnecting && !isConnected && !error && (
+        <div className="absolute top-4 right-4 z-20 bg-status-connecting/95 px-4 py-2 rounded-lg text-white text-sm">
+          Loading alerts...
+        </div>
+      )}
+
+      {/* Disconnected State Overlay with Connecting Spinner */}
+      {showConnectingSpinner && (
         <>
-          <div className="absolute inset-0 bg-black/50 z-20"></div>
-          <Spinner />
+          <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center">
+            <div className="bg-zinc-800/95 backdrop-blur-sm p-6 rounded-xl text-white text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-white border-t-transparent mx-auto mb-3"></div>
+              <div className="text-lg font-medium mb-1">
+                {isConnecting ? 'Connecting to Stream' : 'Loading Alerts'}
+              </div>
+              <div className="text-sm text-zinc-300">
+                {isConnecting ? 'Establishing connection...' : 'Please wait while we load the latest alerts'}
+              </div>
+            </div>
+          </div>
         </>
       )}
 
@@ -946,8 +962,9 @@ const MapView: React.FC = () => {
             <span className="sm:hidden">
               {visibleAlerts.length.toLocaleString()}
             </span>
-            {isConnected && isStreaming && <span className="text-status-connecting">●</span>}
-            {isConnected && !isStreaming && <span className="text-status-connected">●</span>}
+            {isConnecting && <span className="text-blue-400">●</span>}
+            {isConnected && isStreaming && !isConnecting && <span className="text-yellow-400">●</span>}
+            {isConnected && !isStreaming && !isConnecting && <span className="text-status-connected">●</span>}
           </div>
           <div className="text-zinc-400 text-[10px] sm:text-xs">
             <span className="hidden sm:inline">

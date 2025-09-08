@@ -28,6 +28,7 @@ interface AlertsContextType {
   fetchAgentTrace: (traceId: string) => Promise<{ success: boolean; trace?: string; message: string }>;
   // Streaming properties
   isStreaming: boolean;
+  isConnecting: boolean;
   streamingProgress: {
     currentChunk: number;
     totalChunks: number;
