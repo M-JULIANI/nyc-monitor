@@ -25,20 +25,29 @@ interface UseAlertsOptions {
 }
 
 // Minimal normalization for optimized backend payload
-const normalizeAlert = (rawAlert: any): Partial<Alert> => {
+const normalizeAlert = (rawAlert: any): Alert => {
+  const now = new Date().toISOString();
   // Backend now sends minimal, clean data - just pass through with fallbacks
   return {
-    id: rawAlert.id,
+    id: rawAlert.id || '',
     title: rawAlert.title || 'Untitled Alert',
     description: rawAlert.description || '',
     source: rawAlert.source || 'unknown',
     priority: rawAlert.priority || 'medium',
     status: rawAlert.status || 'active',
-    timestamp: rawAlert.timestamp || new Date().toISOString(),
+    timestamp: rawAlert.timestamp || now,
     coordinates: rawAlert.coordinates || { lat: 40.7589, lng: -73.9851 },
     neighborhood: rawAlert.neighborhood || 'Unknown',
     borough: rawAlert.borough || 'Unknown',
-    category: rawAlert.category || 'general'
+    category: rawAlert.category || 'general',
+    // Required date fields
+    event_date: rawAlert.event_date || rawAlert.timestamp || now,
+    created_at: rawAlert.created_at || now,
+    updated_at: rawAlert.updated_at || now,
+    // Add optional fields with defaults
+    reportUrl: rawAlert.reportUrl,
+    traceId: rawAlert.traceId,
+    investigationId: rawAlert.investigationId,
   };
 };
 
@@ -49,7 +58,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     hours = 4320, // Default to 6 months
   } = options;
 
-  const [alerts, setAlerts] = useState<Partial<Alert>[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertsWithReports, setAlertsWithReports] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,7 +77,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     try {
       setIsLoadingReports(true);
 
-      const response = await fetch(`/api/alerts/reports?limit=100`, {
+      const response = await fetch(`/api/alerts/reports?limit=40`, {
         credentials: 'include',
       });
 
@@ -304,9 +313,67 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     [],
   );
 
+  // Get a single hydrated alert by ID with full details
+  const getSingleAlert = useCallback(
+    async (alertId: string): Promise<{ success: boolean; message: string; alert?: Alert }> => {
+      try {
+        const startTime = performance.now();
+        const response = await fetch(`/api/alerts/get/${alertId}`, {
+          credentials: 'include',
+        });
+        const endTime = performance.now();
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Alert not found");
+          }
+          throw new Error(`Failed to fetch alert: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Record performance metric
+        recordPerformanceMetric({
+          endpoint: `/api/alerts/get/${alertId}`,
+          method: 'GET',
+          roundTripTime: endTime - startTime,
+          cached: data.performance?.cached || false,
+          timestamp: Date.now()
+        });
+
+        if (!data.found || !data.alert) {
+          throw new Error("Alert not found in response");
+        }
+
+        // Return the full hydrated alert data directly (backend already sends complete data)
+        const hydratedAlert = {
+          ...data.alert,
+          id: alertId, // Ensure ID is set
+        } as Alert;
+
+        console.log(`✅ Retrieved hydrated alert ${alertId} with full details`);
+
+        return {
+          success: true,
+          message: "Alert retrieved successfully",
+          alert: hydratedAlert,
+        };
+      } catch (err) {
+        const error = err as Error;
+        console.error(`❌ Failed to get alert ${alertId}:`, error);
+
+        return {
+          success: false,
+          message: error.message,
+        };
+      }
+    },
+    []
+  );
+
   // Refetch a single alert by ID and update it in the local state
   const refetchAlert = useCallback(
-    async (alertId: string): Promise<{ success: boolean; message: string; alert?: Partial<Alert> }> => {
+    async (alertId: string): Promise<{ success: boolean; message: string; alert?: Alert }> => {
       try {
         //console.log(`🔄 Refetching alert ${alertId}...`);
 
@@ -460,6 +527,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     stats: alertStats,
     refetch: fetchAlerts,
     refetchAlert,
+    getSingleAlert,
     generateReport,
     fetchAgentTrace,
     fetchAlertsWithReports,

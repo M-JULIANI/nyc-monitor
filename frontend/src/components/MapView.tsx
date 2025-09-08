@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isDevelopmentMode } from "../utils/devMode";
 
 const MAPBOX_TOKEN = "pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA";
-
+const PERFORMANCE_THRESHOLD = 1000;
 // Configure mapbox-gl for development environment
 if (typeof window !== "undefined") {
   // Set mapbox access token globally via ES import
@@ -89,7 +89,7 @@ const sliderStyles = `
 const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
   //const markerClickedRef = useRef(false);
-  const { alerts, error, isLoading, generateReport, refetchAlert } = useAlerts();
+  const { alerts, error, isLoading, generateReport, getSingleAlert } = useAlerts();
   const { user } = useAuth();
   const { isMobile } = useMobile();
   
@@ -109,6 +109,11 @@ const MapView: React.FC = () => {
     traceId: "",
     alertTitle: "",
   });
+
+  // Performance guard state
+  const [isAutoHeatmapMode, setIsAutoHeatmapMode] = useState(false);
+  const [showPerformanceNotification, setShowPerformanceNotification] = useState(false);
+  const autoSwitchDebounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Track if we should auto-fit to alerts (only on first load or filter changes, disabled on mobile)
   const [shouldAutoFit, setShouldAutoFit] = useState(!isMobile);
@@ -167,6 +172,60 @@ const MapView: React.FC = () => {
     return filtered;
   }, [alerts, filter]);
 
+  // Function to check if an alert is within the current viewport bounds
+  const isAlertInViewport = (alert: Alert, bounds: any) => {
+    if (!bounds) return true; // If no bounds, show all alerts
+    
+    const { lat, lng } = alert.coordinates;
+    const { north, south, east, west } = bounds;
+    
+    // Handle longitude wrapping around antimeridian
+    let withinLongitude;
+    if (west <= east) {
+      withinLongitude = lng >= west && lng <= east;
+    } else {
+      // Longitude wraps around (e.g., spans -180/180 line)
+      withinLongitude = lng >= west || lng <= east;
+    }
+    
+    return lat >= south && lat <= north && withinLongitude;
+  };
+
+  // Get current map bounds for viewport filtering
+  const getCurrentBounds = () => {
+    if (!mapRef.current) return null;
+    try {
+      const map = mapRef.current.getMap();
+      const bounds = map.getBounds();
+      return {
+        north: bounds.getNorth(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        west: bounds.getWest()
+      };
+    } catch (error) {
+      console.warn("Error getting map bounds:", error);
+      return null;
+    }
+  };
+
+  // Filter alerts to only those visible in current viewport
+  const visibleAlerts = useMemo(() => {
+    const startTime = performance.now();
+    const bounds = getCurrentBounds();
+    if (!bounds) return filteredAlerts; // Fallback to all filtered alerts if bounds unavailable
+    
+    const visible = filteredAlerts.filter(alert => isAlertInViewport(alert, bounds));
+    const filterTime = performance.now() - startTime;
+    
+    // Log performance improvement for significant datasets
+    if (filteredAlerts.length > 1000) {
+      const reductionPercentage = ((1 - visible.length / filteredAlerts.length) * 100).toFixed(1);
+    }
+    
+    return visible;
+  }, [filteredAlerts, viewport]); // Re-filter when viewport changes
+
   // Update map bounds when alerts change, but only if we should auto-fit (desktop only)
   useEffect(() => {
     if (mapRef.current && filteredAlerts.length > 0 && shouldAutoFit && !isMobile) {
@@ -207,6 +266,54 @@ const MapView: React.FC = () => {
       setShouldAutoFit(true);
     }
   }, [filter, isMobile]);
+
+  // Performance guard: Auto-switch to heatmap when too many alerts are visible
+  useEffect(() => {
+    const DEBOUNCE_DELAY = 50; // ms
+
+    // Clear existing timer
+    if (autoSwitchDebounceTimer.current) {
+      clearTimeout(autoSwitchDebounceTimer.current);
+    }
+
+    // Debounce the performance check to prevent rapid switching during zoom/pan
+    const timer = setTimeout(() => {
+      const shouldUseHeatmap = visibleAlerts.length > PERFORMANCE_THRESHOLD;
+      
+      if (shouldUseHeatmap && displayMode !== "heatmap") {
+        console.log(`🚀 Performance guard: Auto-switching to heatmap mode (${visibleAlerts.length} alerts visible)`);
+        setDisplayMode("heatmap");
+        setIsAutoHeatmapMode(true);
+        
+        // Show notification briefly
+        setShowPerformanceNotification(true);
+        setTimeout(() => setShowPerformanceNotification(false), 3000);
+      } else if (!shouldUseHeatmap && isAutoHeatmapMode) {
+        // Only auto-switch back if we're in auto-heatmap mode
+        console.log(`🔄 Performance guard: Switching back to dots mode (${visibleAlerts.length} alerts visible)`);
+        setDisplayMode("dots");
+        setIsAutoHeatmapMode(false);
+      }
+    }, DEBOUNCE_DELAY);
+
+    autoSwitchDebounceTimer.current = timer;
+
+    // Cleanup timer on unmount
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [visibleAlerts.length, displayMode, isAutoHeatmapMode, setDisplayMode]);
+
+  // Clean up timer when component unmounts
+  useEffect(() => {
+    return () => {
+      if (autoSwitchDebounceTimer.current) {
+        clearTimeout(autoSwitchDebounceTimer.current);
+      }
+    };
+  }, []);
 
   // Handle viewport changes from the map
   const handleViewportChange = (evt: any) => {
@@ -314,10 +421,10 @@ const MapView: React.FC = () => {
     return `${Math.round(hours / 720)} months`; // 720 hours = 30 days
   };
 
-  // Create GeoJSON for alert points (used for both priority mode and heatmap)
-  const alertsGeoJSON: GeoJSON.FeatureCollection = {
+  // Create GeoJSON for visible alert points (viewport-filtered for performance)
+  const visibleAlertsGeoJSON: GeoJSON.FeatureCollection = {
     type: "FeatureCollection",
-    features: filteredAlerts.map((alert) => ({
+    features: visibleAlerts.map((alert) => ({
       type: "Feature" as const,
       geometry: {
         type: "Point" as const,
@@ -402,32 +509,27 @@ const MapView: React.FC = () => {
       }, 850); // Wait slightly longer than the animation duration
     }
 
-    if (alert.source === "311") {
-      console.log("🎯 311 alert, returning early");
-      return;
-    }
-
     // Step 2: Set loading state
     console.log("🎯 Setting loading state to true");
     setSelectedAlertLoading(true);
 
-    // Step 3: Start refetch in background (non-blocking)
-    console.log("🎯 Starting background refetch...");
+    // Step 3: Start hydrated alert fetch in background (non-blocking)
+    console.log("🎯 Starting hydrated alert fetch...");
     setTimeout(() => {
-      console.log("🔄 Refetching alert data for:", alert.id);
+      console.log("🔄 Fetching hydrated alert data for:", alert.id);
 
-      refetchAlert(alert.id)
-        .then((result) => {
-          console.log("📥 Refetch completed for:", alert.id, result);
+      getSingleAlert(alert.id)
+        .then((result: { success: boolean; message: string; alert?: Alert }) => {
+          console.log("📥 Hydrated alert fetch completed for:", alert.id, result);
           if (result.success && result.alert) {
-            console.log("✅ Updating with fresh data");
+            console.log("✅ Updating with hydrated data");
             setSelectedAlert(result.alert);
           } else {
-            console.warn("⚠️ Refetch failed, keeping cached data");
+            console.warn("⚠️ Hydrated fetch failed, keeping cached data");
           }
         })
-        .catch((err) => {
-          console.warn("⚠️ Refetch error, keeping cached data:", err);
+        .catch((err: Error) => {
+          console.warn("⚠️ Hydrated fetch error, keeping cached data:", err);
         })
         .finally(() => {
           console.log("🏁 Clearing loading state");
@@ -549,6 +651,16 @@ const MapView: React.FC = () => {
         </div>
       )}
 
+      {/* Performance Auto-Switch Notification */}
+      {showPerformanceNotification && (
+        <div className="absolute top-16 right-4 z-20 bg-orange-500/95 px-4 py-2 rounded-lg text-white text-sm shadow-lg animate-in slide-in-from-right duration-300">
+          <div className="flex items-center gap-2">
+            <span>🚀</span>
+            <span>Switched to heatmap for performance ({visibleAlerts.length} alerts)</span>
+          </div>
+        </div>
+      )}
+
       {/* Disconnected State Overlay */}
       {!isConnected && (
         <>
@@ -641,28 +753,45 @@ const MapView: React.FC = () => {
                   name="displayMode"
                   value="heatmap"
                   checked={displayMode === "heatmap"}
-                  onChange={(e) => setDisplayMode(e.target.value as "dots" | "heatmap")}
+                  onChange={(e) => {
+                    setDisplayMode(e.target.value as "dots" | "heatmap");
+                    // If user manually selects heatmap, clear auto-mode
+                    if (isAutoHeatmapMode) {
+                      setIsAutoHeatmapMode(false);
+                    }
+                  }}
                   className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
                   disabled={!isMapInteractive}
                 />
                 <span>Heatmap</span>
+                {isAutoHeatmapMode && (
+                  <span className="text-orange-400 text-[9px]">(auto)</span>
+                )}
               </label>
-              <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-                <input
-                  type="radio"
-                  name="displayMode"
-                  value="dots"
-                  checked={displayMode === "dots"}
-                  onChange={(e) => setDisplayMode(e.target.value as "dots" | "heatmap")}
-                  className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
-                  disabled={!isMapInteractive}
-                />
-                <span>Dots</span>
-              </label>
+              {/* Only show dots option when under performance threshold */}
+              {visibleAlerts.length <= PERFORMANCE_THRESHOLD && (
+                <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="displayMode"
+                    value="dots"
+                    checked={displayMode === "dots"}
+                    onChange={(e) => setDisplayMode(e.target.value as "dots" | "heatmap")}
+                    className="w-3 h-3 text-blue-600 bg-zinc-700 border-zinc-600 focus:ring-blue-500"
+                    disabled={!isMapInteractive}
+                  />
+                  <span>Dots</span>
+                </label>
+              )}
             </div>
             {displayMode === "heatmap" && (
               <p className="text-[9px] text-zinc-500 mt-2">
                 Shows alert density. Zoom in/out to see different intensities.
+                {isAutoHeatmapMode && (
+                  <span className="block text-orange-400 mt-1">
+                    Auto-enabled due to {visibleAlerts.length} visible alerts (greater than 1000).
+                  </span>
+                )}
               </p>
             )}
           </div>
@@ -819,9 +948,25 @@ const MapView: React.FC = () => {
           !isMapInteractive ? "opacity-50" : ""
         }`}
       >
-        <span className="hidden sm:inline">{filteredAlerts.length} alerts visible</span>
-        <span className="sm:hidden">{filteredAlerts.length}</span>
-        {isConnected && <span className="ml-2 text-status-connected">●</span>}
+        <div className="flex flex-col gap-1 text-right">
+          <div className="flex items-center justify-end gap-2">
+            <span className="hidden sm:inline">
+              {visibleAlerts.length.toLocaleString()} alerts visible
+            </span>
+            <span className="sm:hidden">
+              {visibleAlerts.length.toLocaleString()}
+            </span>
+            {isConnected && <span className="text-status-connected">●</span>}
+          </div>
+          <div className="text-zinc-400 text-[10px] sm:text-xs">
+            <span className="hidden sm:inline">
+              {alerts.length.toLocaleString()} total
+            </span>
+            <span className="sm:hidden">
+              {alerts.length.toLocaleString()} total
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Time Range Slider - Responsive with better mobile positioning */}
@@ -917,7 +1062,7 @@ const MapView: React.FC = () => {
           >
           {/* Heatmap Layer - Show when in heatmap mode */}
           {displayMode === "heatmap" && (
-            <Source type="geojson" data={alertsGeoJSON}>
+            <Source type="geojson" data={visibleAlertsGeoJSON}>
               <Layer
                 id="alert-heatmap"
                 type="heatmap"
@@ -1008,7 +1153,7 @@ const MapView: React.FC = () => {
 
           {/* Priority Mode - Circle Layer */}
           {displayMode === "dots" && viewMode === "priority" && (
-            <Source type="geojson" data={alertsGeoJSON}>
+            <Source type="geojson" data={visibleAlertsGeoJSON}>
               <Layer
                 id="alert-points"
                 type="circle"
@@ -1043,7 +1188,7 @@ const MapView: React.FC = () => {
 
           {/* Source Mode - HTML Markers */}
           {displayMode === "dots" && viewMode === "source" &&
-            filteredAlerts.map((alert) => (
+            visibleAlerts.map((alert) => (
               <Marker
                 key={alert.id}
                 longitude={alert.coordinates.lng}
@@ -1068,7 +1213,7 @@ const MapView: React.FC = () => {
 
           {/* Category Mode - HTML Markers */}
           {displayMode === "dots" && viewMode === "category" &&
-            filteredAlerts.map((alert) => (
+            visibleAlerts.map((alert) => (
               <Marker
                 key={alert.id}
                 longitude={alert.coordinates.lng}
