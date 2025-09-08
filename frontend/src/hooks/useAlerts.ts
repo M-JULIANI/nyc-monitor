@@ -1,5 +1,5 @@
 // frontend/src/hooks/useAlerts.ts
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Alert } from "../types";
 
 // Import performance tracking from AlertStatsContext
@@ -22,6 +22,8 @@ interface UseAlertsOptions {
   pollInterval?: number; // How often to refresh data
   limit?: number; // Max number of alerts to load
   hours?: number; // How many hours back to fetch
+  useStreaming?: boolean; // Whether to use streaming endpoint
+  chunkSize?: number; // Chunk size for streaming
 }
 
 // Minimal normalization for optimized backend payload
@@ -56,15 +58,34 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     pollInterval = 1800000, // 30 minutes
     limit = 50000, // High limit for map display
     hours = 4320, // Default to 6 months
+    useStreaming, // Default to non-streaming
+    chunkSize = 200, // Default chunk size (kept smaller to prevent SSE payload truncation)
   } = options;
 
+  // Main alerts dataset - full collection for map visualization and analytics (up to 50k alerts)
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  
+  // Curated reports dataset - only alerts with completed investigation reports (limited to ~20 items)
+  // Used specifically for the Dashboard component to showcase finished investigations
   const [alertsWithReports, setAlertsWithReports] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingReports, setIsLoadingReports] = useState(true);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [lastReportsFetch, setLastReportsFetch] = useState<Date | null>(null);
+  
+  // Streaming state
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingProgress, setStreamingProgress] = useState({
+    currentChunk: 0,
+    totalChunks: 0,
+    totalAlerts: 0,
+    source: '',
+    isComplete: false
+  });
+  const [streamController, setStreamController] = useState<AbortController | null>(null);
+  const [streamingFailures, setStreamingFailures] = useState<number>(0);
+  const streamingInProgress = useRef<boolean>(false);
 
   // Keep track of alerts that are currently being investigated to prevent polling interference
   const [investigatingAlerts, setInvestigatingAlerts] = useState<Set<string>>(new Set());
@@ -72,12 +93,17 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     Map<string, { reportUrl?: string; traceId?: string; investigationId?: string }>
   >(new Map());
 
-  // Fetch alerts with reports
-  const fetchAlertsWithReports = useCallback(async () => {
+  /**
+   * Fetches alerts that have completed investigation reports.
+   * This is a separate, smaller dataset optimized for the Dashboard component.
+   * 
+   * @param reportLimit Maximum number of reports to fetch (default: 20)
+   */
+  const fetchAlertsWithReports = useCallback(async (reportLimit: number = 20) => {
     try {
       setIsLoadingReports(true);
 
-      const response = await fetch(`/api/alerts/reports?limit=40`, {
+      const response = await fetch(`/api/alerts/reports?limit=${reportLimit}`, {
         credentials: 'include',
       });
 
@@ -100,14 +126,227 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     }
   }, []);
 
-  // Fetch all alerts - simplified
+  /**
+   * Streams the main alerts dataset using Server-Sent Events.
+   * This populates the primary `alerts` array with the full dataset for map/analytics.
+   */
+  const streamAlerts = useCallback(async () => {
+    if (isStreaming || streamingInProgress.current) {
+      console.warn('Stream already in progress, skipping...');
+      return;
+    }
+
+    // Additional safety check - abort any existing controller
+    if (streamController) {
+      console.log('Aborting existing stream controller...');
+      streamController.abort();
+      setStreamController(null);
+    }
+
+    try {
+      // Prevent starting a new stream if one just completed successfully
+      if (alerts.length > 0 && !isLoading && !error) {
+        console.log('⏭️ Skipping stream - data already loaded successfully');
+        return;
+      }
+
+      streamingInProgress.current = true;
+      setIsLoading(true);
+      setIsStreaming(true);
+      setError(null);
+      setAlerts([]); // Clear existing alerts for fresh stream
+      setStreamingProgress({
+        currentChunk: 0,
+        totalChunks: 0,
+        totalAlerts: 0,
+        source: '',
+        isComplete: false
+      });
+
+      // Create abort controller for cancellation
+      const controller = new AbortController();
+      setStreamController(controller);
+
+      const startTime = performance.now();
+      // Ensure chunk size doesn't exceed safe SSE limits (max ~200 alerts per chunk to be safe)
+      const safeChunkSize = Math.min(chunkSize, 200);
+      const eventSource = new EventSource(`/api/alerts/recent/stream?hours=${hours}&chunk_size=${safeChunkSize}`);
+
+      eventSource.onmessage = (event) => {
+        if (controller.signal.aborted) {
+          eventSource.close();
+          return;
+        }
+
+        try {
+          // Add debugging for malformed JSON
+          if (!event.data || event.data.trim() === '') {
+            console.warn('⚠️ Received empty EventSource data, skipping...');
+            return;
+          }
+          
+          // Clean the SSE data - remove 'data: ' prefix if present
+          let eventData = event.data.trim();
+          if (eventData.startsWith('data: ')) {
+            eventData = eventData.substring(6).trim();
+          }
+          
+          // Check for truncated JSON (common with large SSE payloads)
+          if (!eventData.endsWith('}') && !eventData.endsWith(']')) {
+            console.warn('⚠️ Received truncated JSON data, skipping chunk:', eventData.slice(0, 100) + '...');
+            return;
+          }
+          
+          // Additional validation - ensure it looks like JSON
+          if (!eventData.startsWith('{') && !eventData.startsWith('[')) {
+            console.warn('⚠️ Invalid JSON format detected, skipping:', eventData.slice(0, 100) + '...');
+            return;
+          }
+          
+          const data = JSON.parse(eventData);
+
+          switch (data.type) {
+            case 'start':
+              console.log('🚀 Starting alert stream:', data);
+              setStreamingProgress(prev => ({
+                ...prev,
+                source: 'Starting...'
+              }));
+              break;
+
+            case 'chunk':
+              const normalizedChunkAlerts = data.alerts.map(normalizeAlert);
+              
+              setAlerts(prev => [...prev, ...normalizedChunkAlerts]);
+              setStreamingProgress(prev => ({
+                ...prev,
+                currentChunk: data.chunk,
+                totalChunks: Math.max(prev.totalChunks, data.chunk),
+                totalAlerts: data.total_so_far,
+                source: data.source
+              }));
+              break;
+
+            case 'complete':
+              const endTime = performance.now();
+              
+              setStreamingProgress(prev => ({
+                ...prev,
+                isComplete: true,
+                totalChunks: data.total_chunks,
+                totalAlerts: data.total_alerts
+              }));
+
+              // Record performance metric
+              recordPerformanceMetric({
+                endpoint: `/api/alerts/recent/stream?hours=${hours}&chunk_size=${safeChunkSize}`,
+                method: 'GET',
+                roundTripTime: endTime - startTime,
+                cached: false,
+                alertCount: data.total_alerts,
+                timestamp: Date.now()
+              });
+
+              setIsLoading(false);
+              setIsStreaming(false);
+              setLastFetch(new Date());
+              eventSource.close();
+              setStreamController(null);
+              streamingInProgress.current = false;
+              
+              // Reset failure counter on successful completion
+              setStreamingFailures(0);
+
+              console.log(`✅ Stream complete: ${data.total_alerts} alerts in ${data.total_chunks} chunks`);
+              break;
+
+            case 'error':
+              console.error('❌ Stream error:', data);
+              setError(`Streaming error (${data.source}): ${data.message}`);
+              break;
+          }
+        } catch (err) {
+          console.error('Failed to parse stream data:', err);
+          console.error('Raw event data length:', event.data?.length || 0);
+          console.error('Raw event data preview:', event.data?.slice(0, 200) + '...');
+          console.error('Raw event data ending:', '...' + event.data?.slice(-100));
+          
+          // Log the cleaned data for debugging
+          let cleanedData = event.data?.trim() || '';
+          if (cleanedData.startsWith('data: ')) {
+            cleanedData = cleanedData.substring(6).trim();
+          }
+          console.error('Cleaned data preview:', cleanedData.slice(0, 200) + '...');
+          console.error('Cleaned data ending:', '...' + cleanedData.slice(-100));
+          
+          // Check if this looks like a truncation issue
+          if (event.data && event.data.length > 1000 && !cleanedData.endsWith('}')) {
+            console.warn('🔥 This appears to be a truncated SSE payload. Consider reducing chunk_size.');
+          }
+          
+          // Don't treat JSON parse errors as fatal - continue streaming
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        setStreamingFailures(prev => prev + 1);
+        
+        // If streaming fails repeatedly, fall back to regular fetch
+        if (streamingFailures >= 2) {
+          console.warn('🔄 Multiple streaming failures detected, falling back to regular fetch...');
+          setError('Streaming failed, switching to regular fetch');
+          eventSource.close();
+          setStreamController(null);
+          setIsStreaming(false);
+          streamingInProgress.current = false;
+          // Trigger regular fetch as fallback
+          fetchAlerts();
+          return;
+        }
+        
+        setError('Connection lost during streaming');
+        setIsLoading(false);
+        setIsStreaming(false);
+        eventSource.close();
+        setStreamController(null);
+        streamingInProgress.current = false;
+      };
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start streaming");
+      setIsLoading(false);
+      setIsStreaming(false);
+      setStreamController(null);
+      streamingInProgress.current = false;
+      console.error("Error starting stream:", err);
+    }
+  }, [hours, chunkSize]);
+
+  // Cancel streaming
+  const cancelStreaming = useCallback(() => {
+    if (streamController) {
+      streamController.abort();
+      setStreamController(null);
+      setIsStreaming(false);
+      setIsLoading(false);
+      streamingInProgress.current = false;
+      console.log('🛑 Stream cancelled by user');
+    }
+  }, [streamController]);
+
+  /**
+   * Fetches the main alerts dataset via REST API.
+   * This populates the primary `alerts` array with the full dataset for map/analytics.
+   */
   const fetchAlerts = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
 
       const startTime = performance.now();
-      const response = await fetch(`/api/alerts/recent?limit=${limit}&hours=${hours}`, {
+      //fallback to 5000 alerts
+      const response = await fetch(`/api/alerts/recent?limit=${5000}&hours=${hours}`, {
         credentials: 'include',
       });
       const endTime = performance.now();
@@ -468,21 +707,59 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     }
   };
 
-  // Auto-refresh alerts
+  // Auto-refresh alerts - separate effect for initial load and polling
   useEffect(() => {
-    // Initial load
-    fetchAlerts();
+    let mounted = true;
+    
+    // Initial load - use streaming if enabled
+    const initialLoad = async () => {
+      if (!mounted) return;
+      
+      if (useStreaming) {
+        streamAlerts();
+      } else {
+        fetchAlerts();
+      }
+    };
+    
+    initialLoad();
     fetchAlertsWithReports();
 
-    // Set up staggered polling intervals
-    const alertsInterval = setInterval(fetchAlerts, pollInterval); // 30 minutes
-    const reportsInterval = setInterval(fetchAlertsWithReports, 720000); // 12 minutes (12 * 60 * 1000)
+    return () => {
+      mounted = false;
+    };
+  }, []); // Only run once on mount
+
+  // Separate effect for polling intervals
+  useEffect(() => {
+    // Set up staggered polling intervals (only for non-streaming mode)
+    let alertsInterval: NodeJS.Timeout | undefined;
+    let reportsInterval: NodeJS.Timeout | undefined;
+    
+    if (!useStreaming) {
+      alertsInterval = setInterval(() => {
+        fetchAlerts();
+      }, pollInterval); // 30 minutes
+    }
+    reportsInterval = setInterval(() => {
+      fetchAlertsWithReports();
+    }, 720000); // 12 minutes
 
     return () => {
-      clearInterval(alertsInterval);
-      clearInterval(reportsInterval);
+      if (alertsInterval) clearInterval(alertsInterval);
+      if (reportsInterval) clearInterval(reportsInterval);
     };
-  }, [fetchAlerts, fetchAlertsWithReports, pollInterval]);
+  }, [useStreaming, pollInterval]); // Safe to include these as they're primitive values
+
+  // Separate effect for cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Cancel any ongoing stream on unmount
+      if (streamController) {
+        streamController.abort();
+      }
+    };
+  }, [streamController]);
 
   // Memoized stats
   const alertStats = useMemo(() => {
@@ -525,11 +802,18 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     lastFetch,
     lastReportsFetch,
     stats: alertStats,
-    refetch: fetchAlerts,
+    refetch: useStreaming ? streamAlerts : fetchAlerts,
     refetchAlert,
     getSingleAlert,
     generateReport,
     fetchAgentTrace,
     fetchAlertsWithReports,
+    // Streaming-specific state and methods
+    isStreaming,
+    streamingProgress,
+    streamAlerts,
+    cancelStreaming,
+    // Dashboard optimization - separate reports fetch with configurable limit
+    fetchReportsForDashboard: () => fetchAlertsWithReports(15), // Faster for dashboard
   };
 };

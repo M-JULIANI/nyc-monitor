@@ -159,8 +159,8 @@ class FirestoreManager:
         """
         try:
             query = (self.db.collection(self.alerts_collection)
-                     .where('topic', '==', topic)
-                     .where('status', '==', 'active')
+                     .where(filter=firestore.FieldFilter('topic', '==', topic))
+                     .where(filter=firestore.FieldFilter('status', '==', 'active'))
                      .order_by('created_at', direction=firestore.Query.DESCENDING)
                      .limit(limit))
 
@@ -192,9 +192,9 @@ class FirestoreManager:
             cutoff_time = datetime.utcnow() - timedelta(hours=hours_back)
 
             query = (self.db.collection(self.alerts_collection)
-                     .where('severity', '>=', min_severity)
-                     .where('created_at', '>=', cutoff_time)
-                     .where('status', '==', 'active')
+                     .where(filter=firestore.FieldFilter('severity', '>=', min_severity))
+                     .where(filter=firestore.FieldFilter('created_at', '>=', cutoff_time))
+                     .where(filter=firestore.FieldFilter('status', '==', 'active'))
                      .order_by('severity', direction=firestore.Query.DESCENDING))
 
             docs = query.stream()
@@ -225,8 +225,8 @@ class FirestoreManager:
             cutoff_time = datetime.utcnow() - timedelta(hours=6)
 
             query = (self.db.collection(self.alerts_collection)
-                     .where('created_at', '>=', cutoff_time)
-                     .where('status', '==', 'active'))
+                     .where(filter=firestore.FieldFilter('created_at', '>=', cutoff_time))
+                     .where(filter=firestore.FieldFilter('status', '==', 'active')))
 
             docs = query.stream()
 
@@ -309,7 +309,7 @@ class FirestoreManager:
             cutoff_time = datetime.utcnow() - timedelta(days=days_old)
 
             query = (self.db.collection(self.alerts_collection)
-                     .where('created_at', '<', cutoff_time))
+                     .where(filter=firestore.FieldFilter('created_at', '<', cutoff_time)))
 
             docs = query.stream()
             deleted_count = 0
@@ -395,7 +395,7 @@ class FirestoreManager:
             cutoff_time = datetime.utcnow() - timedelta(hours=hours_back)
 
             query = (self.db.collection(self.monitor_runs_collection)
-                     .where('created_at', '>=', cutoff_time)
+                     .where(filter=firestore.FieldFilter('created_at', '>=', cutoff_time))
                      .order_by('created_at', direction=firestore.Query.DESCENDING))
 
             docs = query.stream()
@@ -462,7 +462,7 @@ class FirestoreManager:
 
             # Query recent alerts
             alerts_ref = self.db.collection('nyc_monitor_alerts')
-            query = alerts_ref.where('created_at', '>=', cutoff_time).order_by(
+            query = alerts_ref.where(filter=firestore.FieldFilter('created_at', '>=', cutoff_time)).order_by(
                 'created_at', direction=firestore.Query.DESCENDING).limit(50)
 
             docs = query.stream()

@@ -152,6 +152,208 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
         }
 
 
+@alerts_router.get('/recent/stream')
+async def stream_alerts(
+    hours: int = Query(24, ge=1, le=4320, description="Hours to look back (max 6 months)"),
+    chunk_size: int = Query(200, ge=50, le=5000, description="Number of alerts per chunk"),
+    user=Depends(verify_session)
+):
+    """
+    Stream alerts using Server-Sent Events for progressive loading
+    
+    Returns alerts in chunks to provide immediate feedback and better UX.
+    Each chunk contains a portion of the total alerts with progress information.
+    
+    **Requires authentication**: Valid Google OAuth token
+    """
+    # Input validation
+    if hours < 1 or hours > 4320:
+        raise AlertError("Hours must be between 1 and 4320 (6 months)")
+    
+    if chunk_size < 100 or chunk_size > 5000:
+        raise AlertError("Chunk size must be between 100 and 5000")
+
+    logger.info(
+        f"🔒 Authenticated user {user.get('email')} starting streaming alerts (hours={hours}, chunk_size={chunk_size})")
+
+    async def generate_alert_stream():
+        db = None
+        try:
+            # Create a new Firestore client for this specific stream to avoid retry issues
+            db = firestore.Client(project=get_config().GOOGLE_CLOUD_PROJECT)
+            cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+            
+            # Send initial metadata
+            yield f"data: {json.dumps({'type': 'start', 'hours': hours, 'chunk_size': chunk_size, 'cutoff_time': cutoff_time.isoformat()})}\n\n"
+            
+            total_alerts = []
+            chunk_num = 0
+            
+            # Stream monitor alerts first with better error handling
+            try:
+                alerts_ref = db.collection('nyc_monitor_alerts')
+                monitor_query = (alerts_ref
+                               .where(filter=firestore.FieldFilter('created_at', '>=', cutoff_time))
+                               .limit(min(2000, chunk_size * 2)))  # Reasonable limit for monitor
+                
+                monitor_alerts = []
+                try:
+                    # Convert stream to list to avoid iterator issues
+                    docs = list(monitor_query.stream())
+                    for doc in docs:
+                        try:
+                            data = doc.to_dict()
+                            
+                            # Extract the real source from the nested structure
+                            real_source = 'monitor'
+                            try:
+                                original_alert = data.get('original_alert', {})
+                                if original_alert:
+                                    original_alert_data = original_alert.get('original_alert_data', {})
+                                    if original_alert_data:
+                                        signals = original_alert_data.get('signals', [])
+                                        if signals and len(signals) > 0:
+                                            real_source = signals[0]
+                            except Exception as e:
+                                logger.warning(f"Could not extract source for alert {doc.id}: {e}")
+                            
+                            alert = {
+                                'id': doc.id,
+                                'source': real_source,
+                                'priority': _get_priority_from_severity(data.get('severity', 5)),
+                                'timestamp': _extract_monitor_timestamp(data),
+                                'coordinates': {
+                                    'lat': data.get('original_alert', {}).get('latitude', 40.7589),
+                                    'lng': data.get('original_alert', {}).get('longitude', -73.9851)
+                                },
+                                'category': normalize_category(data.get('category', 'general')),
+                            }
+                            monitor_alerts.append(alert)
+                        except Exception as doc_error:
+                            logger.warning(f"Error processing monitor alert doc {doc.id}: {doc_error}")
+                            continue
+                
+                except Exception as stream_error:
+                    logger.error(f"Monitor query stream error: {stream_error}")
+                    # Don't fail the entire stream for monitor errors
+                
+                # Send monitor alerts chunk
+                if monitor_alerts:
+                    chunk_num += 1
+                    total_alerts.extend(monitor_alerts)
+                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk_num, 'alerts': monitor_alerts, 'source': 'monitor', 'total_so_far': len(total_alerts)})}\n\n"
+                    
+            except Exception as e:
+                logger.error(f"Monitor streaming error: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'source': 'monitor', 'message': str(e)})}\n\n"
+            
+            # Stream 311 signals in smaller, more manageable chunks to prevent connection issues
+            try:
+                signals_ref = db.collection('nyc_311_signals')
+                
+                # Use the filter method instead of positional arguments to avoid deprecation warning
+                signals_query = (signals_ref
+                               .where(filter=firestore.FieldFilter('signal_timestamp', '>=', cutoff_time))
+                               .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category', 'full_signal_data', 'incident_zip', 'borough', 'status', 'severity', 'event_type'])
+                               .limit(50000))  # Hard limit to prevent excessive memory usage
+                
+                signals_batch = []
+                signals_processed = 0
+                max_docs_to_process = 50000  # Safety limit
+                docs_processed = 0
+                
+                try:
+                    # Process documents in a single pass without intermediate storage
+                    for doc in signals_query.stream():
+                        try:
+                            if docs_processed >= max_docs_to_process:
+                                logger.warning(f"Reached processing limit of {max_docs_to_process} documents")
+                                break
+                                
+                            data = doc.to_dict()
+                            docs_processed += 1
+                            
+                            # Use calculated severity from rule-based triage
+                            severity = data.get('severity')
+                            if severity is None:
+                                severity = 7 if data.get('is_emergency', False) else 3
+                            
+                            # Get categorization
+                            complaint_type = data.get('complaint_type', '')
+                            category = data.get('category')
+                            if not category:
+                                event_type = data.get('event_type') or categorize_311_complaint(complaint_type)
+                                alert_type_info = get_alert_type_info(event_type)
+                                category = alert_type_info.category.value
+                            
+                            alert = {
+                                'id': doc.id,
+                                'source': '311',
+                                'priority': _get_priority_from_severity(severity),
+                                'timestamp': _extract_311_timestamp(data),
+                                'coordinates': {
+                                    'lat': data.get('latitude', 40.7589),
+                                    'lng': data.get('longitude', -73.9851)
+                                },
+                                'category': normalize_category(category),
+                            }
+                            
+                            signals_batch.append(alert)
+                            signals_processed += 1
+                            
+                            # Send chunk when we reach chunk_size
+                            if len(signals_batch) >= chunk_size:
+                                chunk_num += 1
+                                total_alerts.extend(signals_batch)
+                                yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk_num, 'alerts': signals_batch, 'source': '311', 'total_so_far': len(total_alerts), 'signals_processed': signals_processed})}\n\n"
+                                signals_batch = []
+                                
+                        except Exception as doc_error:
+                            logger.warning(f"Error processing 311 signal doc {doc.id}: {doc_error}")
+                            continue
+                
+                except Exception as stream_error:
+                    logger.error(f"311 query stream error: {stream_error}")
+                    # Continue with whatever we have
+                
+                # Send remaining signals
+                if signals_batch:
+                    chunk_num += 1
+                    total_alerts.extend(signals_batch)
+                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk_num, 'alerts': signals_batch, 'source': '311', 'total_so_far': len(total_alerts), 'signals_processed': signals_processed})}\n\n"
+                    
+            except Exception as e:
+                logger.error(f"311 streaming error: {e}")
+                yield f"data: {json.dumps({'type': 'error', 'source': '311', 'message': str(e)})}\n\n"
+            
+            # Send completion message
+            yield f"data: {json.dumps({'type': 'complete', 'total_alerts': len(total_alerts), 'total_chunks': chunk_num, 'accessed_by': user.get('email')})}\n\n"
+            
+            logger.info(f"🎯 STREAMING COMPLETE: {len(total_alerts)} alerts in {chunk_num} chunks for user {user.get('email')}")
+            
+        except Exception as e:
+            logger.error(f"Streaming error: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            # Ensure we properly close the database connection
+            try:
+                if db is not None:
+                    db.close()
+            except Exception as close_error:
+                logger.warning(f"Error closing database connection: {close_error}")
+    
+    # Add headers to help with connection management
+    response = EventSourceResponse(
+        generate_alert_stream(),
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+    return response
+
+
 @alerts_router.get('/recent')
 async def get_recent_alerts(
     limit: int = Query(2000, ge=1, le=50000,
@@ -219,7 +421,7 @@ async def get_recent_alerts(
     try:
         alerts_ref = db.collection('nyc_monitor_alerts')
         monitor_query = (alerts_ref
-                         .where('created_at', '>=', cutoff_time)
+                         .where(filter=firestore.FieldFilter('created_at', '>=', cutoff_time))
                          .limit(monitor_limit))
 
         for doc in monitor_query.stream():
@@ -275,7 +477,7 @@ async def get_recent_alerts(
     try:
         signals_ref = db.collection('nyc_311_signals')
         signals_query = (signals_ref
-                         .where('signal_timestamp', '>=', cutoff_time)
+                         .where(filter=firestore.FieldFilter('signal_timestamp', '>=', cutoff_time))
                          .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category', 'full_signal_data', 'incident_zip', 'borough', 'status', 'severity', 'event_type'])
                          .limit(signals_limit))
 
@@ -419,7 +621,7 @@ async def get_single_alert(alert_id: str, user=Depends(verify_session)):
     # Also try searching by unique_key for 311 signals
     try:
         signals_ref = db.collection('nyc_311_signals')
-        query = signals_ref.where('unique_key', '==', alert_id).limit(1)
+        query = signals_ref.where(filter=firestore.FieldFilter('unique_key', '==', alert_id)).limit(1)
         docs = list(query.stream())
 
         if docs:
@@ -661,7 +863,7 @@ async def get_alert_stats(
     try:
         monitor_ref = db.collection('nyc_monitor_alerts')
         monitor_docs = monitor_ref.where(
-            'created_at', '>=', cutoff_time).stream()
+            filter=firestore.FieldFilter('created_at', '>=', cutoff_time)).stream()
         stats['monitor_alerts'] = sum(1 for _ in monitor_docs)
     except Exception as e:
         logger.error(f"Error counting monitor alerts: {e}")
@@ -670,7 +872,7 @@ async def get_alert_stats(
     try:
         signals_ref = db.collection('nyc_311_signals')
         signals_docs = signals_ref.where(
-            'signal_timestamp', '>=', cutoff_time).stream()
+            filter=firestore.FieldFilter('signal_timestamp', '>=', cutoff_time)).stream()
         stats['nyc_311_signals'] = sum(1 for _ in signals_docs)
     except Exception as e:
         logger.error(f"Error counting 311 signals: {e}")
@@ -858,7 +1060,7 @@ async def get_alerts_with_reports(
         logger.info("🔍 Querying resolved alerts...")
 
         resolved_query = (alerts_ref
-                          .where('status', '==', 'resolved')
+                          .where(filter=firestore.FieldFilter('status', '==', 'resolved'))
                           .limit(limit * 2))  # Get more to account for filtering
 
         monitor_count = 0
@@ -937,7 +1139,7 @@ async def get_alerts_with_reports(
 
         # Simple approach for 311 as well
         resolved_311_query = (signals_ref
-                              .where('status', '==', 'resolved')
+                              .where(filter=firestore.FieldFilter('status', '==', 'resolved'))
                               .limit(limit // 4))  # Smaller limit for 311
 
         signals_count = 0

@@ -20,9 +20,14 @@ if (typeof window !== "undefined") {
     if (mapboxgl.default) {
       mapboxgl.default.accessToken = MAPBOX_TOKEN;
       console.log("✅ Mapbox access token set via ES import");
+    } else if (mapboxgl) {
+      // Fallback for different import structure
+      (mapboxgl as any).accessToken = MAPBOX_TOKEN;
+      console.log("✅ Mapbox access token set via fallback");
     }
   }).catch((importError) => {
-    console.error("❌ ES import failed:", importError);
+    console.warn("⚠️ Dynamic Mapbox import failed (non-critical):", importError);
+    // Not a critical error - react-map-gl should handle token assignment
   });
 }
 
@@ -89,7 +94,16 @@ const sliderStyles = `
 const MapView: React.FC = () => {
   const mapRef = useRef<any>(null);
   //const markerClickedRef = useRef(false);
-  const { alerts, error, isLoading, generateReport, getSingleAlert } = useAlerts();
+  const { 
+    alerts, 
+    error, 
+    isLoading, 
+    generateReport, 
+    getSingleAlert,
+    isStreaming,
+    streamingProgress,
+    cancelStreaming
+  } = useAlerts();
   const { user } = useAuth();
   const { isMobile } = useMobile();
   
@@ -97,7 +111,7 @@ const MapView: React.FC = () => {
   const isDevMode = isDevelopmentMode();
 
 
-  const isConnected = !isLoading;
+  const isConnected = !isLoading || isStreaming; // Consider streaming as connected
   const isMapInteractive = true;
 
   const { viewport, setViewport, filter, setFilter, viewMode, setViewMode, displayMode, setDisplayMode } = useMapState();
@@ -112,7 +126,6 @@ const MapView: React.FC = () => {
 
   // Performance guard state
   const [isAutoHeatmapMode, setIsAutoHeatmapMode] = useState(false);
-  const [showPerformanceNotification, setShowPerformanceNotification] = useState(false);
   const autoSwitchDebounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Track if we should auto-fit to alerts (only on first load or filter changes, disabled on mobile)
@@ -211,19 +224,10 @@ const MapView: React.FC = () => {
 
   // Filter alerts to only those visible in current viewport
   const visibleAlerts = useMemo(() => {
-    const startTime = performance.now();
     const bounds = getCurrentBounds();
     if (!bounds) return filteredAlerts; // Fallback to all filtered alerts if bounds unavailable
     
-    const visible = filteredAlerts.filter(alert => isAlertInViewport(alert, bounds));
-    const filterTime = performance.now() - startTime;
-    
-    // Log performance improvement for significant datasets
-    if (filteredAlerts.length > 1000) {
-      const reductionPercentage = ((1 - visible.length / filteredAlerts.length) * 100).toFixed(1);
-    }
-    
-    return visible;
+    return filteredAlerts.filter(alert => isAlertInViewport(alert, bounds));
   }, [filteredAlerts, viewport]); // Re-filter when viewport changes
 
   // Update map bounds when alerts change, but only if we should auto-fit (desktop only)
@@ -284,10 +288,6 @@ const MapView: React.FC = () => {
         console.log(`🚀 Performance guard: Auto-switching to heatmap mode (${visibleAlerts.length} alerts visible)`);
         setDisplayMode("heatmap");
         setIsAutoHeatmapMode(true);
-        
-        // Show notification briefly
-        setShowPerformanceNotification(true);
-        setTimeout(() => setShowPerformanceNotification(false), 3000);
       } else if (!shouldUseHeatmap && isAutoHeatmapMode) {
         // Only auto-switch back if we're in auto-heatmap mode
         console.log(`🔄 Performance guard: Switching back to dots mode (${visibleAlerts.length} alerts visible)`);
@@ -651,18 +651,8 @@ const MapView: React.FC = () => {
         </div>
       )}
 
-      {/* Performance Auto-Switch Notification */}
-      {showPerformanceNotification && (
-        <div className="absolute top-16 right-4 z-20 bg-orange-500/95 px-4 py-2 rounded-lg text-white text-sm shadow-lg animate-in slide-in-from-right duration-300">
-          <div className="flex items-center gap-2">
-            <span>🚀</span>
-            <span>Switched to heatmap for performance ({visibleAlerts.length} alerts)</span>
-          </div>
-        </div>
-      )}
-
       {/* Disconnected State Overlay */}
-      {!isConnected && (
+      {!isConnected && !isStreaming && (
         <>
           <div className="absolute inset-0 bg-black/50 z-20"></div>
           <Spinner />
@@ -956,7 +946,8 @@ const MapView: React.FC = () => {
             <span className="sm:hidden">
               {visibleAlerts.length.toLocaleString()}
             </span>
-            {isConnected && <span className="text-status-connected">●</span>}
+            {isConnected && isStreaming && <span className="text-status-connecting">●</span>}
+            {isConnected && !isStreaming && <span className="text-status-connected">●</span>}
           </div>
           <div className="text-zinc-400 text-[10px] sm:text-xs">
             <span className="hidden sm:inline">

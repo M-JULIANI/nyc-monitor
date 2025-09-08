@@ -28,7 +28,7 @@ const Dashboard: React.FC = () => {
                 {isConnected ? (
                   <span className="text-green-400">● Live</span>
                 ) : (
-                  <span className="text-yellow-400">● Connecting...</span>
+                  <span className="text-yellow-400">● Streaming...</span>
                 )}
                 {error && <span className="text-red-400">⚠ {error}</span>}
               </div>
