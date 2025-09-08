@@ -1,118 +1,108 @@
 // frontend/src/hooks/useAlerts.ts
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Alert } from "../types";
 
+// Import performance tracking from AlertStatsContext
+const recordPerformanceMetric = (metric: {
+  endpoint: string;
+  method: string;
+  roundTripTime: number;
+  cached: boolean;
+  alertCount?: number;
+  timestamp: number;
+}) => {
+  // Simple global tracking - will be picked up by PerformancePanel
+  if (typeof window !== 'undefined' && (window as any).performanceMetrics) {
+    (window as any).performanceMetrics.unshift(metric);
+    (window as any).performanceMetrics = (window as any).performanceMetrics.slice(0, 99);
+  }
+};
+
 interface UseAlertsOptions {
-  pollInterval?: number; // How often to refresh data
   limit?: number; // Max number of alerts to load
   hours?: number; // How many hours back to fetch
+  useStreaming?: boolean; // Whether to use streaming endpoint
+  chunkSize?: number; // Chunk size for streaming
 }
 
-// Function to normalize alert objects
+// Minimal normalization for optimized backend payload
 const normalizeAlert = (rawAlert: any): Alert => {
-  const og = structuredClone(rawAlert);
-  const original = og.original_alert || {};
-  const originalData = og.original_alert_data || {};
-
-  // Extract coordinates from wherever they exist
-  let coordinates = {
-    lat: 40.7589, // NYC center fallback (Times Square)
-    lng: -73.9851,
+  const now = new Date().toISOString();
+  // Backend now sends minimal, clean data - just pass through with fallbacks
+  return {
+    id: rawAlert.id || '',
+    title: rawAlert.title || 'Untitled Alert',
+    description: rawAlert.description || '',
+    source: rawAlert.source || 'unknown',
+    priority: rawAlert.priority || 'medium',
+    status: rawAlert.status || 'active',
+    timestamp: rawAlert.timestamp || now,
+    coordinates: rawAlert.coordinates || { lat: 40.7589, lng: -73.9851 },
+    neighborhood: rawAlert.neighborhood || 'Unknown',
+    borough: rawAlert.borough || 'Unknown',
+    category: rawAlert.category || 'general',
+    // Required date fields
+    event_date: rawAlert.event_date || rawAlert.timestamp || now,
+    created_at: rawAlert.created_at || now,
+    updated_at: rawAlert.updated_at || now,
+    // Add optional fields with defaults
+    reportUrl: rawAlert.reportUrl,
+    traceId: rawAlert.traceId,
+    investigationId: rawAlert.investigationId,
   };
-
-  if (original.latitude && original.longitude && original.latitude !== null && original.longitude !== null) {
-    coordinates = {
-      lat: original.latitude,
-      lng: original.longitude,
-    };
-  } else if (
-    originalData.coordinates?.lat &&
-    originalData.coordinates?.lng &&
-    originalData.coordinates.lat !== null &&
-    originalData.coordinates.lng !== null
-  ) {
-    coordinates = originalData.coordinates;
-  } else if (og.coordinates?.lat && og.coordinates?.lng) {
-    coordinates = og.coordinates;
-  }
-
-  const priorityValue = og.priority;
-
-  // Use the most complete/accurate data available
-  const normalizedAlert = {
-    id: og.id || original.id || og.alert_id,
-    title: og.title || original.title || og.topic,
-    description: original.description || og.description || "",
-    source: original.source || og.source === "unknown" ? originalData.signals?.[0] || "unknown" : og.source,
-    priority: priorityValue || "medium",
-    status: og.status || original.status || "active", // PRIORITIZE og.status
-
-    timestamp: original.timestamp || original.created_at || og.created_at || og.timestamp || new Date().toISOString(),
-    neighborhood: original.neighborhood || originalData.area || og.area || og.neighborhood || "Unknown",
-    borough: original.borough || original.borough_primary || og.borough || "Unknown",
-
-    // Additional date/time fields
-    event_date: original.event_date || og.event_date,
-    created_at: original.created_at || og.created_at,
-    updated_at: og.updated_at,
-
-    // Location data
-    coordinates: coordinates as { lat: number; lng: number },
-    area: originalData.area || original.neighborhood || og.area || og.neighborhood || "Unknown",
-    venue_address: originalData.venue_address || og.venue_address || "",
-    specific_streets: originalData.specific_streets || og.specific_streets || [],
-    cross_streets: originalData.cross_streets || og.cross_streets || [],
-
-    // Impact data
-    crowd_impact: originalData.crowd_impact || og.crowd_impact || "unknown",
-    transportation_impact: originalData.transportation_impact || og.transportation_impact || "",
-    estimated_attendance: originalData.estimated_attendance || og.estimated_attendance || "",
-    severity: originalData.severity || og.severity || 0,
-
-    // Categorization fields (simplified to just main category)
-    category: og.category || original.category || "general",
-
-    // Additional data
-    keywords: originalData.keywords || og.keywords || [],
-    signals: originalData.signals || og.signals || [],
-    url: og.url || "",
-
-    // Investigation & Report fields - PRIORITIZE og fields
-    reportUrl: og.report_url || original.report_url,
-    traceId: og.trace_id || original.trace_id,
-    investigationId: og.investigation_id || original.investigation_id,
-  };
-
-  return normalizedAlert;
 };
 
 export const useAlerts = (options: UseAlertsOptions = {}) => {
   const {
-    pollInterval = 1800000, // 30 minutes
-    limit = 2000, // High limit for map display
-    hours = 168, // Default to 7 days to get all available data
+    limit = 50000, // High limit for map display
+    hours = 4320, // Default to 6 months
+    useStreaming, // Default to non-streaming
+    chunkSize = 200, // Default chunk size (kept smaller to prevent SSE payload truncation)
   } = options;
 
+  // Main alerts dataset - full collection for map visualization and analytics (up to 50k alerts)
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  
+  // Curated reports dataset - only alerts with completed investigation reports (limited to ~20 items)
+  // Used specifically for the Dashboard component to showcase finished investigations
   const [alertsWithReports, setAlertsWithReports] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingReports, setIsLoadingReports] = useState(true);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [lastReportsFetch, setLastReportsFetch] = useState<Date | null>(null);
+  
+  // Streaming state
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [streamingProgress, setStreamingProgress] = useState({
+    currentChunk: 0,
+    totalChunks: 0,
+    totalAlerts: 0,
+    source: '',
+    isComplete: false
+  });
+  const [streamController, setStreamController] = useState<AbortController | null>(null);
+  const [streamingFailures, setStreamingFailures] = useState<number>(0);
+  const streamingInProgress = useRef<boolean>(false);
 
-  // Keep track of alerts that are currently being investigated to prevent polling interference
+  // Keep track of alerts that are currently being investigated
   const [investigatingAlerts, setInvestigatingAlerts] = useState<Set<string>>(new Set());
   const [completedInvestigations, setCompletedInvestigations] = useState<
     Map<string, { reportUrl?: string; traceId?: string; investigationId?: string }>
   >(new Map());
 
-  // Fetch alerts with reports
-  const fetchAlertsWithReports = useCallback(async () => {
+  /**
+   * Fetches alerts that have completed investigation reports.
+   * This is a separate, smaller dataset optimized for the Dashboard component.
+   * 
+   * @param reportLimit Maximum number of reports to fetch (default: 20)
+   */
+  const fetchAlertsWithReports = useCallback(async (reportLimit: number = 20) => {
     try {
       setIsLoadingReports(true);
 
-      const response = await fetch(`/api/alerts/reports?limit=100`, {
+      const response = await fetch(`/api/alerts/reports?limit=${reportLimit}`, {
         credentials: 'include',
       });
 
@@ -135,21 +125,256 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     }
   }, []);
 
-  // Fetch all alerts - simplified
+  /**
+   * Streams the main alerts dataset using Server-Sent Events.
+   * This populates the primary `alerts` array with the full dataset for map/analytics.
+   */
+  const streamAlerts = useCallback(async () => {
+    if (isStreaming || streamingInProgress.current) {
+      console.warn('Stream already in progress, skipping...');
+      return;
+    }
+
+    // Additional safety check - abort any existing controller
+    if (streamController) {
+      console.log('Aborting existing stream controller...');
+      streamController.abort();
+      setStreamController(null);
+    }
+
+    try {
+      // Prevent starting a new stream if one just completed successfully
+      if (alerts.length > 0 && !isLoading && !error) {
+        console.log('⏭️ Skipping stream - data already loaded successfully');
+        return;
+      }
+
+      streamingInProgress.current = true;
+      setIsLoading(true);
+      setIsConnecting(true);
+      setIsStreaming(false); // Not streaming yet, just connecting
+      setError(null);
+      setAlerts([]); // Clear existing alerts for fresh stream
+      setStreamingProgress({
+        currentChunk: 0,
+        totalChunks: 0,
+        totalAlerts: 0,
+        source: 'Connecting...',
+        isComplete: false
+      });
+
+      // Create abort controller for cancellation
+      const controller = new AbortController();
+      setStreamController(controller);
+
+      const startTime = performance.now();
+      // Ensure chunk size doesn't exceed safe SSE limits (max ~200 alerts per chunk to be safe)
+      const safeChunkSize = Math.min(chunkSize, 200);
+      const eventSource = new EventSource(`/api/alerts/recent/stream?hours=${hours}&chunk_size=${safeChunkSize}`);
+
+      eventSource.onmessage = (event) => {
+        if (controller.signal.aborted) {
+          eventSource.close();
+          return;
+        }
+
+        try {
+          // Add debugging for malformed JSON
+          if (!event.data || event.data.trim() === '') {
+            console.warn('⚠️ Received empty EventSource data, skipping...');
+            return;
+          }
+          
+          // Clean the SSE data - remove 'data: ' prefix if present
+          let eventData = event.data.trim();
+          if (eventData.startsWith('data: ')) {
+            eventData = eventData.substring(6).trim();
+          }
+          
+          // Check for truncated JSON (common with large SSE payloads)
+          if (!eventData.endsWith('}') && !eventData.endsWith(']')) {
+            console.warn('⚠️ Received truncated JSON data, skipping chunk:', eventData.slice(0, 100) + '...');
+            return;
+          }
+          
+          // Additional validation - ensure it looks like JSON
+          if (!eventData.startsWith('{') && !eventData.startsWith('[')) {
+            console.warn('⚠️ Invalid JSON format detected, skipping:', eventData.slice(0, 100) + '...');
+            return;
+          }
+          
+          const data = JSON.parse(eventData);
+
+          switch (data.type) {
+            case 'start':
+              console.log('🚀 Starting alert stream:', data);
+              setIsConnecting(false);
+              setIsStreaming(true);
+              setStreamingProgress(prev => ({
+                ...prev,
+                source: 'Starting...'
+              }));
+              break;
+
+            case 'chunk':
+              const normalizedChunkAlerts = data.alerts.map(normalizeAlert);
+              
+              setAlerts(prev => [...prev, ...normalizedChunkAlerts]);
+              setStreamingProgress(prev => ({
+                ...prev,
+                currentChunk: data.chunk,
+                totalChunks: Math.max(prev.totalChunks, data.chunk),
+                totalAlerts: data.total_so_far,
+                source: data.source
+              }));
+              break;
+
+            case 'complete':
+              const endTime = performance.now();
+              
+              setStreamingProgress(prev => ({
+                ...prev,
+                isComplete: true,
+                totalChunks: data.total_chunks,
+                totalAlerts: data.total_alerts
+              }));
+
+              // Record performance metric
+              recordPerformanceMetric({
+                endpoint: `/api/alerts/recent/stream?hours=${hours}&chunk_size=${safeChunkSize}`,
+                method: 'GET',
+                roundTripTime: endTime - startTime,
+                cached: false,
+                alertCount: data.total_alerts,
+                timestamp: Date.now()
+              });
+
+              setIsLoading(false);
+              setIsStreaming(false);
+              setIsConnecting(false);
+              setLastFetch(new Date());
+              eventSource.close();
+              setStreamController(null);
+              streamingInProgress.current = false;
+              
+              // Reset failure counter on successful completion
+              setStreamingFailures(0);
+
+              console.log(`✅ Stream complete: ${data.total_alerts} alerts in ${data.total_chunks} chunks`);
+              break;
+
+            case 'error':
+              console.error('❌ Stream error:', data);
+              setError(`Streaming error (${data.source}): ${data.message}`);
+              setIsConnecting(false);
+              setIsStreaming(false);
+              break;
+          }
+        } catch (err) {
+          console.error('Failed to parse stream data:', err);
+          console.error('Raw event data length:', event.data?.length || 0);
+          console.error('Raw event data preview:', event.data?.slice(0, 200) + '...');
+          console.error('Raw event data ending:', '...' + event.data?.slice(-100));
+          
+          // Log the cleaned data for debugging
+          let cleanedData = event.data?.trim() || '';
+          if (cleanedData.startsWith('data: ')) {
+            cleanedData = cleanedData.substring(6).trim();
+          }
+          console.error('Cleaned data preview:', cleanedData.slice(0, 200) + '...');
+          console.error('Cleaned data ending:', '...' + cleanedData.slice(-100));
+          
+          // Check if this looks like a truncation issue
+          if (event.data && event.data.length > 1000 && !cleanedData.endsWith('}')) {
+            console.warn('🔥 This appears to be a truncated SSE payload. Consider reducing chunk_size.');
+          }
+          
+          // Don't treat JSON parse errors as fatal - continue streaming
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        setStreamingFailures(prev => prev + 1);
+        
+        // If streaming fails repeatedly, fall back to regular fetch
+        if (streamingFailures >= 2) {
+          console.warn('🔄 Multiple streaming failures detected, falling back to regular fetch...');
+          setError('Streaming failed, switching to regular fetch');
+          eventSource.close();
+          setStreamController(null);
+          setIsStreaming(false);
+          setIsConnecting(false);
+          streamingInProgress.current = false;
+          // Trigger regular fetch as fallback
+          fetchAlerts();
+          return;
+        }
+        
+        setError('Connection lost during streaming');
+        setIsLoading(false);
+        setIsStreaming(false);
+        setIsConnecting(false);
+        eventSource.close();
+        setStreamController(null);
+        streamingInProgress.current = false;
+      };
+
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start streaming");
+      setIsLoading(false);
+      setIsStreaming(false);
+      setIsConnecting(false);
+      setStreamController(null);
+      streamingInProgress.current = false;
+      console.error("Error starting stream:", err);
+    }
+  }, [hours, chunkSize]);
+
+  // Cancel streaming
+  const cancelStreaming = useCallback(() => {
+    if (streamController) {
+      streamController.abort();
+      setStreamController(null);
+      setIsStreaming(false);
+      setIsConnecting(false);
+      setIsLoading(false);
+      streamingInProgress.current = false;
+      console.log('🛑 Stream cancelled by user');
+    }
+  }, [streamController]);
+
+  /**
+   * Fetches the main alerts dataset via REST API.
+   * This populates the primary `alerts` array with the full dataset for map/analytics.
+   */
   const fetchAlerts = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/alerts/recent?limit=${limit}&hours=${hours}`, {
+      const startTime = performance.now();
+      //fallback to 5000 alerts
+      const response = await fetch(`/api/alerts/recent?limit=${5000}&hours=${hours}`, {
         credentials: 'include',
       });
+      const endTime = performance.now();
 
       if (!response.ok) {
         throw new Error(`Failed to fetch alerts: ${response.status}`);
       }
 
       const data = await response.json();
+
+      // Record performance metric
+      recordPerformanceMetric({
+        endpoint: `/api/alerts/recent?limit=${limit}&hours=${hours}`,
+        method: 'GET',
+        roundTripTime: endTime - startTime,
+        cached: data.performance?.cached || false,
+        alertCount: data.count || data.alerts?.length || 0,
+        timestamp: Date.now()
+      });
 
       // Normalize the alerts
       const normalizedAlerts = (data.alerts || []).map(normalizeAlert);
@@ -336,6 +561,64 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     [],
   );
 
+  // Get a single hydrated alert by ID with full details
+  const getSingleAlert = useCallback(
+    async (alertId: string): Promise<{ success: boolean; message: string; alert?: Alert }> => {
+      try {
+        const startTime = performance.now();
+        const response = await fetch(`/api/alerts/get/${alertId}`, {
+          credentials: 'include',
+        });
+        const endTime = performance.now();
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Alert not found");
+          }
+          throw new Error(`Failed to fetch alert: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Record performance metric
+        recordPerformanceMetric({
+          endpoint: `/api/alerts/get/${alertId}`,
+          method: 'GET',
+          roundTripTime: endTime - startTime,
+          cached: data.performance?.cached || false,
+          timestamp: Date.now()
+        });
+
+        if (!data.found || !data.alert) {
+          throw new Error("Alert not found in response");
+        }
+
+        // Return the full hydrated alert data directly (backend already sends complete data)
+        const hydratedAlert = {
+          ...data.alert,
+          id: alertId, // Ensure ID is set
+        } as Alert;
+
+        console.log(`✅ Retrieved hydrated alert ${alertId} with full details`);
+
+        return {
+          success: true,
+          message: "Alert retrieved successfully",
+          alert: hydratedAlert,
+        };
+      } catch (err) {
+        const error = err as Error;
+        console.error(`❌ Failed to get alert ${alertId}:`, error);
+
+        return {
+          success: false,
+          message: error.message,
+        };
+      }
+    },
+    []
+  );
+
   // Refetch a single alert by ID and update it in the local state
   const refetchAlert = useCallback(
     async (alertId: string): Promise<{ success: boolean; message: string; alert?: Alert }> => {
@@ -433,37 +716,54 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     }
   };
 
-  // Auto-refresh alerts
+  // Load alerts once on mount - NO polling
   useEffect(() => {
-    // Initial load
-    fetchAlerts();
+    let mounted = true;
+    
+    // Initial load - use streaming if enabled
+    const initialLoad = async () => {
+      if (!mounted) return;
+      
+      if (useStreaming) {
+        streamAlerts();
+      } else {
+        fetchAlerts();
+      }
+    };
+    
+    initialLoad();
     fetchAlertsWithReports();
 
-    // Set up staggered polling intervals
-    const alertsInterval = setInterval(fetchAlerts, pollInterval); // 30 minutes
-    const reportsInterval = setInterval(fetchAlertsWithReports, 720000); // 12 minutes (12 * 60 * 1000)
-
     return () => {
-      clearInterval(alertsInterval);
-      clearInterval(reportsInterval);
+      mounted = false;
     };
-  }, [fetchAlerts, fetchAlertsWithReports, pollInterval]);
+  }, []); // Only run once on mount
+
+  // Separate effect for cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Cancel any ongoing stream on unmount
+      if (streamController) {
+        streamController.abort();
+      }
+    };
+  }, [streamController]);
 
   // Memoized stats
   const alertStats = useMemo(() => {
     const total = alerts.length;
     const byPriority = alerts.reduce((acc, alert) => {
-      acc[alert.priority] = (acc[alert.priority] || 0) + 1;
+      acc[alert.priority || "medium"] = (acc[alert.priority || "medium"] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     const byStatus = alerts.reduce((acc, alert) => {
-      acc[alert.status] = (acc[alert.status] || 0) + 1;
+      acc[alert.status || "active"] = (acc[alert.status || "active"] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
     const bySource = alerts.reduce((acc, alert) => {
-      acc[alert.source] = (acc[alert.source] || 0) + 1;
+      acc[alert.source || "unknown"] = (acc[alert.source || "unknown"] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
@@ -490,10 +790,19 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     lastFetch,
     lastReportsFetch,
     stats: alertStats,
-    refetch: fetchAlerts,
+    refetch: useStreaming ? streamAlerts : fetchAlerts,
     refetchAlert,
+    getSingleAlert,
     generateReport,
     fetchAgentTrace,
     fetchAlertsWithReports,
+    // Streaming-specific state and methods
+    isStreaming,
+    isConnecting,
+    streamingProgress,
+    streamAlerts,
+    cancelStreaming,
+    // Dashboard optimization - separate reports fetch with configurable limit
+    fetchReportsForDashboard: () => fetchAlertsWithReports(15), // Faster for dashboard
   };
 };

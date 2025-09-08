@@ -13,7 +13,7 @@ import signal
 import sys
 from datetime import datetime, timedelta
 from typing import List, Dict, Set
-import json
+from google.cloud import firestore
 
 # Add the backend directory to Python path
 backend_dir = os.path.dirname(os.path.dirname(
@@ -264,7 +264,7 @@ class NYC311Job:
 
             # Use direct Firestore query for efficiency
             query = (self.storage.db.collection(self.collection_name)
-                     .where('created_at', '>=', cutoff_time)
+                     .where(filter=firestore.FieldFilter('created_at', '>=', cutoff_time))
                      .select(['unique_key']))  # Only fetch unique_key field for efficiency
 
             docs = query.stream()

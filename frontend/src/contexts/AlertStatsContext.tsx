@@ -1,5 +1,34 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
+// Simple performance tracking
+interface PerformanceMetric {
+  endpoint: string;
+  method: string;
+  roundTripTime: number;
+  cached: boolean;
+  alertCount?: number;
+  timestamp: number;
+}
+
+// Global performance tracker for dev mode
+let performanceMetrics: PerformanceMetric[] = [];
+let performanceCallbacks: ((metric: PerformanceMetric) => void)[] = [];
+
+const addPerformanceListener = (callback: (metric: PerformanceMetric) => void) => {
+  performanceCallbacks.push(callback);
+};
+
+const removePerformanceListener = (callback: (metric: PerformanceMetric) => void) => {
+  performanceCallbacks = performanceCallbacks.filter(cb => cb !== callback);
+};
+
+const recordPerformanceMetric = (metric: PerformanceMetric) => {
+  performanceMetrics = [metric, ...performanceMetrics.slice(0, 99)]; // Keep last 100
+  performanceCallbacks.forEach(callback => callback(metric));
+};
+
+export { addPerformanceListener, removePerformanceListener, performanceMetrics };
+
 interface AlertStats {
   monitor_alerts: number;
   nyc_311_signals: number;
@@ -58,6 +87,10 @@ export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children
       setIsLoading(true);
       setError(null);
 
+      // Track performance for both requests
+      const startTime1 = performance.now();
+      const startTime2 = performance.now();
+
       const [statsResponse, categoriesResponse] = await Promise.all([
         fetch(`/api/alerts/stats?hours=${timeRange}`, {
           credentials: 'include',
@@ -66,6 +99,8 @@ export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children
           credentials: 'include',
         })
       ]);
+
+      const endTime = performance.now();
 
       if (!statsResponse.ok) {
         throw new Error(`Stats API error: ${statsResponse.status}`);
@@ -79,6 +114,25 @@ export const AlertStatsProvider: React.FC<AlertStatsProviderProps> = ({ children
         statsResponse.json(),
         categoriesResponse.json()
       ]);
+
+      // Record performance metrics
+      recordPerformanceMetric({
+        endpoint: `/api/alerts/stats?hours=${timeRange}`,
+        method: 'GET',
+        roundTripTime: endTime - startTime1,
+        cached: statsData.performance?.cached || false,
+        alertCount: statsData.stats?.total,
+        timestamp: Date.now()
+      });
+
+      recordPerformanceMetric({
+        endpoint: '/api/alerts/categories',
+        method: 'GET',
+        roundTripTime: endTime - startTime2,
+        cached: categoriesData.performance?.cached || false,
+        alertCount: categoriesData.total_categories,
+        timestamp: Date.now()
+      });
 
       setAlertStats(statsData);
       setAlertCategories(categoriesData);

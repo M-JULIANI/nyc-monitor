@@ -10,7 +10,7 @@ interface FilterState {
   priority: string;
   source: string;
   status: string;
-  timeRangeHours: number; // Hours back from now (1-168 for 7 days)
+  timeRangeHours: number; // Hours back from now (1-4320 for 6 months)
 }
 
 type ViewMode = 'priority' | 'source' | 'category';
@@ -46,7 +46,7 @@ export const MapStateProvider: React.FC<MapStateProviderProps> = ({ children }) 
     priority: 'all',
     source: 'all',
     status: 'all',
-    timeRangeHours: 168 // Default to last 7 days to show all available data
+    timeRangeHours: 4320 // Default to last 6 months to show all available data
   });
 
   // View mode state

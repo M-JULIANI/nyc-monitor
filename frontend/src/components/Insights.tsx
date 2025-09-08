@@ -263,7 +263,7 @@ const Insights: React.FC = () => {
             {[1, 2, 3].map((i) => (
               <div key={i} className="card relative h-24">
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+                  <div className="w-8 h-8 border-2 border-zinc-600 rounded-full"></div>
                 </div>
               </div>
             ))}
@@ -298,7 +298,7 @@ const Insights: React.FC = () => {
             ) : (
               <div className="h-64 relative">
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+                  <div className="w-8 h-8 border-2 border-zinc-600 rounded-full"></div>
                 </div>
               </div>
             )}
@@ -332,7 +332,7 @@ const Insights: React.FC = () => {
             ) : (
               <div className="h-64 relative">
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
+                  <div className="w-8 h-8 border-2 border-zinc-600 rounded-full"></div>
                 </div>
               </div>
             )}

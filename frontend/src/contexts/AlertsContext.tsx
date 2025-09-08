@@ -23,18 +23,45 @@ interface AlertsContextType {
   refetch: () => void;
   fetchAlertsWithReports: () => void;
   refetchAlert: (alertId: string) => Promise<{ success: boolean; message: string; alert?: Alert }>;
+  getSingleAlert: (alertId: string) => Promise<{ success: boolean; message: string; alert?: Alert }>;
   generateReport: (alertId: string) => Promise<{ success: boolean; message: string; investigationId?: string }>;
   fetchAgentTrace: (traceId: string) => Promise<{ success: boolean; trace?: string; message: string }>;
+  // Streaming properties
+  isStreaming: boolean;
+  isConnecting: boolean;
+  streamingProgress: {
+    currentChunk: number;
+    totalChunks: number;
+    totalAlerts: number;
+    source: string;
+    isComplete: boolean;
+  };
+  streamAlerts: () => void;
+  cancelStreaming: () => void;
+  // Dashboard optimization
+  fetchReportsForDashboard: () => void;
 }
 
 const AlertsContext = createContext<AlertsContextType | undefined>(undefined);
 
 interface AlertsProviderProps {
   children: ReactNode;
+  useStreaming?: boolean;
+  chunkSize?: number;
+  hours?: number;
 }
 
-export const AlertsProvider: React.FC<AlertsProviderProps> = ({ children }) => {
-  const alertsData = useAlertsHook();
+export const AlertsProvider: React.FC<AlertsProviderProps> = ({ 
+  children, 
+  useStreaming = true, // Disable streaming by default to prevent connection issues
+  chunkSize = 1000,
+  hours = 4320 // 6 months
+}) => {
+  const alertsData = useAlertsHook({ 
+    useStreaming, 
+    chunkSize, 
+    hours 
+  });
   
   return (
     <AlertsContext.Provider value={alertsData}>
