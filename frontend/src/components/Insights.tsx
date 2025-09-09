@@ -85,7 +85,7 @@ const CategoryMap: React.FC<{
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-lg font-semibold capitalize">{category}</h3>
         <span 
-          className="px-3 py-1 rounded-full text-sm font-medium text-white"
+          className="px-3 py-1 rounded-full text-xs font-medium text-white"
           style={{ backgroundColor: color }}
         >
           {count} alerts
@@ -276,7 +276,7 @@ const Insights: React.FC = () => {
         <div className="space-y-4">
           <h2 className="text-2xl font-bold text-white">Alerts by Category</h2>
           <p className="text-zinc-400 text-sm">
-            Last 6 months
+            Last 6 months {alerts?.length || "..."} alerts
           </p>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
