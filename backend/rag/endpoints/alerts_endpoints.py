@@ -186,31 +186,17 @@ async def stream_alerts(
             # Send initial metadata
             yield f"data: {json.dumps({'type': 'start', 'hours': hours, 'chunk_size': chunk_size, 'cutoff_time': cutoff_time.isoformat()})}\n\n"
             
-            # Get total counts early for progress tracking
+            # Skip expensive count queries - use approximate estimates
             try:
-                logger.info("🔢 Getting total counts for progress tracking...")
-                
-                # Count monitor alerts
-                monitor_count_query = (db.collection('nyc_monitor_alerts')
-                                     .where(filter=firestore.FieldFilter('created_at', '>=', cutoff_time))
-                                     .select([]))  # Count query
-                monitor_total = sum(1 for _ in monitor_count_query.stream())
-                
-                # Count 311 signals  
-                signals_count_query = (db.collection('nyc_311_signals')
-                                     .where(filter=firestore.FieldFilter('signal_timestamp', '>=', cutoff_time))
-                                     .select([]))  # Count query
-                signals_total = sum(1 for _ in signals_count_query.stream())
-                
-                estimated_total = min(monitor_total + signals_total, 50000)  # Cap at processing limit
-                
-                logger.info(f"📊 Total counts: {monitor_total} monitor + {signals_total} signals = {estimated_total} estimated")
-                
-                # Send count metadata early
-                yield f"data: {json.dumps({'type': 'count', 'monitor_total': monitor_total, 'signals_total': signals_total, 'estimated_total': estimated_total})}\n\n"
+                logger.info("🔢 Using estimated counts for faster startup...") 
+                # Use approximate estimates based on typical data volumes
+                estimated_total = 50000
+
+                # Send estimated count metadata early
+                yield f"data: {json.dumps({'type': 'count', 'monitor_total': 1000, 'signals_total': 49000, 'estimated_total': estimated_total, 'estimated': True})}\n\n"
                 
             except Exception as count_error:
-                logger.warning(f"Error getting counts: {count_error}")
+                logger.warning(f"Error with estimates: {count_error}")
                 # Send unknown count so frontend knows counting failed
                 yield f"data: {json.dumps({'type': 'count', 'estimated_total': -1, 'count_error': str(count_error)})}\n\n"
             
@@ -283,11 +269,11 @@ async def stream_alerts(
                 signals_query = (signals_ref
                                .where(filter=firestore.FieldFilter('signal_timestamp', '>=', cutoff_time))
                                .select(['signal_timestamp', 'complaint_type', 'descriptor', 'latitude', 'longitude', 'is_emergency', 'category', 'full_signal_data', 'incident_zip', 'borough', 'status', 'severity', 'event_type'])
-                               .limit(50000))  # Hard limit to prevent excessive memory usage
+                               .limit(50000))  
                 
                 signals_batch = []
                 signals_processed = 0
-                max_docs_to_process = 50000  # Safety limit
+                max_docs_to_process = 50000 
                 docs_processed = 0
                 
                 try:
@@ -370,13 +356,16 @@ async def stream_alerts(
             except Exception as close_error:
                 logger.warning(f"Error closing database connection: {close_error}")
     
-    # Add headers to help with connection management
+    # Add headers to help with connection management and prevent timeouts
     response = EventSourceResponse(
         generate_alert_stream(),
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"  # Disable nginx buffering
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "Access-Control-Allow-Origin": "*",  # CORS for streaming
+            "X-Content-Type-Options": "nosniff",  # Security
+            "Keep-Alive": "timeout=900, max=100"  # Keep connection alive for 15 minutes
         }
     )
     return response
