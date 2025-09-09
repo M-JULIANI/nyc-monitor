@@ -36,6 +36,7 @@ interface AlertsContextType {
   // Streaming properties
   isStreaming: boolean;
   isConnecting: boolean;
+  isComputingCharts: boolean;
   streamingProgress: {
     currentChunk: number;
     totalChunks: number;

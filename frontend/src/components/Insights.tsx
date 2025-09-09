@@ -234,7 +234,7 @@ const Insights: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-white">NYC Alert Insights</h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-white">Insights</h2>
             <p className="text-zinc-400 text-sm mt-2">
               Last 3 days • {alertStats?.stats.total || "..."} alerts
             </p>

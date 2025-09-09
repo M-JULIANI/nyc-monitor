@@ -20,11 +20,10 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="w-full h-full bg-zinc-900 text-white relative">
-      {/* Loading Bar - shows during streaming */}
+      {/* Loading Bar*/}
       <LoadingBar 
         progress={streamingProgress.progressPercent}
-        label={streamingProgress.source}
-        isVisible={isStreaming && streamingProgress.estimatedTotal > 0}
+        isVisible={isStreaming}
       />
 
       {/* Connecting Overlay */}
@@ -42,7 +41,7 @@ const Dashboard: React.FC = () => {
         <div className="min-h-full p-4 md:p-6">
           <div className="max-w-7xl mx-auto space-y-4 pb-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-              <h2 className="text-2xl md:text-3xl font-bold text-white">NYC Alert Dashboard & Reports</h2>
+              <h2 className="text-2xl md:text-3xl font-bold text-white">Dashboard & Reports</h2>
               <div className="flex items-center gap-2 text-sm">
                 {isConnecting ? (
                   <span className="text-blue-400 flex items-center gap-1">

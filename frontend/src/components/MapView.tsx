@@ -643,11 +643,10 @@ const MapView: React.FC = () => {
       {/* Inject custom slider styles */}
       <style dangerouslySetInnerHTML={{ __html: sliderStyles }} />
 
-      {/* Loading Bar - shows during streaming */}
+      {/* Loading Bar*/}
       <LoadingBar 
         progress={streamingProgress.progressPercent}
-        label={streamingProgress.source}
-        isVisible={isStreaming && streamingProgress.estimatedTotal > 0}
+        isVisible={isStreaming}
       />
 
       {/* Connection Status */}

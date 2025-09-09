@@ -38,10 +38,10 @@ const MemoizedInsights = memo(Insights);
 const HomeContent = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [insightsHasBeenRendered, setInsightsHasBeenRendered] = useState(false);
-  const { isLoading, isStreaming, isConnecting, alerts } = useAlerts();
+  const { isLoading, isStreaming, isConnecting, isComputingCharts, alerts } = useAlerts();
 
   // Determine if insights should be enabled
-  const insightsEnabled = !isLoading && !isStreaming && !isConnecting && alerts.length > 0;
+  const insightsEnabled = !isLoading && !isStreaming && !isConnecting && !isComputingCharts && alerts.length > 0;
 
   // Handle tab change with validation
   const handleTabChange = (newTab: string) => {
@@ -49,6 +49,12 @@ const HomeContent = () => {
     if (newTab === "insights" && !insightsEnabled) {
       return;
     }
+    
+    // Prevent switching to any other tab during chart computation
+    if (isComputingCharts && newTab !== activeTab) {
+      return;
+    }
+    
     setActiveTab(newTab);
   };
 
@@ -95,6 +101,7 @@ const HomeContent = () => {
           <TabNavigation 
             activeTab={activeTab} 
             onTabChange={handleTabChange}
+            isComputingCharts={isComputingCharts}
             {...(!insightsEnabled && { insightsDisabled: true })}
           />
         </div>

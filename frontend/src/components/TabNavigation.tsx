@@ -3,9 +3,10 @@ interface TabNavigationProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   insightsDisabled?: boolean;
+  isComputingCharts?: boolean;
 }
 
-const TabNavigation = ({ activeTab, onTabChange, insightsDisabled = false }: TabNavigationProps) => {
+const TabNavigation = ({ activeTab, onTabChange, insightsDisabled = false, isComputingCharts = false }: TabNavigationProps) => {
   const tabs = [
     { id: "dashboard", label: "Dashboard", icon: "" },
     { id: "map", label: "Map", icon: "" },
@@ -15,7 +16,9 @@ const TabNavigation = ({ activeTab, onTabChange, insightsDisabled = false }: Tab
   return (
     <div className="flex border-b border-zinc-800 bg-zinc-900 px-2 pt-2">
       {tabs.map((tab) => {
-        const isDisabled = tab.id === "insights" && insightsDisabled;
+        const isInsightsDisabled = tab.id === "insights" && insightsDisabled;
+        const isInactiveTabFrozen = isComputingCharts && tab.id !== activeTab;
+        const isDisabled = isInsightsDisabled || isInactiveTabFrozen;
         
         return (
           <button
@@ -32,13 +35,24 @@ const TabNavigation = ({ activeTab, onTabChange, insightsDisabled = false }: Tab
               bg-zinc-900 rounded-t-md
             `}
             type="button"
-            title={isDisabled ? "Loading data..." : undefined}
+            title={
+              isInsightsDisabled 
+                ? "Loading data..." 
+                : isInactiveTabFrozen 
+                  ? "Computing charts..." 
+                  : undefined
+            }
           >
             <span>{tab.icon}</span>
             <span>{tab.label}</span>
-            {isDisabled && (
+            {isInsightsDisabled && (
               <span className="ml-1 text-xs">
                 <div className="animate-spin rounded-full h-3 w-3 border border-zinc-600 border-t-transparent"></div>
+              </span>
+            )}
+            {isInactiveTabFrozen && !isInsightsDisabled && (
+              <span className="ml-1 text-xs">
+                <div className="animate-pulse rounded-full h-2 w-2 bg-orange-500"></div>
               </span>
             )}
           </button>

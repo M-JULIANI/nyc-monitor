@@ -2,11 +2,10 @@ import React from 'react';
 
 interface LoadingBarProps {
   progress: number; // 0-100
-  label?: string;
   isVisible: boolean;
 }
 
-const LoadingBar: React.FC<LoadingBarProps> = ({ progress, label, isVisible }) => {
+const LoadingBar: React.FC<LoadingBarProps> = ({ progress, isVisible }) => {
   if (!isVisible) return null;
 
   return (
@@ -14,7 +13,7 @@ const LoadingBar: React.FC<LoadingBarProps> = ({ progress, label, isVisible }) =
       <div className="px-4 py-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-zinc-300">
-            {label || 'Loading...'}
+            {'Loading...'}
           </span>
           <span className="text-xs text-zinc-400">
             {Math.round(progress)}%
