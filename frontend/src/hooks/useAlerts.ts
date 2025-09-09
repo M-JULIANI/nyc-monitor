@@ -37,7 +37,7 @@ const normalizeAlert = (rawAlert: any): Alert => {
     priority: rawAlert.priority || 'medium',
     status: rawAlert.status || 'active',
     timestamp: rawAlert.timestamp || now,
-    coordinates: rawAlert.coordinates || { lat: 40.7589, lng: -73.9851 },
+    coordinates: rawAlert.coordinates || { lat: 40.748817, lng: -73.985428 }, // Empire State Building
     neighborhood: rawAlert.neighborhood || 'Unknown',
     borough: rawAlert.borough || 'Unknown',
     category: rawAlert.category || 'general',
@@ -75,6 +75,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isComputingCharts, setIsComputingCharts] = useState(false);
   const [streamingProgress, setStreamingProgress] = useState({
     currentChunk: 0,
     totalChunks: 0,
@@ -221,7 +222,6 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
               break;
 
             case 'count':
-              console.log('📊 Received count info:', data);
               setStreamingProgress(prev => ({
                 ...prev,
                 estimatedTotal: data.estimated_total,
@@ -238,7 +238,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
                 const newTotalAlerts = data.total_so_far;
                 const progressPercent = prev.estimatedTotal > 0 
                   ? Math.min(Math.round((newTotalAlerts / prev.estimatedTotal) * 100), 100)
-                  : 0;
+                  : Math.min(Math.round((newTotalAlerts / 10) * 100), 100); // Show progress even without estimated total
                 
                 return {
                   ...prev,
@@ -273,9 +273,11 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
                 timestamp: Date.now()
               });
 
-              setIsLoading(false);
+              // Mark streaming as complete - map/dashboard can be interactive now
               setIsStreaming(false);
               setIsConnecting(false);
+              setIsLoading(false); // Allow map/dashboard to be interactive immediately
+              setIsComputingCharts(true); // Start chart computation phase for Insights only
               setLastFetch(new Date());
               eventSource.close();
               setStreamController(null);
@@ -284,7 +286,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
               // Reset failure counter on successful completion
               setStreamingFailures(0);
 
-              console.log(`✅ Stream complete: ${data.total_alerts} alerts in ${data.total_chunks} chunks`);
+              console.log(`✅ Stream complete: ${data.total_alerts} alerts in ${data.total_chunks} chunks - starting chart computation`);
               break;
 
             case 'error':
@@ -806,7 +808,13 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
   }, [alerts]);
 
   // Memoized chart data for Insights component - computed once and cached
+  // Only compute chart data when streaming is complete or not using streaming
   const chartData = useMemo(() => {
+    // Don't compute expensive chart data while streaming is in progress or if streaming just completed
+    if (isStreaming || (streamingProgress.isComplete && isComputingCharts)) {
+      return { categoryData: [], timeData: [], priorityData: [], dateInfo: [], debugInfo: null };
+    }
+    
     if (!alerts.length) return { categoryData: [], timeData: [], priorityData: [], dateInfo: [], debugInfo: null };
 
     // Day names array
@@ -950,7 +958,19 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     };
 
     return { categoryData, timeData: spreadTimeData, priorityData, dateInfo, debugInfo };
-  }, [alerts]);
+  }, [alerts, isStreaming, streamingProgress.isComplete, isComputingCharts]);
+
+  // Effect to trigger chart computation after streaming completes
+  useEffect(() => {
+    if (streamingProgress.isComplete && isComputingCharts && alerts.length > 0) {
+      // Use setTimeout to allow the chart computation to happen in the next tick
+      const computeCharts = setTimeout(() => {
+        setIsComputingCharts(false); // Only affects Insights tab availability
+      }, 100); // Small delay to ensure chart computation happens
+
+      return () => clearTimeout(computeCharts);
+    }
+  }, [streamingProgress.isComplete, isComputingCharts, alerts.length]);
 
   return {
     alerts,
@@ -971,6 +991,7 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
     // Streaming-specific state and methods
     isStreaming,
     isConnecting,
+    isComputingCharts,
     streamingProgress,
     streamAlerts,
     cancelStreaming,
