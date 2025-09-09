@@ -1,8 +1,9 @@
 import React from "react";
 import { useAlerts } from "../contexts/AlertsContext";
+import LoadingBar from "./LoadingBar";
 
 const Dashboard: React.FC = () => {
-  const { alertsWithReports, stats, error, isLoading, isLoadingReports, isConnecting } = useAlerts();
+  const { alertsWithReports, stats, error, isLoading, isLoadingReports, isConnecting, isStreaming, streamingProgress } = useAlerts();
   const isConnected = !isLoading;
 
   const handleViewReport = (reportUrl: string) => {
@@ -19,6 +20,13 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="w-full h-full bg-zinc-900 text-white relative">
+      {/* Loading Bar - shows during streaming */}
+      <LoadingBar 
+        progress={streamingProgress.progressPercent}
+        label={streamingProgress.source}
+        isVisible={isStreaming && streamingProgress.estimatedTotal > 0}
+      />
+
       {/* Connecting Overlay */}
       {isConnecting && (
         <div className="absolute inset-0 bg-black/50 z-20 flex items-center justify-center">

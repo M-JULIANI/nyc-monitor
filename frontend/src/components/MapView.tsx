@@ -7,6 +7,7 @@ import { useMapState } from "../contexts/MapStateContext";
 import { useMobile } from "../pages/Home";
 import AgentTraceModal from "./AgentTraceModal";
 import PerformancePanel from "./PerformancePanel";
+import LoadingBar from "./LoadingBar";
 import { useAuth } from "@/contexts/AuthContext";
 
 const MAPBOX_TOKEN = "pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA";
@@ -100,6 +101,7 @@ const MapView: React.FC = () => {
     getSingleAlert,
     isStreaming,
     isConnecting,
+    streamingProgress,
   } = useAlerts();
   const { user } = useAuth();
   const { isMobile } = useMobile();
@@ -158,8 +160,6 @@ const MapView: React.FC = () => {
 
   // Filter alerts based on current filter settings
   const filteredAlerts = useMemo(() => {
-    //console.log('Filtering with timeRangeHours:', filter.timeRangeHours);
-
     const filtered = alerts.filter((alert) => {
       // Priority filter
       if (filter.priority !== "all" && alert.priority !== filter.priority) return false;
@@ -170,16 +170,23 @@ const MapView: React.FC = () => {
       // Status filter
       if (filter.status !== "all" && alert.status !== filter.status) return false;
 
-      // Time range filter - API sends 'date' field, not 'timestamp'
-      const alertTime = new Date(alert.timestamp);
+      // Time range filter - use timestamp if available, fallback to created_at
+      let alertTimestamp = alert.timestamp || alert.created_at;
+      if (!alertTimestamp) {
+        console.warn(`Alert ${alert.id} has no timestamp or created_at field`);
+        return true; // Don't filter out alerts without timestamps
+      }
+      
+      const alertTime = new Date(alertTimestamp);
       const now = new Date();
       const hoursAgo = (now.getTime() - alertTime.getTime()) / (1000 * 60 * 60);
+      
+      
       if (hoursAgo > filter.timeRangeHours) return false;
 
       return true;
     });
 
-    //console.log(`Filtered from ${alerts.length} to ${filtered.length} alerts`);
     return filtered;
   }, [alerts, filter]);
 
@@ -635,6 +642,13 @@ const MapView: React.FC = () => {
     <div className="relative w-full h-full">
       {/* Inject custom slider styles */}
       <style dangerouslySetInnerHTML={{ __html: sliderStyles }} />
+
+      {/* Loading Bar - shows during streaming */}
+      <LoadingBar 
+        progress={streamingProgress.progressPercent}
+        label={streamingProgress.source}
+        isVisible={isStreaming && streamingProgress.estimatedTotal > 0}
+      />
 
       {/* Connection Status */}
       {error && (

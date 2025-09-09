@@ -1,9 +1,9 @@
-import { useState, useMemo, createContext, useContext } from "react";
+import { useState, useMemo, createContext, useContext, memo } from "react";
 import TabNavigation from "../components/TabNavigation";
 import MapView from "../components/MapView";
 import Dashboard from "../components/Dashboard";
 import Insights from "../components/Insights";
-import { AlertsProvider } from "../contexts/AlertsContext";
+import { AlertsProvider, useAlerts } from "../contexts/AlertsContext";
 import { AlertStatsProvider } from "../contexts/AlertStatsContext";
 import { MapStateProvider } from "../contexts/MapStateContext";
 
@@ -31,9 +31,26 @@ const MobileProvider: React.FC<MobileProviderProps> = ({ children, isMobile }) =
   return <MobileContext.Provider value={{ isMobile }}>{children}</MobileContext.Provider>;
 };
 
+// Memoized Insights component to prevent re-calculation
+const MemoizedInsights = memo(Insights);
+
 // Internal component to access alerts for AlertStatsProvider
 const HomeContent = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [insightsHasBeenRendered, setInsightsHasBeenRendered] = useState(false);
+  const { isLoading, isStreaming, isConnecting, alerts } = useAlerts();
+
+  // Determine if insights should be enabled
+  const insightsEnabled = !isLoading && !isStreaming && !isConnecting && alerts.length > 0;
+
+  // Handle tab change with validation
+  const handleTabChange = (newTab: string) => {
+    // Prevent switching to insights if not ready
+    if (newTab === "insights" && !insightsEnabled) {
+      return;
+    }
+    setActiveTab(newTab);
+  };
 
   const renderActiveTab = () => {
     switch (activeTab) {
@@ -42,7 +59,15 @@ const HomeContent = () => {
       case "dashboard":
         return <Dashboard />;
       case "insights":
-        return <Insights />;
+        // Only render if enabled
+        if (!insightsEnabled) {
+          return <Dashboard />; // Fallback to dashboard
+        }
+        // Mark that insights has been rendered (for memoization)
+        if (!insightsHasBeenRendered) {
+          setInsightsHasBeenRendered(true);
+        }
+        return <MemoizedInsights />;
       default:
         return <MapView />;
     }
@@ -67,7 +92,11 @@ const HomeContent = () => {
             backgroundColor: "#111827",
           }}
         >
-          <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+          <TabNavigation 
+            activeTab={activeTab} 
+            onTabChange={handleTabChange}
+            {...(!insightsEnabled && { insightsDisabled: true })}
+          />
         </div>
         <div
           style={{
