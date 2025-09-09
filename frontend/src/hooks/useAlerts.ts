@@ -25,9 +25,53 @@ interface UseAlertsOptions {
   chunkSize?: number; // Chunk size for streaming
 }
 
+// NYC bounding box - precise boundaries including all 5 boroughs
+const NYC_BOUNDS = {
+  minLat: 40.477399, // Southern tip of Staten Island
+  maxLat: 40.917577, // Northern Bronx
+  minLng: -74.259090, // Westernmost point (Staten Island)
+  maxLng: -73.700272, // Easternmost point (Queens)
+};
+
+// Check if coordinates are within NYC bounds
+const isWithinNYC = (lat: number, lng: number): boolean => {
+  return (
+    lat >= NYC_BOUNDS.minLat &&
+    lat <= NYC_BOUNDS.maxLat &&
+    lng >= NYC_BOUNDS.minLng &&
+    lng <= NYC_BOUNDS.maxLng
+  );
+};
+
+// Check if coordinates are valid (not zero, not null, not NaN)
+const isValidCoordinate = (lat: number, lng: number): boolean => {
+  return (
+    typeof lat === 'number' &&
+    typeof lng === 'number' &&
+    !isNaN(lat) &&
+    !isNaN(lng) &&
+    lat !== 0 &&
+    lng !== 0 &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+  );
+};
+
 // Minimal normalization for optimized backend payload
-const normalizeAlert = (rawAlert: any): Alert => {
+const normalizeAlert = (rawAlert: any): Alert | null => {
   const now = new Date().toISOString();
+  
+  // Extract coordinates and validate them
+  const coords = rawAlert.coordinates || {};
+  const lat = typeof coords.lat === 'number' ? coords.lat : parseFloat(coords.lat);
+  const lng = typeof coords.lng === 'number' ? coords.lng : parseFloat(coords.lng);
+  
+  // Skip alerts with invalid coordinates or coordinates outside NYC
+  if (!isValidCoordinate(lat, lng) || !isWithinNYC(lat, lng)) {
+    console.debug(`🚫 Filtering out alert ${rawAlert.id}: invalid coordinates (${lat}, ${lng}) or outside NYC bounds`);
+    return null;
+  }
+  
   // Backend now sends minimal, clean data - just pass through with fallbacks
   return {
     id: rawAlert.id || '',
@@ -37,7 +81,7 @@ const normalizeAlert = (rawAlert: any): Alert => {
     priority: rawAlert.priority || 'medium',
     status: rawAlert.status || 'active',
     timestamp: rawAlert.timestamp || now,
-    coordinates: rawAlert.coordinates || { lat: 40.748817, lng: -73.985428 }, // Empire State Building
+    coordinates: { lat, lng }, // Use validated coordinates
     neighborhood: rawAlert.neighborhood || 'Unknown',
     borough: rawAlert.borough || 'Unknown',
     category: rawAlert.category || 'general',
@@ -231,7 +275,14 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
               break;
 
             case 'chunk':
-              const normalizedChunkAlerts = data.alerts.map(normalizeAlert);
+              const beforeFiltering = data.alerts.length;
+              const normalizedChunkAlerts = data.alerts.map(normalizeAlert).filter(Boolean) as Alert[];
+              const afterFiltering = normalizedChunkAlerts.length;
+              const filteredCount = beforeFiltering - afterFiltering;
+              
+              if (filteredCount > 0) {
+                console.log(`🚫 Filtered out ${filteredCount}/${beforeFiltering} alerts from ${data.source} chunk (outside NYC bounds or invalid coordinates)`);
+              }
               
               setAlerts(prev => [...prev, ...normalizedChunkAlerts]);
               setStreamingProgress(prev => {
@@ -402,8 +453,14 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
         timestamp: Date.now()
       });
 
-      // Normalize the alerts
-      const normalizedAlerts = (data.alerts || []).map(normalizeAlert);
+      // Normalize the alerts and filter out nulls (invalid coordinates)
+      const beforeFiltering = (data.alerts || []).length;
+      const normalizedAlerts = (data.alerts || []).map(normalizeAlert).filter(Boolean) as Alert[];
+      const filteredCount = beforeFiltering - normalizedAlerts.length;
+      
+      if (filteredCount > 0) {
+        console.log(`🚫 Filtered out ${filteredCount}/${beforeFiltering} alerts during regular fetch (outside NYC bounds or invalid coordinates)`);
+      }
 
       // Preserve investigation status and data for alerts that are being investigated
       const alertsWithInvestigationData = normalizedAlerts.map((alert: Alert) => {
@@ -673,6 +730,10 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
 
         // Normalize the single alert
         const normalizedAlert = normalizeAlert(data.alert);
+        
+        if (!normalizedAlert) {
+          throw new Error("Alert has invalid coordinates or is outside NYC bounds");
+        }
 
         // Only update if the data actually changed (avoid unnecessary re-renders)
         setAlerts((prev) => {
