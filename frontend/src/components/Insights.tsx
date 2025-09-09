@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from "react";
+import Map, { Layer, Source } from "react-map-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { useAlerts } from "../contexts/AlertsContext";
 import { useAlertStats } from "../contexts/AlertStatsContext";
 import { Alert } from "../types";
@@ -14,28 +16,185 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ScatterChart,
-  Scatter,
-  Legend,
 } from "recharts";
 
+const MAPBOX_TOKEN = "pk.eyJ1IjoibWp1bGlhbmkiLCJhIjoiY21iZWZzbGpzMWZ1ejJycHgwem9mdTkxdCJ9.pRU2rzdu-wP9A63--30ldA";
+
+// Lightweight Mapbox component for category visualization
+const CategoryMap: React.FC<{
+  category: string;
+  alerts: Alert[];
+  color: string;
+  count: number;
+}> = ({ category, alerts, color, count }) => {
+  // Fixed NYC viewport for all maps - adjusted to show more of Queens
+  const viewport = useMemo(() => ({
+    longitude: -73.87,
+    latitude: 40.7,
+    zoom: 9.2           
+  }), []);
+
+  // Generate GeoJSON for alert points with weight for heatmap
+  const alertsGeoJSON = useMemo(() => {
+    const features = alerts.map(alert => ({
+      type: "Feature" as const,
+      geometry: {
+        type: "Point" as const,
+        coordinates: [alert.coordinates.lng, alert.coordinates.lat]
+      },
+      properties: {
+        id: alert.id,
+        category: alert.category,
+        // Add weight for heatmap intensity
+        weight: 1
+      }
+    }));
+
+    return {
+      type: "FeatureCollection" as const,
+      features
+    };
+  }, [alerts]);
+
+  // Generate heatmap colors based on category color
+  const getHeatmapColors = useMemo(() => {
+    // Convert hex color to RGB
+    const hexToRgb = (hex: string) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 0, g: 0, b: 0 };
+    };
+
+    const rgb = hexToRgb(color);
+    
+    return [
+      `rgba(${rgb.r},${rgb.g},${rgb.b},0)`,     // Transparent
+      `rgba(${rgb.r},${rgb.g},${rgb.b},0.2)`,   // Very light
+      `rgba(${rgb.r},${rgb.g},${rgb.b},0.4)`,   // Light
+      `rgba(${rgb.r},${rgb.g},${rgb.b},0.6)`,   // Medium
+      `rgba(${rgb.r},${rgb.g},${rgb.b},0.8)`,   // Strong
+      `rgba(${rgb.r},${rgb.g},${rgb.b},1.0)`    // Full intensity
+    ];
+  }, [color]);
+
+  return (
+    <div className="card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-lg font-semibold capitalize">{category}</h3>
+        <span 
+          className="px-3 py-1 rounded-full text-xs font-medium text-white"
+          style={{ backgroundColor: color }}
+        >
+          {count} alerts
+        </span>
+      </div>
+      
+      <div className="relative overflow-hidden rounded-lg" style={{ height: '400px' }}>
+        {alerts.length > 0 ? (
+          <Map
+            initialViewState={viewport}
+            mapboxAccessToken={MAPBOX_TOKEN}
+            style={{ width: "100%", height: "100%" }}
+            mapStyle="mapbox://styles/mapbox/dark-v11"
+            interactive={false}
+            dragPan={false}
+            dragRotate={false}
+            scrollZoom={false}
+            keyboard={false}
+            doubleClickZoom={false}
+          >
+            <Source type="geojson" data={alertsGeoJSON}>
+              <Layer
+                id={`alert-heatmap-${category}`}
+                type="heatmap"
+                paint={{
+                  // Heatmap weight based on properties
+                  "heatmap-weight": ["get", "weight"],
+                  
+                  // Heatmap intensity varies by zoom level
+                  "heatmap-intensity": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    0, 1,
+                    9, 1.5,
+                    15, 2
+                  ],
+                  
+                  // Category-specific color ramp
+                  "heatmap-color": [
+                    "interpolate",
+                    ["linear"],
+                    ["heatmap-density"],
+                    0, getHeatmapColors[0],
+                    0.2, getHeatmapColors[1],
+                    0.4, getHeatmapColors[2],
+                    0.6, getHeatmapColors[3],
+                    0.8, getHeatmapColors[4],
+                    1, getHeatmapColors[5]
+                  ],
+                  
+                  // Heatmap radius varies by zoom level
+                  "heatmap-radius": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    0, 0.5,
+                    9, 4,
+                    15, 8
+                  ],
+                  
+                  // Heatmap opacity
+                  "heatmap-opacity": 0.8
+                }}
+              />
+            </Source>
+          </Map>
+        ) : (
+          <div className="w-full h-full bg-zinc-800 flex items-center justify-center rounded-lg">
+            <span className="text-zinc-500 text-sm">No alerts in this category</span>
+          </div>
+        )}
+        
+      </div>
+    </div>
+  );
+};
+
 const Insights: React.FC = () => {
-  // Get alerts from AlertsContext
-  const { alerts, isLoading: alertsLoading } = useAlerts();
+  // Get alerts and pre-computed chart data from AlertsContext
+  const { alerts, chartData, isLoading: alertsLoading } = useAlerts();
 
   // Get stats and categories from AlertStatsContext
-  const { alertStats, alertCategories, isLoading: statsLoading, error: statsError } = useAlertStats();
+  const { alertStats, isLoading: statsLoading, error: statsError } = useAlertStats();
 
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
   // Overall loading state
   const isLoading = alertsLoading || statsLoading;
 
-  // Day names array - moved before chartData useMemo
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  // Chart data is now pre-computed in useAlerts hook for performance
 
-  // Category colors for consistent theming
-  const categoryColors = {
+  // Group alerts by category for maps
+  const alertsByCategory = useMemo(() => {
+    const grouped: Record<string, Alert[]> = {};
+    
+    alerts.forEach(alert => {
+      const category = alert.category || 'general';
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
+      grouped[category].push(alert);
+    });
+    
+    return grouped;
+  }, [alerts]);
+
+  // Category colors (matching the chart colors)
+  const categoryColors = useMemo(() => ({
     infrastructure: "#3b82f6", // blue
     emergency: "#ef4444", // red
     transportation: "#8b5cf6", // purple
@@ -44,167 +203,10 @@ const Insights: React.FC = () => {
     environment: "#10b981", // green
     housing: "#eab308", // yellow
     general: "#6b7280", // gray
-  };
-
-  // Process alerts data for charts
-  const chartData = useMemo(() => {
-    if (!alerts.length) return { categoryData: [], timeData: [], priorityData: [], dateInfo: [], debugInfo: null };
-
-    // Debug: Log alert timestamps to understand date range
-    const timestamps = alerts.map((alert) => new Date(alert.timestamp));
-    const minDate = new Date(Math.min(...timestamps.map((d) => d.getTime())));
-    const maxDate = new Date(Math.max(...timestamps.map((d) => d.getTime())));
-
-    // Category breakdown
-    const categoryCount = alerts.reduce((acc, alert) => {
-      const category = alert.category || "general";
-      acc[category] = (acc[category] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const categoryData = Object.entries(categoryCount).map(([category, count]) => ({
-      name: category.charAt(0).toUpperCase() + category.slice(1),
-      value: count,
-      color: categoryColors[category as keyof typeof categoryColors] || "#6b7280",
-    }));
-
-    // Get unique dates from alerts and sort them chronologically
-    const uniqueDates = [
-      ...new Set(
-        alerts.map((alert) => {
-          const date = new Date(alert.timestamp);
-          return date.toDateString(); // This gives us "Mon Jan 01 2024" format
-        }),
-      ),
-    ].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-
-    // Create date info for X-axis
-    const dateInfo = uniqueDates.map((dateStr, index) => {
-      const date = new Date(dateStr);
-      const alertsOnThisDate = alerts.filter((alert) => new Date(alert.timestamp).toDateString() === dateStr).length;
-
-      return {
-        index,
-        dateStr,
-        shortLabel: `${date.getMonth() + 1}/${date.getDate()}`, // MM/DD format
-        dayName: dayNames[date.getDay()],
-        alertCount: alertsOnThisDate,
-      };
-    });
-
-    // Time-based scatter plot data with intelligent clustering prevention
-    const timeData = alerts.map((alert, alertIndex) => {
-      const date = new Date(alert.timestamp);
-      const dateStr = date.toDateString();
-      const dateIndex = uniqueDates.indexOf(dateStr);
-      const hourOfDay = date.getHours();
-
-      return {
-        originalX: dateIndex,
-        originalY: hourOfDay,
-        category: alert.category || "general",
-        title: alert.title,
-        priority: alert.priority,
-        color: categoryColors[alert.category as keyof typeof categoryColors] || "#6b7280",
-        alert: alert,
-        alertIndex, // Store original index for stable jitter
-      };
-    });
-
-    // Apply intelligent spreading to prevent clustering
-    const maxDateIndex = uniqueDates.length - 1;
-    const spreadTimeData = timeData.map((point) => {
-      // Scale the position to use more chart width (map 0-2 to 0-10 for better spacing)
-      const scaleFactor = maxDateIndex > 0 ? 10 / maxDateIndex : 1;
-      const scaledOriginalX = point.originalX * scaleFactor;
-
-      // Find all points with same or very similar coordinates
-      const similarPoints = timeData.filter(
-        (p) => Math.abs(p.originalX - point.originalX) < 0.1 && Math.abs(p.originalY - point.originalY) < 0.5, // Smaller tolerance for hour grouping
-      );
-
-      if (similarPoints.length <= 1) {
-        // If no clustering, just add small horizontal jitter only
-        return {
-          ...point,
-          x: scaledOriginalX + (Math.random() - 0.5) * 0.5,
-          y: point.originalY, // Keep exact hour - no vertical jitter
-        };
-      }
-
-      // For clustered points, spread them out horizontally only
-      const pointIndex = similarPoints.findIndex((p) => p.alertIndex === point.alertIndex);
-      const totalSimilar = similarPoints.length;
-
-      // Create horizontal spread pattern for clustered points
-      const horizontalSpread = (pointIndex - totalSimilar / 2) * 0.15; // Systematic horizontal spacing
-
-      // Add some horizontal randomness to avoid perfect lines
-      const randomX = (Math.random() - 0.5) * 0.2;
-
-      return {
-        ...point,
-        x: scaledOriginalX + horizontalSpread + randomX,
-        y: point.originalY, // Keep exact hour - preserve time accuracy
-      };
-    });
-
-    // Priority breakdown
-    const priorityCount = alerts.reduce((acc, alert) => {
-      acc[alert.priority] = (acc[alert.priority] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const priorityData = Object.entries(priorityCount).map(([priority, count]) => ({
-      name: priority.charAt(0).toUpperCase() + priority.slice(1),
-      value: count,
-      color:
-        priority === "critical"
-          ? "#ef4444"
-          : priority === "high"
-          ? "#f97316"
-          : priority === "medium"
-          ? "#eab308"
-          : "#10b981",
-    }));
-
-    const debugInfo = {
-      totalAlerts: alerts.length,
-      dateRange: { minDate: minDate.toDateString(), maxDate: maxDate.toDateString() },
-      uniqueDates: uniqueDates.length,
-      pointsGenerated: spreadTimeData.length,
-    };
-
-    return { categoryData, timeData: spreadTimeData, priorityData, dateInfo, debugInfo };
-  }, [alerts]);
-
-  const handleScatterClick = (data: any) => {
-    if (data && data.alert) {
-      setSelectedAlert(data.alert);
-    }
-  };
+  }), []);
 
   const closeAlertModal = () => {
     setSelectedAlert(null);
-  };
-
-  // Custom tooltip for scatter plot
-  const ScatterTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length > 0) {
-      const data = payload[0].payload;
-      const dateInfo = chartData.dateInfo[data.x];
-      return (
-        <div className="bg-zinc-800 p-3 rounded-lg border border-zinc-700 shadow-lg">
-          <p className="text-white font-medium">{data.title}</p>
-          <p className="text-zinc-300 text-sm">Category: {data.category}</p>
-          <p className="text-zinc-300 text-sm">Priority: {data.priority}</p>
-          <p className="text-zinc-300 text-sm">
-            {dateInfo?.dayName} {dateInfo?.shortLabel} at {data.y}:00
-          </p>
-        </div>
-      );
-    }
-    return null;
   };
 
   if (isLoading) {
@@ -232,9 +234,9 @@ const Insights: React.FC = () => {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-white">NYC Alert Insights</h2>
-            <p className="text-zinc-400 text-sm mt-1">
-              Analytics from the last 3 days • {alerts.length} alerts (of {alertStats?.stats.total || "..."} total)
+            <h2 className="text-2xl md:text-3xl font-bold text-white">Insights</h2>
+            <p className="text-zinc-400 text-sm mt-2">
+              Last 3 days • {alertStats?.stats.total || "..."} alerts
             </p>
           </div>
         </div>
@@ -269,6 +271,35 @@ const Insights: React.FC = () => {
             ))}
           </div>
         )}
+
+        {/* Category Maps Grid */}
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold text-white">Alerts by Category</h2>
+          <p className="text-zinc-400 text-sm">
+            Last 6 months {alerts?.length || "..."} alerts
+          </p>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {Object.entries(alertsByCategory)
+              .sort(([,a], [,b]) => b.length - a.length) // Sort by alert count descending
+              .map(([category, categoryAlerts]) => (
+                <CategoryMap
+                  key={category}
+                  category={category}
+                  alerts={categoryAlerts}
+                  color={categoryColors[category as keyof typeof categoryColors] || categoryColors.general}
+                  count={categoryAlerts.length}
+                />
+              ))
+            }
+          </div>
+          
+          {Object.keys(alertsByCategory).length === 0 && (
+            <div className="text-center py-8">
+              <p className="text-zinc-500">No alerts available for category mapping</p>
+            </div>
+          )}
+        </div>
 
         {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -339,125 +370,6 @@ const Insights: React.FC = () => {
           </div>
         </div>
 
-        {/* Time-based Scatter Plot */}
-        <div className="card p-4">
-          <h3 className="text-xl font-semibold mb-4">Alert Timing Patterns</h3>
-          <p className="text-sm text-zinc-400 mb-4">
-            Click on dots to see alert details. X-axis: Date, Y-axis: Hour of day (Last 3 days)
-          </p>
-          {chartData.debugInfo && (
-            <p className="text-xs text-zinc-500 mb-2">
-              Debug: {chartData.debugInfo.totalAlerts} alerts across {chartData.debugInfo.uniqueDates} days (
-              {chartData.debugInfo.dateRange.minDate} to {chartData.debugInfo.dateRange.maxDate})
-            </p>
-          )}
-          {chartData.timeData.length > 0 ? (
-            <div className="h-[28rem] sm:h-96 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 20, right: 30, bottom: 90, left: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis
-                    dataKey="x"
-                    type="number"
-                    domain={["dataMin - 1", "dataMax + 1"]}
-                    ticks={chartData.dateInfo.map((_, index) => {
-                      const scaleFactor = chartData.dateInfo.length > 1 ? 10 / (chartData.dateInfo.length - 1) : 1;
-                      return index * scaleFactor;
-                    })}
-                    tickFormatter={(value) => {
-                      const scaleFactor = chartData.dateInfo.length > 1 ? 10 / (chartData.dateInfo.length - 1) : 1;
-                      const dateIndex = Math.round(value / scaleFactor);
-                      const dateInfo = chartData.dateInfo[dateIndex];
-                      return dateInfo ? `${dateInfo.dayName} ${dateInfo.shortLabel}` : "";
-                    }}
-                    stroke="#9ca3af"
-                    interval={0}
-                    angle={-45}
-                    tick={{ textAnchor: "end", fontSize: 11 }}
-                    allowDecimals={false}
-                    includeHidden={false}
-                  />
-                  <YAxis
-                    dataKey="y"
-                    type="number"
-                    domain={[-2, 25]}
-                    stroke="#9ca3af"
-                    label={{
-                      value: "Hour of Day",
-                      angle: -90,
-                      position: "insideLeft",
-                      style: { textAnchor: "middle" },
-                    }}
-                  />
-                  <Tooltip content={<ScatterTooltip />} />
-                  {Object.entries(categoryColors).map(([category, color]) => {
-                    const categoryData = chartData.timeData.filter((d) => d.category === category);
-                    return (
-                      <Scatter
-                        key={category}
-                        name={category.charAt(0).toUpperCase() + category.slice(1)}
-                        data={categoryData}
-                        fill={color}
-                        onClick={handleScatterClick}
-                        style={{ cursor: "pointer" }}
-                      />
-                    );
-                  })}
-                  <Legend
-                    verticalAlign="bottom"
-                    height={60}
-                    wrapperStyle={{ paddingTop: "15px", paddingBottom: "0px" }}
-                  />
-                </ScatterChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-[28rem] sm:h-96 relative">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Category Details */}
-        {alertCategories ? (
-          <div className="card p-4">
-            <h3 className="text-xl font-semibold mb-4">Category Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.entries(alertCategories.categories).map(([key, category]) => (
-                <div key={key} className="bg-zinc-800 p-4 rounded-lg">
-                  <h4
-                    className="font-semibold text-lg mb-2"
-                    style={{ color: categoryColors[key as keyof typeof categoryColors] }}
-                  >
-                    {category.name}
-                  </h4>
-                  <p className="text-sm text-zinc-300 mb-2">{category.types.length} alert types</p>
-                  <div className="space-y-1">
-                    {category.types.slice(0, 3).map((type) => (
-                      <div key={type.key} className="text-xs text-zinc-400">
-                        • {type.name}
-                      </div>
-                    ))}
-                    {category.types.length > 3 && (
-                      <div className="text-xs text-zinc-500">+{category.types.length - 3} more...</div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="card p-4">
-            <h3 className="text-xl font-semibold mb-4">Category Information</h3>
-            <div className="relative h-40">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-8 h-8 border-2 border-zinc-600 border-t-white rounded-full animate-spin"></div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Alert Detail Modal */}

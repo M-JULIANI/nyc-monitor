@@ -20,6 +20,13 @@ interface AlertsContextType {
     active: number;
     resolved: number;
   };
+  chartData: {
+    categoryData: Array<{ name: string; value: number; color: string }>;
+    timeData: Array<any>;
+    priorityData: Array<{ name: string; value: number; color: string }>;
+    dateInfo: Array<any>;
+    debugInfo: any;
+  };
   refetch: () => void;
   fetchAlertsWithReports: () => void;
   refetchAlert: (alertId: string) => Promise<{ success: boolean; message: string; alert?: Alert }>;
@@ -29,10 +36,13 @@ interface AlertsContextType {
   // Streaming properties
   isStreaming: boolean;
   isConnecting: boolean;
+  isComputingCharts: boolean;
   streamingProgress: {
     currentChunk: number;
     totalChunks: number;
     totalAlerts: number;
+    estimatedTotal: number;
+    progressPercent: number;
     source: string;
     isComplete: boolean;
   };

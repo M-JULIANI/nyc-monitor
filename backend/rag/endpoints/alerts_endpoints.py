@@ -102,10 +102,10 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
             'neighborhood': signal.get('full_signal_data', {}).get('metadata', {}).get('incident_zip', signal.get('incident_zip', 'Unknown')),
             'borough': signal.get('full_signal_data', {}).get('metadata', {}).get('borough', signal.get('borough', 'Unknown')),
             'coordinates': {
-                'lat': signal.get('latitude') or 40.7589,
-                'lng': signal.get('longitude') or -73.9851
+                'lat': signal.get('latitude') or 40.748817,  # Empire State Building
+                'lng': signal.get('longitude') or -73.985428
             } if signal.get('latitude') and signal.get('longitude') else {
-                'lat': 40.7589, 'lng': -73.9851
+                'lat': 40.748817, 'lng': -73.985428  # Empire State Building
             },
             'area': signal.get('borough', 'Unknown'),
             'venue_address': '',
@@ -143,7 +143,7 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
             'timestamp': datetime.utcnow().isoformat(),
             'neighborhood': signal.get('borough', 'Unknown'),
             'borough': signal.get('borough', 'Unknown'),
-            'coordinates': {'lat': 40.7589, 'lng': -73.9851},
+            'coordinates': {'lat': 40.748817, 'lng': -73.985428},  # Empire State Building
             'area': signal.get('borough', 'Unknown'),
             'severity': 3,
             'keywords': [],
@@ -186,6 +186,34 @@ async def stream_alerts(
             # Send initial metadata
             yield f"data: {json.dumps({'type': 'start', 'hours': hours, 'chunk_size': chunk_size, 'cutoff_time': cutoff_time.isoformat()})}\n\n"
             
+            # Get total counts early for progress tracking
+            try:
+                logger.info("🔢 Getting total counts for progress tracking...")
+                
+                # Count monitor alerts
+                monitor_count_query = (db.collection('nyc_monitor_alerts')
+                                     .where(filter=firestore.FieldFilter('created_at', '>=', cutoff_time))
+                                     .select([]))  # Count query
+                monitor_total = sum(1 for _ in monitor_count_query.stream())
+                
+                # Count 311 signals  
+                signals_count_query = (db.collection('nyc_311_signals')
+                                     .where(filter=firestore.FieldFilter('signal_timestamp', '>=', cutoff_time))
+                                     .select([]))  # Count query
+                signals_total = sum(1 for _ in signals_count_query.stream())
+                
+                estimated_total = min(monitor_total + signals_total, 50000)  # Cap at processing limit
+                
+                logger.info(f"📊 Total counts: {monitor_total} monitor + {signals_total} signals = {estimated_total} estimated")
+                
+                # Send count metadata early
+                yield f"data: {json.dumps({'type': 'count', 'monitor_total': monitor_total, 'signals_total': signals_total, 'estimated_total': estimated_total})}\n\n"
+                
+            except Exception as count_error:
+                logger.warning(f"Error getting counts: {count_error}")
+                # Send unknown count so frontend knows counting failed
+                yield f"data: {json.dumps({'type': 'count', 'estimated_total': -1, 'count_error': str(count_error)})}\n\n"
+            
             total_alerts = []
             chunk_num = 0
             
@@ -223,8 +251,8 @@ async def stream_alerts(
                                 'priority': _get_priority_from_severity(data.get('severity', 5)),
                                 'timestamp': _extract_monitor_timestamp(data),
                                 'coordinates': {
-                                    'lat': data.get('original_alert', {}).get('latitude', 40.7589),
-                                    'lng': data.get('original_alert', {}).get('longitude', -73.9851)
+                                    'lat': data.get('original_alert', {}).get('latitude', 40.748817),  # Empire State Building
+                                    'lng': data.get('original_alert', {}).get('longitude', -73.985428)
                                 },
                                 'category': normalize_category(data.get('category', 'general')),
                             }
@@ -241,7 +269,7 @@ async def stream_alerts(
                 if monitor_alerts:
                     chunk_num += 1
                     total_alerts.extend(monitor_alerts)
-                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk_num, 'alerts': monitor_alerts, 'source': 'monitor', 'total_so_far': len(total_alerts)})}\n\n"
+                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk_num, 'alerts': monitor_alerts, 'source': 'monitor', 'total_so_far': len(total_alerts), 'alerts_in_chunk': len(monitor_alerts)})}\n\n"
                     
             except Exception as e:
                 logger.error(f"Monitor streaming error: {e}")
@@ -292,8 +320,8 @@ async def stream_alerts(
                                 'priority': _get_priority_from_severity(severity),
                                 'timestamp': _extract_311_timestamp(data),
                                 'coordinates': {
-                                    'lat': data.get('latitude', 40.7589),
-                                    'lng': data.get('longitude', -73.9851)
+                                    'lat': data.get('latitude', 40.748817),  # Empire State Building
+                                    'lng': data.get('longitude', -73.985428)
                                 },
                                 'category': normalize_category(category),
                             }
@@ -305,7 +333,7 @@ async def stream_alerts(
                             if len(signals_batch) >= chunk_size:
                                 chunk_num += 1
                                 total_alerts.extend(signals_batch)
-                                yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk_num, 'alerts': signals_batch, 'source': '311', 'total_so_far': len(total_alerts), 'signals_processed': signals_processed})}\n\n"
+                                yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk_num, 'alerts': signals_batch, 'source': '311', 'total_so_far': len(total_alerts), 'signals_processed': signals_processed, 'alerts_in_chunk': len(signals_batch)})}\n\n"
                                 signals_batch = []
                                 
                         except Exception as doc_error:
@@ -320,7 +348,7 @@ async def stream_alerts(
                 if signals_batch:
                     chunk_num += 1
                     total_alerts.extend(signals_batch)
-                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk_num, 'alerts': signals_batch, 'source': '311', 'total_so_far': len(total_alerts), 'signals_processed': signals_processed})}\n\n"
+                    yield f"data: {json.dumps({'type': 'chunk', 'chunk': chunk_num, 'alerts': signals_batch, 'source': '311', 'total_so_far': len(total_alerts), 'signals_processed': signals_processed, 'alerts_in_chunk': len(signals_batch)})}\n\n"
                     
             except Exception as e:
                 logger.error(f"311 streaming error: {e}")
@@ -450,8 +478,8 @@ async def get_recent_alerts(
                 'priority': _get_priority_from_severity(data.get('severity', 5)),
                 'timestamp': _extract_monitor_timestamp(data),
                 'coordinates': {
-                    'lat': data.get('original_alert', {}).get('latitude', 40.7589),
-                    'lng': data.get('original_alert', {}).get('longitude', -73.9851)
+                    'lat': data.get('original_alert', {}).get('latitude', 40.748817),  # Empire State Building
+                    'lng': data.get('original_alert', {}).get('longitude', -73.985428)
                 },
                 'category': normalize_category(data.get('category', 'general')),
             }
@@ -510,8 +538,8 @@ async def get_recent_alerts(
                 'priority': _get_priority_from_severity(severity),
                 'timestamp': _extract_311_timestamp(data),
                 'coordinates': {
-                    'lat': data.get('latitude', 40.7589),
-                    'lng': data.get('longitude', -73.9851)
+                    'lat': data.get('latitude', 40.748817),  # Empire State Building
+                    'lng': data.get('longitude', -73.985428)
                 },
                 'category': normalize_category(category),
             }
