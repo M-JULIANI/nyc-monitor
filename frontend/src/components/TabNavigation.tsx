@@ -52,7 +52,7 @@ const TabNavigation = ({ activeTab, onTabChange, insightsDisabled = false, isCom
             )}
             {isInactiveTabFrozen && !isInsightsDisabled && (
               <span className="ml-1 text-xs">
-                <div className="animate-pulse rounded-full h-2 w-2 bg-orange-500"></div>
+                <div className="animate-spin rounded-full h-3 w-3 border border-zinc-600 border-t-transparent"></div>
               </span>
             )}
           </button>
