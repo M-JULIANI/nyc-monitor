@@ -102,10 +102,10 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
             'neighborhood': signal.get('full_signal_data', {}).get('metadata', {}).get('incident_zip', signal.get('incident_zip', 'Unknown')),
             'borough': signal.get('full_signal_data', {}).get('metadata', {}).get('borough', signal.get('borough', 'Unknown')),
             'coordinates': {
-                'lat': signal.get('latitude') or 40.7589,
-                'lng': signal.get('longitude') or -73.9851
+                'lat': signal.get('latitude') or 40.748817,  # Empire State Building
+                'lng': signal.get('longitude') or -73.985428
             } if signal.get('latitude') and signal.get('longitude') else {
-                'lat': 40.7589, 'lng': -73.9851
+                'lat': 40.748817, 'lng': -73.985428  # Empire State Building
             },
             'area': signal.get('borough', 'Unknown'),
             'venue_address': '',
@@ -143,7 +143,7 @@ def normalize_311_signal(signal: Dict[Any, Any]) -> Dict[Any, Any]:
             'timestamp': datetime.utcnow().isoformat(),
             'neighborhood': signal.get('borough', 'Unknown'),
             'borough': signal.get('borough', 'Unknown'),
-            'coordinates': {'lat': 40.7589, 'lng': -73.9851},
+            'coordinates': {'lat': 40.748817, 'lng': -73.985428},  # Empire State Building
             'area': signal.get('borough', 'Unknown'),
             'severity': 3,
             'keywords': [],
@@ -251,8 +251,8 @@ async def stream_alerts(
                                 'priority': _get_priority_from_severity(data.get('severity', 5)),
                                 'timestamp': _extract_monitor_timestamp(data),
                                 'coordinates': {
-                                    'lat': data.get('original_alert', {}).get('latitude', 40.7589),
-                                    'lng': data.get('original_alert', {}).get('longitude', -73.9851)
+                                    'lat': data.get('original_alert', {}).get('latitude', 40.748817),  # Empire State Building
+                                    'lng': data.get('original_alert', {}).get('longitude', -73.985428)
                                 },
                                 'category': normalize_category(data.get('category', 'general')),
                             }
@@ -320,8 +320,8 @@ async def stream_alerts(
                                 'priority': _get_priority_from_severity(severity),
                                 'timestamp': _extract_311_timestamp(data),
                                 'coordinates': {
-                                    'lat': data.get('latitude', 40.7589),
-                                    'lng': data.get('longitude', -73.9851)
+                                    'lat': data.get('latitude', 40.748817),  # Empire State Building
+                                    'lng': data.get('longitude', -73.985428)
                                 },
                                 'category': normalize_category(category),
                             }
@@ -478,8 +478,8 @@ async def get_recent_alerts(
                 'priority': _get_priority_from_severity(data.get('severity', 5)),
                 'timestamp': _extract_monitor_timestamp(data),
                 'coordinates': {
-                    'lat': data.get('original_alert', {}).get('latitude', 40.7589),
-                    'lng': data.get('original_alert', {}).get('longitude', -73.9851)
+                    'lat': data.get('original_alert', {}).get('latitude', 40.748817),  # Empire State Building
+                    'lng': data.get('original_alert', {}).get('longitude', -73.985428)
                 },
                 'category': normalize_category(data.get('category', 'general')),
             }
@@ -538,8 +538,8 @@ async def get_recent_alerts(
                 'priority': _get_priority_from_severity(severity),
                 'timestamp': _extract_311_timestamp(data),
                 'coordinates': {
-                    'lat': data.get('latitude', 40.7589),
-                    'lng': data.get('longitude', -73.9851)
+                    'lat': data.get('latitude', 40.748817),  # Empire State Building
+                    'lng': data.get('longitude', -73.985428)
                 },
                 'category': normalize_category(category),
             }

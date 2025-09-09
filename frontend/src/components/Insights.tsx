@@ -27,11 +27,11 @@ const CategoryMap: React.FC<{
   color: string;
   count: number;
 }> = ({ category, alerts, color, count }) => {
-  // Fixed NYC viewport for all maps
+  // Fixed NYC viewport for all maps - adjusted to show more of Queens
   const viewport = useMemo(() => ({
-    longitude: -74.0,
+    longitude: -73.87,
     latitude: 40.7,
-    zoom: 9.5
+    zoom: 9.2           
   }), []);
 
   // Generate GeoJSON for alert points with weight for heatmap

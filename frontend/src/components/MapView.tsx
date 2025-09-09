@@ -1129,10 +1129,10 @@ const MapView: React.FC = () => {
                     "interpolate",
                     ["exponential", 2],  // Base 2 = doubles with each major zoom change
                     ["zoom"],
-                    0, 3,       // Very small when zoomed way out
-                    8, 8,       // Small for city overview
-                    12, 20,     // Medium for neighborhood view
-                    16, 45      // Large for street-level detail
+                    0, 0.5,     // Very small when zoomed way out
+                    3, 3,       // Small for city overview
+                    8, 6,       // Medium for neighborhood view
+                    12, 10      // Large for street-level detail
                   ],
                   // Keep heatmap visible across all zoom levels
                   "heatmap-opacity": [
@@ -1141,32 +1141,6 @@ const MapView: React.FC = () => {
                     ["zoom"],
                     0, 0.8,
                     22, 0.8
-                  ]
-                }}
-              />
-              {/* Optional: Add small circle layer for very high zoom levels */}
-              <Layer
-                id="alert-heatmap-points"
-                type="circle"
-                paint={{
-                  "circle-radius": [
-                    "interpolate",
-                    ["linear"],
-                    ["zoom"],
-                    14, 0,
-                    16, 5,      // Increased from 2 to 5
-                    18, 8       // Increased from 3 to 8
-                  ],
-                  "circle-color": getHeatmapColors()[5],
-                  "circle-stroke-color": "white",
-                  "circle-stroke-width": 0.5,
-                  "circle-opacity": [
-                    "interpolate",
-                    ["cubic-bezier", 0.25, 0.46, 0.45, 0.94],  // Smooth ease-out curve
-                    ["zoom"],
-                    14, 0,
-                    16, 0.7,
-                    18, 1
                   ]
                 }}
               />

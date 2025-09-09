@@ -28,7 +28,7 @@ class NYCLocationExtractor:
             'washington square': (40.7308, -73.9973, 'Manhattan', 'park'),
             'battery park': (40.7033, -74.0170, 'Manhattan', 'park'),
             'world trade center': (40.7115, -74.0134, 'Manhattan', 'landmark'),
-            'empire state building': (40.7484, -73.9857, 'Manhattan', 'landmark'),
+            'empire state building': (40.748817, -73.985428, 'Manhattan', 'landmark'),
             'grand central': (40.7527, -73.9772, 'Manhattan', 'transit'),
             'penn station': (40.7505, -73.9934, 'Manhattan', 'transit'),
             'port authority': (40.7589, -73.9896, 'Manhattan', 'transit'),
