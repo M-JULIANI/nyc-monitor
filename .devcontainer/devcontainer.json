@@ -1,16 +1,22 @@
 {
     "name": "Atlas NYC Monitor Development",
-    "build": {
-        "dockerfile": "Dockerfile",
-        "context": "."
-    },
+    "image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
     "features": {
         "ghcr.io/devcontainers/features/git:1": {},
         "ghcr.io/devcontainers/features/github-cli:1": {},
-        "ghcr.io/devcontainers/features/docker-in-docker:2": {
-            "version": "latest",
-            "moby": true,
-            "dockerDashComposeVersion": "v2"
+        "ghcr.io/devcontainers/features/node:1": {
+            "nodeGypDependencies": true,
+            "version": "20"
+        },
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+        "ghcr.io/devcontainers/features/common-utils:2": {
+            "installZsh": true,
+            "configureZshAsDefaultShell": false,
+            "installOhMyZsh": false,
+            "upgradePackages": true,
+            "username": "vscode",
+            "userUid": "1000",
+            "userGid": "1000"
         }
     },
     "customizations": {
@@ -21,11 +27,18 @@
                 "ms-python.black-formatter",
                 "njpwerner.autodocstring",
                 "ms-azuretools.vscode-docker",
-                "vstirbu.vscode-mermaid-preview"
+                "vstirbu.vscode-mermaid-preview",
+                "bradlc.vscode-tailwindcss",
+                "esbenp.prettier-vscode",
+                "ms-vscode.vscode-typescript-next"
             ],
             "settings": {
                 "python.formatting.provider": "black",
-                "editor.formatOnSave": true
+                "editor.formatOnSave": true,
+                "python.defaultInterpreterPath": "/home/vscode/.local/share/pypoetry/venv/bin/python",
+                "python.terminal.activateEnvironment": true,
+                "terminal.integrated.defaultProfile.linux": "bash",
+                "typescript.preferences.includePackageJsonAutoImports": "on"
             }
         }
     },
@@ -35,5 +48,23 @@
         "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
     ],
     "postCreateCommand": "bash .devcontainer/setup.sh",
-    "updateContentCommand": "bash .devcontainer/setup.sh"
+    "forwardPorts": [
+        8000,
+        5173,
+        3000
+    ],
+    "portsAttributes": {
+        "8000": {
+            "label": "Backend API",
+            "onAutoForward": "notify"
+        },
+        "5173": {
+            "label": "Frontend Dev Server",
+            "onAutoForward": "notify"
+        },
+        "3000": {
+            "label": "Frontend Alt Port",
+            "onAutoForward": "notify"
+        }
+    }
 }
