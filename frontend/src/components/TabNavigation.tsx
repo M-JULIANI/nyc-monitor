@@ -17,8 +17,8 @@ const TabNavigation = ({ activeTab, onTabChange, insightsDisabled = false, isCom
     <div className="flex border-b border-zinc-800 bg-zinc-900 px-2 pt-2">
       {tabs.map((tab) => {
         const isInsightsDisabled = tab.id === "insights" && insightsDisabled;
-        const isInactiveTabFrozen = isComputingCharts && tab.id !== activeTab;
-        const isDisabled = isInsightsDisabled || isInactiveTabFrozen;
+        const isTabFrozen = isComputingCharts; // Disable ALL tabs during chart computation
+        const isDisabled = isInsightsDisabled || isTabFrozen;
         
         return (
           <button
@@ -38,19 +38,14 @@ const TabNavigation = ({ activeTab, onTabChange, insightsDisabled = false, isCom
             title={
               isInsightsDisabled 
                 ? "Loading data..." 
-                : isInactiveTabFrozen 
+                : isTabFrozen 
                   ? "Computing charts..." 
                   : undefined
             }
           >
             <span>{tab.icon}</span>
             <span>{tab.label}</span>
-            {isInsightsDisabled && (
-              <span className="ml-1 text-xs">
-                <div className="animate-spin rounded-full h-3 w-3 border border-zinc-600 border-t-transparent"></div>
-              </span>
-            )}
-            {isInactiveTabFrozen && !isInsightsDisabled && (
+            {isInsightsDisabled && !isComputingCharts && (
               <span className="ml-1 text-xs">
                 <div className="animate-spin rounded-full h-3 w-3 border border-zinc-600 border-t-transparent"></div>
               </span>
