@@ -8,12 +8,8 @@ echo "🚀 Setting up Atlas NYC Monitor development environment..."
 # Ensure we're in the workspace directory
 cd /workspaces/atlas-bootstrapped
 
-# Docker permissions setup
-echo "🐳 Setting up Docker permissions..."
-sudo groupadd -f docker || true
-sudo usermod -aG docker vscode || true
-sudo chown root:docker /var/run/docker.sock || true
-sudo chmod 666 /var/run/docker.sock || true
+# Skip Docker setup - not needed for development
+echo "ℹ️  Skipping Docker setup - using simplified devcontainer"
 
 # Ensure PATH includes necessary directories
 export PATH="/home/vscode/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
@@ -50,15 +46,21 @@ else
     echo "⚠️  Backend directory or pyproject.toml not found, skipping backend setup"
 fi
 
-# Install frontend dependencies using pnpm workspaces
+# Clean and install frontend dependencies using pnpm workspaces
 echo "🌐 Installing frontend dependencies..."
 if [ -f "pnpm-workspace.yaml" ] && [ -f "frontend/package.json" ]; then
+    # Clean node_modules to fix hoist pattern conflicts
+    echo "🧹 Cleaning node_modules to fix hoist pattern conflicts..."
+    rm -rf node_modules frontend/node_modules
+    
     # Install from workspace root to handle workspace dependencies
     pnpm install
     echo "Frontend dependencies installed via workspace"
 else
     echo "⚠️  pnpm-workspace.yaml or frontend/package.json not found, trying individual install..."
     if [ -d "frontend" ] && [ -f "frontend/package.json" ]; then
+        # Clean node_modules first
+        rm -rf frontend/node_modules
         cd frontend
         pnpm install
         cd ..
@@ -68,6 +70,39 @@ else
     fi
 fi
 
+# Set up development environment variables
+echo "🔧 Setting up development environment variables..."
+if [ ! -f ".env" ]; then
+    echo "📝 Creating development .env file..."
+    cat > .env << 'EOF'
+# Development environment configuration
+# For local development - you can override these values
+
+# Google Cloud Project (required for Vertex AI)
+# Set this to your actual GCP project ID, or use the default for local dev
+GOOGLE_CLOUD_PROJECT=atlas-dev-local
+
+# Google Cloud location
+GOOGLE_CLOUD_LOCATION=us-central1
+
+# Docker registry (for local development)
+DOCKER_REGISTRY=localhost
+
+# Development flags
+ENV=development
+
+# Optional: Add your actual project ID here when ready
+# GOOGLE_CLOUD_PROJECT=your-actual-project-id
+EOF
+    echo "✅ Created .env file with development defaults"
+    echo "📋 To use with real Google Cloud:"
+    echo "   1. Set GOOGLE_CLOUD_PROJECT in .env to your actual project ID"
+    echo "   2. Run: gcloud auth application-default login"
+    echo "   3. Run: gcloud config set project YOUR_PROJECT_ID"
+else
+    echo "✅ .env file already exists"
+fi
+
 echo "✅ Development environment setup complete!"
 echo ""
 echo "🔧 Available commands:"
@@ -75,4 +110,6 @@ echo "  make dev          - Start both backend and frontend"
 echo "  make dev-api      - Start backend only"
 echo "  make dev-web      - Start frontend only"
 echo "  make test         - Run all tests"
-echo "  make help         - Show all available commands" 
+echo "  make help         - Show all available commands"
+echo ""
+echo "⚠️  Note: To use Google Cloud services, configure your .env file with real project ID" 

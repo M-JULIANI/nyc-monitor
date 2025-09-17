@@ -8,8 +8,8 @@ import Admin from '@/pages/Admin';
 import Layout from '@/components/Layout';
 import Home from './pages/Home';
 
-// Get client ID from environment
-const clientId = "290750569862-gdc3l80ctskurtojh6sgkbs74ursl25l.apps.googleusercontent.com";
+// Get client ID from environment variable
+const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "290750569862-gdc3l80ctskurtojh6sgkbs74ursl25l.apps.googleusercontent.com";
 const App: React.FC = () => (
   <GoogleOAuthProvider clientId={clientId}>
       <Router>
