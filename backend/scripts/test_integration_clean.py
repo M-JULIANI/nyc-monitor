@@ -53,6 +53,7 @@ def analyze_severity_distribution(alerts: list, source_name: str) -> dict:
     }
 
 
+@pytest.mark.expensive_api
 @pytest.mark.asyncio
 async def test_clean_integration():
     """Test the integration without fake entries"""

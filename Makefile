@@ -256,9 +256,9 @@ test: test-api test-web
 	@echo "All tests completed"
 
 test-api:
-	@echo "Running backend tests (excluding real integration tests)..."
+	@echo "Running backend tests (excluding real integration tests and expensive API calls)..."
 	@if [ -f "backend/pyproject.toml" ]; then \
-		cd backend && poetry run pytest -m "not real_integration"; \
+		cd backend && poetry run pytest -m "not real_integration and not expensive_api"; \
 	fi
 
 test-web:
@@ -292,6 +292,21 @@ test-integration-real:
 	@read -p "Continue? (y/N) " -n 1 -r; echo; \
 	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
 		cd backend && poetry run pytest -m real_integration; \
+	else \
+		echo "Cancelled."; \
+	fi
+
+test-expensive-api:
+	@echo "💰 Running expensive API tests (Twitter, Reddit, Geocoding, etc.)..."
+	@echo "⚠️  This will make external API calls that may have costs or rate limits!"
+	@echo "⚠️  Ensure you have the following environment variables set:"
+	@echo "   - TWITTER_API_KEY, TWITTER_API_KEY_SECRET, TWITTER_BEARER_TOKEN"
+	@echo "   - REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_REFRESH_TOKEN"
+	@echo "   - NYC_311_APP_TOKEN"
+	@echo "   - GOOGLE_MAPS_API_KEY (for geocoding)"
+	@read -p "Continue? (y/N) " -n 1 -r; echo; \
+	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
+		cd backend && poetry run pytest -m expensive_api; \
 	else \
 		echo "Cancelled."; \
 	fi
@@ -734,12 +749,13 @@ help:
 	@echo "  make dev-api      - Start backend development server"
 	@echo "  make dev-web     - Start frontend development server"
 	@echo "  make dev-web-deployed - Start frontend using deployed backend"
-	@echo "  make test             - Run all tests (excludes real integration tests)"
-	@echo "  make test-api         - Run backend tests (excludes real integration tests)"
+	@echo "  make test             - Run all tests (excludes real integration & expensive API tests)"
+	@echo "  make test-api         - Run backend tests (excludes real integration & expensive API tests)"
 	@echo "  make test-web         - Run frontend tests"
 	@echo "  make test-unit        - Run unit tests only"
 	@echo "  make test-integration - Run mocked integration tests"
 	@echo "  make test-integration-real - Run REAL integration tests (requires credentials)"
+	@echo "  make test-expensive-api    - Run expensive API tests (Twitter, Reddit, etc.)"
 	@echo "  make test-deployed-api    - Test deployed backend health"
 	@echo "  make get-api-url  - Get deployed backend URL"
 	@echo "  make lint             - Run linters"

@@ -26,6 +26,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.expensive_api
 @pytest.mark.asyncio
 async def test_nyc311_job():
     """Test the NYC 311 daily job functionality"""

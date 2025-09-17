@@ -19,6 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.expensive_api
 @pytest.mark.asyncio
 async def test_geocoding_extraction():
     """Test the new geocoding-based location extraction"""

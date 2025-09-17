@@ -84,6 +84,7 @@ def test_basic_tracing():
     assert trace_id is not None
 
 
+@pytest.mark.expensive_api
 @pytest.mark.asyncio
 async def test_investigation_with_tracing():
     """Test tracing with a mock investigation."""

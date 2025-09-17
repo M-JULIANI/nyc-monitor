@@ -11,6 +11,7 @@ import asyncio
 import json
 import sys
 import os
+import pytest
 
 # Load environment variables from .env file
 try:
@@ -78,6 +79,7 @@ def create_test_investigation_with_findings(investigation_id: str, event_type: s
     return investigation_state
 
 
+@pytest.mark.expensive_api
 def test_llm_synthesis_direct():
     """
     Test the LLM synthesis function directly with realistic web search findings.
@@ -246,6 +248,7 @@ def test_llm_synthesis_direct():
     assert all_tests_passed, "LLM synthesis tests failed"
 
 
+@pytest.mark.expensive_api
 def test_web_search_to_synthesis_integration():
     """
     Test the full integration from web search collection to final synthesis.

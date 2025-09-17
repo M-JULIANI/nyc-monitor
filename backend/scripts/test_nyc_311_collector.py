@@ -28,6 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.expensive_api
 @pytest.mark.asyncio
 async def test_nyc_311_collector():
     """Test the NYC 311 collector functionality"""

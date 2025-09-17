@@ -11,6 +11,7 @@ import pytest
 from datetime import datetime
 
 
+@pytest.mark.expensive_api
 @pytest.mark.asyncio
 async def test_investigation_api():
     """Test the investigation system via API."""

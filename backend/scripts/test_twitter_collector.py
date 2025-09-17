@@ -29,6 +29,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.expensive_api
 @pytest.mark.asyncio
 async def test_twitter_collector():
     """Test the Twitter collector functionality"""

@@ -24,6 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.expensive_api
 @pytest.mark.asyncio
 async def test_hackernews_collector():
     """Test the HackerNews collector"""
@@ -131,6 +132,7 @@ async def test_hackernews_collector():
         return False
 
 
+@pytest.mark.expensive_api
 @pytest.mark.asyncio
 async def test_api_connectivity():
     """Test basic HackerNews API connectivity"""
