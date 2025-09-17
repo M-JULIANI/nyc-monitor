@@ -1,0 +1,394 @@
+{
+  "collection_info": {
+    "timestamp": "2025-09-17T01:29:59.064282",
+    "total_signals_collected": 107,
+    "sample_size": 5,
+    "collection_source": "nyc_311_collector"
+  },
+  "sample_signals": [
+    {
+      "source": "nyc_311",
+      "title": "Noise - Street/Sidewalk: Loud Music/Party",
+      "content": "311 Request: Noise - Street/Sidewalk\nDescription: Loud Music/Party\nBorough: Unspecified\nAgency: New York City Police Department\nStatus: In Progress",
+      "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+      "timestamp": "2025-09-15T01:51:26",
+      "engagement": {
+        "score": 4,
+        "comments": 0,
+        "shares": 0
+      },
+      "metadata": {
+        "unique_key": "66152878",
+        "complaint_type": "Noise - Street/Sidewalk",
+        "descriptor": "Loud Music/Party",
+        "borough": "Unspecified",
+        "agency": "NYPD",
+        "agency_name": "New York City Police Department",
+        "status": "In Progress",
+        "incident_zip": "",
+        "community_board": "",
+        "due_date": "",
+        "latitude": 40.83122685545888,
+        "longitude": -73.90456934523786,
+        "has_coordinates": true,
+        "signal_category": "volume",
+        "is_emergency": false,
+        "is_event": false,
+        "priority_keywords": [
+          "loud music"
+        ],
+        "has_priority_content": true,
+        "priority_flags": [
+          "loud music"
+        ],
+        "keyword_count": 1,
+        "nyc_relevant": true,
+        "primary_borough": "Unspecified"
+      },
+      "raw_data": {
+        "title": "Noise - Street/Sidewalk: Loud Music/Party",
+        "content": "311 Request: Noise - Street/Sidewalk\nDescription: Loud Music/Party\nBorough: Unspecified\nAgency: New York City Police Department\nStatus: In Progress",
+        "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+        "score": 4,
+        "comments": 0,
+        "shares": 0,
+        "created_at": "2025-09-15T01:51:26",
+        "timestamp": "2025-09-15T01:51:26",
+        "full_text": "Noise - Street/Sidewalk Loud Music/Party",
+        "content_length": 16,
+        "metadata": {
+          "unique_key": "66152878",
+          "complaint_type": "Noise - Street/Sidewalk",
+          "descriptor": "Loud Music/Party",
+          "borough": "Unspecified",
+          "agency": "NYPD",
+          "agency_name": "New York City Police Department",
+          "status": "In Progress",
+          "incident_zip": "",
+          "community_board": "",
+          "due_date": "",
+          "latitude": 40.83122685545888,
+          "longitude": -73.90456934523786,
+          "has_coordinates": true,
+          "signal_category": "volume",
+          "is_emergency": false,
+          "is_event": false,
+          "priority_keywords": [
+            "loud music"
+          ],
+          "has_priority_content": true,
+          "priority_flags": [
+            "loud music"
+          ],
+          "keyword_count": 1,
+          "nyc_relevant": true,
+          "primary_borough": "Unspecified"
+        }
+      }
+    },
+    {
+      "source": "nyc_311",
+      "title": "Vendor Enforcement: Food Vendor",
+      "content": "311 Request: Vendor Enforcement\nDescription: Food Vendor\nBorough: Unspecified\nAgency: Department of Sanitation\nStatus: In Progress",
+      "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+      "timestamp": "2025-09-15T01:50:26",
+      "engagement": {
+        "score": 3,
+        "comments": 0,
+        "shares": 0
+      },
+      "metadata": {
+        "unique_key": "66153032",
+        "complaint_type": "Vendor Enforcement",
+        "descriptor": "Food Vendor",
+        "borough": "Unspecified",
+        "agency": "DSNY",
+        "agency_name": "Department of Sanitation",
+        "status": "In Progress",
+        "incident_zip": "",
+        "community_board": "",
+        "due_date": "",
+        "latitude": 40.753044273921276,
+        "longitude": -73.99945138278457,
+        "has_coordinates": true,
+        "signal_category": "volume",
+        "is_emergency": false,
+        "is_event": false,
+        "priority_keywords": [],
+        "has_priority_content": false,
+        "priority_flags": [],
+        "keyword_count": 0,
+        "nyc_relevant": true,
+        "primary_borough": "Unspecified"
+      },
+      "raw_data": {
+        "title": "Vendor Enforcement: Food Vendor",
+        "content": "311 Request: Vendor Enforcement\nDescription: Food Vendor\nBorough: Unspecified\nAgency: Department of Sanitation\nStatus: In Progress",
+        "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+        "score": 3,
+        "comments": 0,
+        "shares": 0,
+        "created_at": "2025-09-15T01:50:26",
+        "timestamp": "2025-09-15T01:50:26",
+        "full_text": "Vendor Enforcement Food Vendor",
+        "content_length": 11,
+        "metadata": {
+          "unique_key": "66153032",
+          "complaint_type": "Vendor Enforcement",
+          "descriptor": "Food Vendor",
+          "borough": "Unspecified",
+          "agency": "DSNY",
+          "agency_name": "Department of Sanitation",
+          "status": "In Progress",
+          "incident_zip": "",
+          "community_board": "",
+          "due_date": "",
+          "latitude": 40.753044273921276,
+          "longitude": -73.99945138278457,
+          "has_coordinates": true,
+          "signal_category": "volume",
+          "is_emergency": false,
+          "is_event": false,
+          "priority_keywords": [],
+          "has_priority_content": false,
+          "priority_flags": [],
+          "keyword_count": 0,
+          "nyc_relevant": true,
+          "primary_borough": "Unspecified"
+        }
+      }
+    },
+    {
+      "source": "nyc_311",
+      "title": "Noise - Residential: Loud Music/Party",
+      "content": "311 Request: Noise - Residential\nDescription: Loud Music/Party\nBorough: Unspecified\nAgency: New York City Police Department\nStatus: In Progress",
+      "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+      "timestamp": "2025-09-15T01:50:12",
+      "engagement": {
+        "score": 4,
+        "comments": 0,
+        "shares": 0
+      },
+      "metadata": {
+        "unique_key": "66150580",
+        "complaint_type": "Noise - Residential",
+        "descriptor": "Loud Music/Party",
+        "borough": "Unspecified",
+        "agency": "NYPD",
+        "agency_name": "New York City Police Department",
+        "status": "In Progress",
+        "incident_zip": "",
+        "community_board": "",
+        "due_date": "",
+        "latitude": 40.69057895526809,
+        "longitude": -73.91648636035438,
+        "has_coordinates": true,
+        "signal_category": "volume",
+        "is_emergency": false,
+        "is_event": false,
+        "priority_keywords": [
+          "loud music"
+        ],
+        "has_priority_content": true,
+        "priority_flags": [
+          "loud music"
+        ],
+        "keyword_count": 1,
+        "nyc_relevant": true,
+        "primary_borough": "Unspecified"
+      },
+      "raw_data": {
+        "title": "Noise - Residential: Loud Music/Party",
+        "content": "311 Request: Noise - Residential\nDescription: Loud Music/Party\nBorough: Unspecified\nAgency: New York City Police Department\nStatus: In Progress",
+        "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+        "score": 4,
+        "comments": 0,
+        "shares": 0,
+        "created_at": "2025-09-15T01:50:12",
+        "timestamp": "2025-09-15T01:50:12",
+        "full_text": "Noise - Residential Loud Music/Party",
+        "content_length": 16,
+        "metadata": {
+          "unique_key": "66150580",
+          "complaint_type": "Noise - Residential",
+          "descriptor": "Loud Music/Party",
+          "borough": "Unspecified",
+          "agency": "NYPD",
+          "agency_name": "New York City Police Department",
+          "status": "In Progress",
+          "incident_zip": "",
+          "community_board": "",
+          "due_date": "",
+          "latitude": 40.69057895526809,
+          "longitude": -73.91648636035438,
+          "has_coordinates": true,
+          "signal_category": "volume",
+          "is_emergency": false,
+          "is_event": false,
+          "priority_keywords": [
+            "loud music"
+          ],
+          "has_priority_content": true,
+          "priority_flags": [
+            "loud music"
+          ],
+          "keyword_count": 1,
+          "nyc_relevant": true,
+          "primary_borough": "Unspecified"
+        }
+      }
+    },
+    {
+      "source": "nyc_311",
+      "title": "Noise - Commercial: Loud Music/Party",
+      "content": "311 Request: Noise - Commercial\nDescription: Loud Music/Party\nBorough: Unspecified\nAgency: New York City Police Department\nStatus: In Progress",
+      "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+      "timestamp": "2025-09-15T01:49:15",
+      "engagement": {
+        "score": 4,
+        "comments": 0,
+        "shares": 0
+      },
+      "metadata": {
+        "unique_key": "66152852",
+        "complaint_type": "Noise - Commercial",
+        "descriptor": "Loud Music/Party",
+        "borough": "Unspecified",
+        "agency": "NYPD",
+        "agency_name": "New York City Police Department",
+        "status": "In Progress",
+        "incident_zip": "",
+        "community_board": "",
+        "due_date": "",
+        "latitude": 40.837378947777104,
+        "longitude": -73.8669723240475,
+        "has_coordinates": true,
+        "signal_category": "volume",
+        "is_emergency": false,
+        "is_event": false,
+        "priority_keywords": [
+          "loud music"
+        ],
+        "has_priority_content": true,
+        "priority_flags": [
+          "loud music"
+        ],
+        "keyword_count": 1,
+        "nyc_relevant": true,
+        "primary_borough": "Unspecified"
+      },
+      "raw_data": {
+        "title": "Noise - Commercial: Loud Music/Party",
+        "content": "311 Request: Noise - Commercial\nDescription: Loud Music/Party\nBorough: Unspecified\nAgency: New York City Police Department\nStatus: In Progress",
+        "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+        "score": 4,
+        "comments": 0,
+        "shares": 0,
+        "created_at": "2025-09-15T01:49:15",
+        "timestamp": "2025-09-15T01:49:15",
+        "full_text": "Noise - Commercial Loud Music/Party",
+        "content_length": 16,
+        "metadata": {
+          "unique_key": "66152852",
+          "complaint_type": "Noise - Commercial",
+          "descriptor": "Loud Music/Party",
+          "borough": "Unspecified",
+          "agency": "NYPD",
+          "agency_name": "New York City Police Department",
+          "status": "In Progress",
+          "incident_zip": "",
+          "community_board": "",
+          "due_date": "",
+          "latitude": 40.837378947777104,
+          "longitude": -73.8669723240475,
+          "has_coordinates": true,
+          "signal_category": "volume",
+          "is_emergency": false,
+          "is_event": false,
+          "priority_keywords": [
+            "loud music"
+          ],
+          "has_priority_content": true,
+          "priority_flags": [
+            "loud music"
+          ],
+          "keyword_count": 1,
+          "nyc_relevant": true,
+          "primary_borough": "Unspecified"
+        }
+      }
+    },
+    {
+      "source": "nyc_311",
+      "title": "Noise - Residential: Loud Talking",
+      "content": "311 Request: Noise - Residential\nDescription: Loud Talking\nBorough: Unspecified\nAgency: New York City Police Department\nStatus: In Progress",
+      "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+      "timestamp": "2025-09-15T01:48:59",
+      "engagement": {
+        "score": 4,
+        "comments": 0,
+        "shares": 0
+      },
+      "metadata": {
+        "unique_key": "66158861",
+        "complaint_type": "Noise - Residential",
+        "descriptor": "Loud Talking",
+        "borough": "Unspecified",
+        "agency": "NYPD",
+        "agency_name": "New York City Police Department",
+        "status": "In Progress",
+        "incident_zip": "",
+        "community_board": "",
+        "due_date": "",
+        "latitude": 40.679685754357216,
+        "longitude": -73.96675503522702,
+        "has_coordinates": true,
+        "signal_category": "volume",
+        "is_emergency": false,
+        "is_event": false,
+        "priority_keywords": [],
+        "has_priority_content": false,
+        "priority_flags": [],
+        "keyword_count": 0,
+        "nyc_relevant": true,
+        "primary_borough": "Unspecified"
+      },
+      "raw_data": {
+        "title": "Noise - Residential: Loud Talking",
+        "content": "311 Request: Noise - Residential\nDescription: Loud Talking\nBorough: Unspecified\nAgency: New York City Police Department\nStatus: In Progress",
+        "url": "https://portal.311.nyc.gov/article/?kanumber=KA-01010",
+        "score": 4,
+        "comments": 0,
+        "shares": 0,
+        "created_at": "2025-09-15T01:48:59",
+        "timestamp": "2025-09-15T01:48:59",
+        "full_text": "Noise - Residential Loud Talking",
+        "content_length": 12,
+        "metadata": {
+          "unique_key": "66158861",
+          "complaint_type": "Noise - Residential",
+          "descriptor": "Loud Talking",
+          "borough": "Unspecified",
+          "agency": "NYPD",
+          "agency_name": "New York City Police Department",
+          "status": "In Progress",
+          "incident_zip": "",
+          "community_board": "",
+          "due_date": "",
+          "latitude": 40.679685754357216,
+          "longitude": -73.96675503522702,
+          "has_coordinates": true,
+          "signal_category": "volume",
+          "is_emergency": false,
+          "is_event": false,
+          "priority_keywords": [],
+          "has_priority_content": false,
+          "priority_flags": [],
+          "keyword_count": 0,
+          "nyc_relevant": true,
+          "primary_borough": "Unspecified"
+        }
+      }
+    }
+  ]
+}

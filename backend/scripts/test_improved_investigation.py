@@ -11,6 +11,7 @@ import asyncio
 import json
 import sys
 import os
+import pytest
 
 # Load environment variables from .env file
 try:
@@ -78,6 +79,7 @@ def create_test_investigation_with_findings(investigation_id: str, event_type: s
     return investigation_state
 
 
+@pytest.mark.expensive_api
 def test_llm_synthesis_direct():
     """
     Test the LLM synthesis function directly with realistic web search findings.
@@ -92,7 +94,7 @@ def test_llm_synthesis_direct():
         print("✅ Imported dedicated synthesis tool")
     except ImportError as e:
         print(f"❌ Failed to import synthesis tool: {e}")
-        return False
+        assert False, f"Failed to import synthesis tool: {e}"
 
     # Test data - realistic web search findings like the agent would collect
     test_scenarios = [
@@ -243,9 +245,10 @@ def test_llm_synthesis_direct():
         print("   The synthesis is still producing generic or incomplete content.")
         print("   Additional improvements needed in the LLM synthesis logic.")
 
-    return all_tests_passed
+    assert all_tests_passed, "LLM synthesis tests failed"
 
 
+@pytest.mark.expensive_api
 def test_web_search_to_synthesis_integration():
     """
     Test the full integration from web search collection to final synthesis.
@@ -378,11 +381,11 @@ def test_web_search_to_synthesis_integration():
             print(
                 f"🎯 INTEGRATION TEST: {'✅ PASS' if integration_success else '❌ FAIL'}")
 
-            return integration_success
+            assert integration_success, "Integration test failed"
 
     except Exception as e:
         print(f"❌ Integration test failed: {e}")
-        return False
+        assert False, f"Integration test failed: {e}"
 
 
 async def run_all_tests():

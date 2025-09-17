@@ -28,7 +28,8 @@ def load_env():
 def test_eval_full_conversation():
     """Test the agent's basic ability on a few examples."""
     AgentEvaluator.evaluate(
-       agent_module="rag",
-       eval_dataset_file_path_or_dir=str(pathlib.Path(__file__).parent / "data/conversation.test.json"),
-       num_runs=1,
+        agent_module="rag",
+        eval_dataset_file_path_or_dir=str(pathlib.Path(
+            __file__).parent / "data/conversation.test.json"),
+        num_runs=1,
     )

@@ -275,14 +275,14 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
               break;
 
             case 'chunk':
-              const beforeFiltering = data.alerts.length;
-              const normalizedChunkAlerts = data.alerts.map(normalizeAlert).filter(Boolean) as Alert[];
-              const afterFiltering = normalizedChunkAlerts.length;
-              const filteredCount = beforeFiltering - afterFiltering;
+              // const beforeFiltering = data.alerts.length;
+               const normalizedChunkAlerts = data.alerts.map(normalizeAlert).filter(Boolean) as Alert[];
+              // const afterFiltering = normalizedChunkAlerts.length;
+             // const filteredCount = beforeFiltering - afterFiltering;
               
-              if (filteredCount > 0) {
-                console.log(`🚫 Filtered out ${filteredCount}/${beforeFiltering} alerts from ${data.source} chunk (outside NYC bounds or invalid coordinates)`);
-              }
+              // if (filteredCount > 0) {
+              //   console.log(`🚫 Filtered out ${filteredCount}/${beforeFiltering} alerts from ${data.source} chunk (outside NYC bounds or invalid coordinates)`);
+              // }
               
               setAlerts(prev => [...prev, ...normalizedChunkAlerts]);
               setStreamingProgress(prev => {
@@ -454,13 +454,13 @@ export const useAlerts = (options: UseAlertsOptions = {}) => {
       });
 
       // Normalize the alerts and filter out nulls (invalid coordinates)
-      const beforeFiltering = (data.alerts || []).length;
+     // const beforeFiltering = (data.alerts || []).length;
       const normalizedAlerts = (data.alerts || []).map(normalizeAlert).filter(Boolean) as Alert[];
-      const filteredCount = beforeFiltering - normalizedAlerts.length;
+     // const filteredCount = beforeFiltering - normalizedAlerts.length;
       
-      if (filteredCount > 0) {
-        console.log(`🚫 Filtered out ${filteredCount}/${beforeFiltering} alerts during regular fetch (outside NYC bounds or invalid coordinates)`);
-      }
+      // if (filteredCount > 0) {
+      //   console.log(`🚫 Filtered out ${filteredCount}/${beforeFiltering} alerts during regular fetch (outside NYC bounds or invalid coordinates)`);
+      // }
 
       // Preserve investigation status and data for alerts that are being investigated
       const alertsWithInvestigationData = normalizedAlerts.map((alert: Alert) => {

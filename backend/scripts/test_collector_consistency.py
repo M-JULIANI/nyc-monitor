@@ -7,6 +7,7 @@ import asyncio
 import sys
 import os
 import logging
+import pytest
 
 # Add backend to path
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,6 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.asyncio
 async def test_collector_consistency():
     """Test that both collectors use the same geocoding approach"""
 

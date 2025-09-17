@@ -45,13 +45,13 @@ const HomeContent = () => {
 
   // Handle tab change with validation
   const handleTabChange = (newTab: string) => {
-    // Prevent switching to insights if not ready
-    if (newTab === "insights" && !insightsEnabled) {
+    // Prevent ALL navigation during chart computation
+    if (isComputingCharts) {
       return;
     }
     
-    // Prevent switching to any other tab during chart computation
-    if (isComputingCharts && newTab !== activeTab) {
+    // Prevent switching to insights if not ready
+    if (newTab === "insights" && !insightsEnabled) {
       return;
     }
     
@@ -113,6 +113,29 @@ const HomeContent = () => {
           }}
         >
           {renderActiveTab()}
+          {/* Spinner overlay during chart computation */}
+          {isComputingCharts && (
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(0, 0, 0, 0.7)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 50,
+                backdropFilter: "blur(2px)",
+              }}
+            >
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-zinc-600 border-t-blue-500 mb-4"></div>
+              <p className="text-white text-lg font-medium mb-2">Computing Charts...</p>
+              <p className="text-zinc-400 text-sm">Please wait while we process the data</p>
+            </div>
+          )}
         </div>
       </div>
     </AlertStatsProvider>

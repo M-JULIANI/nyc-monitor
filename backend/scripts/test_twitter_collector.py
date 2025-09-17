@@ -9,6 +9,7 @@ import asyncio
 import sys
 import os
 import logging
+import pytest
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -28,6 +29,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.expensive_api
+@pytest.mark.asyncio
 async def test_twitter_collector():
     """Test the Twitter collector functionality"""
     logger.info("=== Testing Twitter Collector ===")

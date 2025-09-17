@@ -1,3 +1,6 @@
+# Load environment variables early before any other imports
+from . import env_setup
+
 import os
 import json
 import logging
@@ -430,10 +433,19 @@ Note: Model analysis failed, but investigation infrastructure is working.
 This demonstrates the system is ready for both simple and complex approaches."""
 
 
-# Export the simple service
-simple_investigation_service = SimpleInvestigationService()
+# Export the simple service (lazy initialization to avoid startup issues)
+simple_investigation_service = None
+
+
+def get_simple_investigation_service():
+    """Get or create the simple investigation service instance."""
+    global simple_investigation_service
+    if simple_investigation_service is None:
+        simple_investigation_service = SimpleInvestigationService()
+    return simple_investigation_service
 
 
 async def investigate_alert_simple(alert_data: AlertData) -> tuple[str, str]:
     """Simple investigation entry point - no deployment required"""
-    return await simple_investigation_service.investigate_alert(alert_data)
+    service = get_simple_investigation_service()
+    return await service.investigate_alert(alert_data)

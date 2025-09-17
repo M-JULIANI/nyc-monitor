@@ -10,6 +10,7 @@ from monitor.collectors.nyc_311_collector import NYC311Collector
 import asyncio
 import sys
 import os
+import pytest
 sys.path.append('..')
 
 try:
@@ -52,6 +53,8 @@ def analyze_severity_distribution(alerts: list, source_name: str) -> dict:
     }
 
 
+@pytest.mark.expensive_api
+@pytest.mark.asyncio
 async def test_clean_integration():
     """Test the integration without fake entries"""
 

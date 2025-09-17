@@ -8,6 +8,7 @@ from monitor.utils.geocode import NYCGeocoder, geocode_nyc_location
 import asyncio
 import sys
 import os
+import pytest
 from pathlib import Path
 
 # Add the backend directory to the path so we can import modules
@@ -15,6 +16,8 @@ backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
 
+@pytest.mark.expensive_api
+@pytest.mark.asyncio
 async def test_geocoder():
     """Test the NYC geocoder with various location types"""
 
