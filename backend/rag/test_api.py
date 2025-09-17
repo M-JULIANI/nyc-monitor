@@ -7,9 +7,11 @@ This script tests the investigation via the /investigate endpoint.
 import asyncio
 import json
 import aiohttp
+import pytest
 from datetime import datetime
 
 
+@pytest.mark.asyncio
 async def test_investigation_api():
     """Test the investigation system via API."""
 
@@ -87,6 +89,7 @@ async def test_investigation_api():
         return False
 
 
+@pytest.mark.asyncio
 async def test_health_endpoint():
     """Test the health endpoint to ensure API is running."""
 

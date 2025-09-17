@@ -8,6 +8,7 @@ from monitor.collectors.hackernews_collector import HackerNewsCollector
 import asyncio
 import sys
 import os
+import pytest
 from datetime import datetime
 
 # Add the backend directory to Python path
@@ -23,6 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.asyncio
 async def test_hackernews_collector():
     """Test the HackerNews collector"""
     print("🔍 Testing HackerNews Collector...")
@@ -129,6 +131,7 @@ async def test_hackernews_collector():
         return False
 
 
+@pytest.mark.asyncio
 async def test_api_connectivity():
     """Test basic HackerNews API connectivity"""
     print("🔗 Testing HackerNews API connectivity...")

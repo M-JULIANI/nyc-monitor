@@ -8,6 +8,7 @@ import logging
 import sys
 import os
 import json
+import pytest
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -27,6 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.asyncio
 async def test_nyc_311_collector():
     """Test the NYC 311 collector functionality"""
 
